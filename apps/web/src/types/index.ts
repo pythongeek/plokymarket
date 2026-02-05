@@ -166,6 +166,21 @@ export interface PaymentTransaction {
 }
 
 // ===================================
+// MARKET SUGGESTIONS
+// ===================================
+
+export interface MarketSuggestion {
+  id: string;
+  title: string;
+  description?: string;
+  source_url?: string;
+  ai_confidence: number;
+  status: 'pending' | 'approved' | 'rejected';
+  created_at: string;
+  metadata?: Record<string, any>;
+}
+
+// ===================================
 // UI TYPES
 // ===================================
 

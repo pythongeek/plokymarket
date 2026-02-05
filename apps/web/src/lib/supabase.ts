@@ -196,6 +196,35 @@ export async function resolveMarket(marketId: string, winningOutcome: 'YES' | 'N
   if (error) throw error;
 }
 
+// Market Suggestions functions
+export async function fetchMarketSuggestions() {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from('market_suggestions')
+    .select('*')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data;
+}
+
+export async function updateSuggestionStatus(id: string, status: 'approved' | 'rejected') {
+  if (!supabase) return;
+  const { error } = await supabase
+    .from('market_suggestions')
+    .update({ status })
+    .eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteSuggestion(id: string) {
+  if (!supabase) return;
+  const { error } = await supabase
+    .from('market_suggestions')
+    .delete()
+    .eq('id', id);
+  if (error) throw error;
+}
+
 // Realtime subscription
 export function subscribeToMarket(
   marketId: string,

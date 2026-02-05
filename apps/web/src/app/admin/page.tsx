@@ -100,9 +100,72 @@ function AdminMarketCard({ market }: { market: any }) {
   );
 }
 
+function AdminSuggestionCard({ suggestion, onApprove }: { suggestion: any, onApprove: (s: any) => void }) {
+  const { updateSuggestion } = useStore();
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  const handleAction = async (status: 'approved' | 'rejected') => {
+    setIsUpdating(true);
+    await updateSuggestion(suggestion.id, status);
+    if (status === 'approved') {
+      onApprove(suggestion);
+    }
+    setIsUpdating(false);
+  };
+
+  return (
+    <Card>
+      <CardContent className="p-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-2">
+              <Badge variant="outline">{suggestion.status}</Badge>
+              <Badge variant="secondary" className="bg-blue-500/10 text-blue-500">
+                Confidence: {(suggestion.ai_confidence * 100).toFixed(0)}%
+              </Badge>
+            </div>
+            <h3 className="font-semibold text-lg">{suggestion.title}</h3>
+            <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{suggestion.description}</p>
+            {suggestion.source_url && (
+              <a
+                href={suggestion.source_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-primary hover:underline mt-2 block"
+              >
+                Source: {suggestion.source_url}
+              </a>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="default"
+              onClick={() => handleAction('approved')}
+              disabled={isUpdating || suggestion.status === 'approved'}
+            >
+              Approve & Create
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => handleAction('rejected')}
+              disabled={isUpdating || suggestion.status === 'rejected'}
+            >
+              Reject
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AdminPage() {
-  const { currentUser, isAuthenticated, markets, createMarket } = useStore();
+  const { currentUser, isAuthenticated, markets, createMarket, suggestions, fetchSuggestions } = useStore();
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -116,6 +179,26 @@ export default function AdminPage() {
     resolution_source: '',
   });
   const [isCreating, setIsCreating] = useState(false);
+
+  // Fetch suggestions on load
+  useState(() => {
+    if (isAuthenticated && currentUser?.is_admin && !isLoaded) {
+      fetchSuggestions();
+      setIsLoaded(true);
+    }
+  });
+
+  const handleApproveSuggestion = (suggestion: any) => {
+    setFormData({
+      ...formData,
+      question: suggestion.title,
+      description: suggestion.description || '',
+      source_url: suggestion.source_url || '',
+      resolution_source: suggestion.source_url ? new URL(suggestion.source_url).hostname : '',
+    });
+    setShowCreateForm(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   if (!isAuthenticated) {
     return (
@@ -372,6 +455,7 @@ export default function AdminPage() {
         <TabsList>
           <TabsTrigger value="active">Active ({activeMarkets})</TabsTrigger>
           <TabsTrigger value="resolved">Resolved ({resolvedMarkets})</TabsTrigger>
+          <TabsTrigger value="suggestions">Suggestions ({suggestions.filter(s => s.status === 'pending').length})</TabsTrigger>
           <TabsTrigger value="all">All ({markets.length})</TabsTrigger>
         </TabsList>
 
@@ -389,6 +473,24 @@ export default function AdminPage() {
             .map((market) => (
               <AdminMarketCard key={market.id} market={market} />
             ))}
+        </TabsContent>
+
+        <TabsContent value="suggestions" className="space-y-4">
+          {suggestions.length === 0 ? (
+            <div className="text-center py-10 text-muted-foreground">
+              No market suggestions found. Run the news scraper to get suggestions.
+            </div>
+          ) : (
+            suggestions
+              .filter((s) => s.status === 'pending')
+              .map((suggestion) => (
+                <AdminSuggestionCard
+                  key={suggestion.id}
+                  suggestion={suggestion}
+                  onApprove={handleApproveSuggestion}
+                />
+              ))
+          )}
         </TabsContent>
 
         <TabsContent value="all" className="space-y-4">

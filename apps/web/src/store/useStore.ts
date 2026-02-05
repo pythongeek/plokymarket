@@ -10,6 +10,7 @@ import type {
   Transaction,
   OutcomeType,
   OrderSide,
+  MarketSuggestion,
 } from '@/types';
 import {
   supabase,
@@ -27,6 +28,9 @@ import {
   cancelOrder,
   createMarket,
   resolveMarket,
+  fetchMarketSuggestions,
+  updateSuggestionStatus,
+  deleteSuggestion,
   subscribeToMarket,
   subscribeToTrades,
 } from '@/lib/supabase';
@@ -74,6 +78,9 @@ interface StoreState {
   // Admin
   createMarket: (marketData: Partial<Market>) => Promise<boolean>;
   resolveMarket: (marketId: string, outcome: OutcomeType) => Promise<boolean>;
+  fetchSuggestions: () => Promise<void>;
+  updateSuggestion: (id: string, status: 'approved' | 'rejected') => Promise<void>;
+  suggestions: MarketSuggestion[];
 
   // Real-time
   subscribeToMarket: (marketId: string) => () => void;
@@ -95,6 +102,7 @@ export const useStore = create<StoreState>()(
       positions: [],
       transactions: [],
       wallet: null,
+      suggestions: [],
 
       // ===================================
       // AUTH ACTIONS
@@ -127,6 +135,7 @@ export const useStore = create<StoreState>()(
 
           if (data.user) {
             // Fetch user profile
+            if (!supabase) return 'Database connection error';
             const { data: profile } = await supabase
               .from('users')
               .select('*')
@@ -184,7 +193,7 @@ export const useStore = create<StoreState>()(
 
           if (data.user) {
             // Create user profile
-            const { error: profileError } = await supabase.from('users').insert({
+            const { error: profileError } = await supabase!.from('users').insert({
               id: data.user.id,
               email,
               full_name: fullName,
@@ -197,7 +206,7 @@ export const useStore = create<StoreState>()(
             }
 
             // Create wallet
-            const { error: walletError } = await supabase.from('wallets').insert({
+            const { error: walletError } = await supabase!.from('wallets').insert({
               user_id: data.user.id,
               balance: 0,
               locked_balance: 0,
@@ -366,7 +375,7 @@ export const useStore = create<StoreState>()(
           });
 
           // If using matching engine, trigger it
-          await supabase.rpc('match_order', { p_order_id: order.id });
+          await supabase!.rpc('match_order', { p_order_id: order.id });
 
           // Refresh data
           await get().fetchOrders(marketId);
@@ -436,12 +445,33 @@ export const useStore = create<StoreState>()(
         }
       },
 
+      fetchSuggestions: async () => {
+        try {
+          const suggestions = await fetchMarketSuggestions();
+          set({ suggestions: suggestions || [] });
+        } catch (error) {
+          console.error('Error fetching suggestions:', error);
+          set({ suggestions: [] });
+        }
+      },
+
+      updateSuggestion: async (id: string, status: 'approved' | 'rejected') => {
+        try {
+          await updateSuggestionStatus(id, status);
+          await get().fetchSuggestions();
+        } catch (error) {
+          console.error('Error updating suggestion:', error);
+        }
+      },
+
       // ===================================
       // REAL-TIME SUBSCRIPTIONS
       // ===================================
 
       subscribeToMarket: (marketId: string) => {
         const { fetchOrders, fetchTrades } = get();
+
+        if (!supabase) return () => { };
 
         const channel = subscribeToMarket(marketId, () => {
           fetchOrders(marketId);
@@ -452,8 +482,10 @@ export const useStore = create<StoreState>()(
         });
 
         return () => {
-          supabase.removeChannel(channel);
-          supabase.removeChannel(tradeChannel);
+          if (supabase) {
+            supabase.removeChannel(channel as any);
+            supabase.removeChannel(tradeChannel as any);
+          }
         };
       },
     }),
