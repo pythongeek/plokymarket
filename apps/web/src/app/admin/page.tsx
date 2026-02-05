@@ -25,12 +25,15 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 
+import { useTranslation } from 'react-i18next';
+
 function AdminMarketCard({ market }: { market: any }) {
   const { resolveMarket } = useStore();
   const [isResolving, setIsResolving] = useState(false);
+  const { t } = useTranslation();
 
   const handleResolve = async (outcome: 'YES' | 'NO') => {
-    if (!confirm(`Are you sure you want to resolve this market as ${outcome}?`)) {
+    if (!confirm(t('admin.resolve_confirm', { outcome }))) {
       return;
     }
 
@@ -47,17 +50,17 @@ function AdminMarketCard({ market }: { market: any }) {
             <div className="flex items-center gap-2 mb-2">
               <Badge variant="secondary">{market.category}</Badge>
               {market.status === 'active' ? (
-                <Badge className="bg-green-500">Active</Badge>
+                <Badge className="bg-green-500">{t('admin.active_badge')}</Badge>
               ) : (
-                <Badge className="bg-purple-500">Resolved</Badge>
+                <Badge className="bg-purple-500">{t('admin.resolved_badge')}</Badge>
               )}
             </div>
             <h3 className="font-semibold text-lg">{market.question}</h3>
             <div className="flex flex-wrap gap-4 mt-2 text-sm text-muted-foreground">
-              <span>Volume: ৳{market.total_volume.toLocaleString()}</span>
+              <span>{t('admin.volume')}: ৳{market.total_volume.toLocaleString()}</span>
               <span>YES: ৳{market.yes_price?.toFixed(2)}</span>
               <span>NO: ৳{market.no_price?.toFixed(2)}</span>
-              <span>Closes: {format(new Date(market.trading_closes_at), 'MMM d, yyyy')}</span>
+              <span>{t('admin.closes')}: {format(new Date(market.trading_closes_at), 'MMM d, yyyy')}</span>
             </div>
           </div>
 
@@ -72,7 +75,7 @@ function AdminMarketCard({ market }: { market: any }) {
                   disabled={isResolving}
                 >
                   <CheckCircle2 className="h-4 w-4 mr-1" />
-                  Resolve YES
+                  {t('admin.resolve_yes')}
                 </Button>
                 <Button
                   size="sm"
@@ -82,12 +85,12 @@ function AdminMarketCard({ market }: { market: any }) {
                   disabled={isResolving}
                 >
                   <XCircle className="h-4 w-4 mr-1" />
-                  Resolve NO
+                  {t('admin.resolve_no')}
                 </Button>
               </>
             ) : (
               <Badge className={market.winning_outcome === 'YES' ? 'bg-green-500' : 'bg-red-500'}>
-                Resolved: {market.winning_outcome}
+                {t('admin.resolved_badge')}: {market.winning_outcome}
               </Badge>
             )}
             <Link href={`/markets/${market.id}`}>
@@ -105,6 +108,7 @@ function AdminMarketCard({ market }: { market: any }) {
 function AdminSuggestionCard({ suggestion, onApprove }: { suggestion: any, onApprove: (s: any) => void }) {
   const { updateSuggestion } = useStore();
   const [isUpdating, setIsUpdating] = useState(false);
+  const { t } = useTranslation();
 
   const handleAction = async (status: 'approved' | 'rejected') => {
     setIsUpdating(true);
@@ -123,7 +127,7 @@ function AdminSuggestionCard({ suggestion, onApprove }: { suggestion: any, onApp
             <div className="flex items-center gap-2 mb-2">
               <Badge variant="outline">{suggestion.status}</Badge>
               <Badge variant="secondary" className="bg-blue-500/10 text-blue-500">
-                Confidence: {(suggestion.ai_confidence * 100).toFixed(0)}%
+                {t('admin.confidence')}: {(suggestion.ai_confidence * 100).toFixed(0)}%
               </Badge>
             </div>
             <h3 className="font-semibold text-lg">{suggestion.title}</h3>
@@ -135,7 +139,7 @@ function AdminSuggestionCard({ suggestion, onApprove }: { suggestion: any, onApp
                 rel="noopener noreferrer"
                 className="text-xs text-primary hover:underline mt-2 block"
               >
-                Source: {suggestion.source_url}
+                {t('admin.source')}: {suggestion.source_url}
               </a>
             )}
           </div>
@@ -147,7 +151,7 @@ function AdminSuggestionCard({ suggestion, onApprove }: { suggestion: any, onApp
               onClick={() => handleAction('approved')}
               disabled={isUpdating || suggestion.status === 'approved'}
             >
-              Approve & Create
+              {t('admin.approve_create')}
             </Button>
             <Button
               size="sm"
@@ -155,7 +159,7 @@ function AdminSuggestionCard({ suggestion, onApprove }: { suggestion: any, onApp
               onClick={() => handleAction('rejected')}
               disabled={isUpdating || suggestion.status === 'rejected'}
             >
-              Reject
+              {t('admin.reject')}
             </Button>
           </div>
         </div>
@@ -168,8 +172,11 @@ export default function AdminPage() {
   const { currentUser, isAuthenticated, markets, createMarket, suggestions, fetchSuggestions } = useStore();
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
+  const { t } = useTranslation();
 
   // Form state
+  // ... (rest of state items are unchanged below)
+
   const [formData, setFormData] = useState({
     question: '',
     description: '',
@@ -206,10 +213,10 @@ export default function AdminPage() {
     return (
       <div className="flex flex-col items-center justify-center py-20">
         <AlertCircle className="h-16 w-16 text-muted-foreground mb-4" />
-        <h2 className="text-2xl font-bold mb-2">Login Required</h2>
-        <p className="text-muted-foreground mb-6">Please login to access the admin panel</p>
+        <h2 className="text-2xl font-bold mb-2">{t('admin.login_required')}</h2>
+        <p className="text-muted-foreground mb-6">{t('admin.login_desc')}</p>
         <Link href="/login">
-          <Button>Login</Button>
+          <Button>{t('common.login')}</Button>
         </Link>
       </div>
     );
@@ -219,10 +226,10 @@ export default function AdminPage() {
     return (
       <div className="flex flex-col items-center justify-center py-20">
         <Shield className="h-16 w-16 text-red-500 mb-4" />
-        <h2 className="text-2xl font-bold mb-2">Access Denied</h2>
-        <p className="text-muted-foreground mb-6">You do not have permission to access the admin panel</p>
+        <h2 className="text-2xl font-bold mb-2">{t('admin.access_denied')}</h2>
+        <p className="text-muted-foreground mb-6">{t('admin.access_denied_desc')}</p>
         <Link href="/markets">
-          <Button>Browse Markets</Button>
+          <Button>{t('admin.browse_markets')}</Button>
         </Link>
       </div>
     );
@@ -271,12 +278,12 @@ export default function AdminPage() {
               Admin
             </Badge>
           </div>
-          <h1 className="text-3xl font-bold">Admin Dashboard</h1>
-          <p className="text-muted-foreground">Manage markets and platform settings</p>
+          <h1 className="text-3xl font-bold">{t('admin.page_title')}</h1>
+          <p className="text-muted-foreground">{t('admin.page_subtitle')}</p>
         </div>
         <Button onClick={() => setShowCreateForm(!showCreateForm)}>
           <Plus className="h-4 w-4 mr-2" />
-          Create Market
+          {t('admin.create_market')}
         </Button>
       </div>
 
@@ -286,7 +293,7 @@ export default function AdminPage() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Total Markets</p>
+                <p className="text-sm text-muted-foreground">{t('admin.total_markets')}</p>
                 <p className="text-2xl font-bold">{markets.length}</p>
               </div>
               <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
@@ -300,7 +307,7 @@ export default function AdminPage() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Active</p>
+                <p className="text-sm text-muted-foreground">{t('admin.active')}</p>
                 <p className="text-2xl font-bold text-green-500">{activeMarkets}</p>
               </div>
               <div className="h-10 w-10 rounded-full bg-green-500/10 flex items-center justify-center">
@@ -314,7 +321,7 @@ export default function AdminPage() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Resolved</p>
+                <p className="text-sm text-muted-foreground">{t('admin.resolved')}</p>
                 <p className="text-2xl font-bold text-purple-500">{resolvedMarkets}</p>
               </div>
               <div className="h-10 w-10 rounded-full bg-purple-500/10 flex items-center justify-center">
@@ -328,7 +335,7 @@ export default function AdminPage() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Total Volume</p>
+                <p className="text-sm text-muted-foreground">{t('admin.total_volume')}</p>
                 <p className="text-2xl font-bold">৳{(totalVolume / 1000000).toFixed(1)}M</p>
               </div>
               <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
@@ -343,12 +350,12 @@ export default function AdminPage() {
       {showCreateForm && (
         <Card>
           <CardHeader>
-            <CardTitle>Create New Market</CardTitle>
+            <CardTitle>{t('admin.form.title')}</CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleCreateMarket} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="question">Market Question *</Label>
+                <Label htmlFor="question">{t('admin.form.question')}</Label>
                 <Textarea
                   id="question"
                   placeholder="Will Bangladesh win the T20 World Cup 2024?"
@@ -359,7 +366,7 @@ export default function AdminPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
+                <Label htmlFor="description">{t('admin.form.description')}</Label>
                 <Textarea
                   id="description"
                   placeholder="Detailed description of the market..."
@@ -370,7 +377,7 @@ export default function AdminPage() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="category">Category *</Label>
+                  <Label htmlFor="category">{t('admin.form.category')}</Label>
                   <Input
                     id="category"
                     placeholder="Sports, Politics, Finance..."
@@ -381,7 +388,7 @@ export default function AdminPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="resolution_source">Resolution Source</Label>
+                  <Label htmlFor="resolution_source">{t('admin.form.resolution_source')}</Label>
                   <Input
                     id="resolution_source"
                     placeholder="ESPN Cricinfo, Prothom Alo..."
@@ -393,7 +400,7 @@ export default function AdminPage() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="source_url">Source URL</Label>
+                  <Label htmlFor="source_url">{t('admin.form.source_url')}</Label>
                   <Input
                     id="source_url"
                     type="url"
@@ -404,7 +411,7 @@ export default function AdminPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="image">Market Image</Label>
+                  <Label htmlFor="image">{t('admin.form.image')}</Label>
                   <div className="flex gap-2 items-center">
                     <Input
                       id="image"
@@ -441,7 +448,7 @@ export default function AdminPage() {
                       </div>
                     )}
                   </div>
-                  <p className="text-xs text-muted-foreground">Upload an image or paste URL below</p>
+                  <p className="text-xs text-muted-foreground">{t('admin.form.upload_hint')}</p>
                   <Input
                     type="url"
                     placeholder="Or paste image URL..."
@@ -454,7 +461,7 @@ export default function AdminPage() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="trading_closes_at">Trading Closes At *</Label>
+                  <Label htmlFor="trading_closes_at">{t('admin.form.trading_closes')}</Label>
                   <Input
                     id="trading_closes_at"
                     type="datetime-local"
@@ -465,7 +472,7 @@ export default function AdminPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="event_date">Event Date *</Label>
+                  <Label htmlFor="event_date">{t('admin.form.event_date')}</Label>
                   <Input
                     id="event_date"
                     type="datetime-local"
@@ -478,10 +485,10 @@ export default function AdminPage() {
 
               <div className="flex gap-2">
                 <Button type="submit" disabled={isCreating}>
-                  {isCreating ? 'Creating...' : 'Create Market'}
+                  {isCreating ? t('admin.form.creating') : t('admin.form.create')}
                 </Button>
                 <Button type="button" variant="outline" onClick={() => setShowCreateForm(false)}>
-                  Cancel
+                  {t('admin.form.cancel')}
                 </Button>
               </div>
             </form>
@@ -492,10 +499,10 @@ export default function AdminPage() {
       {/* Markets List */}
       <Tabs defaultValue="active">
         <TabsList>
-          <TabsTrigger value="active">Active ({activeMarkets})</TabsTrigger>
-          <TabsTrigger value="resolved">Resolved ({resolvedMarkets})</TabsTrigger>
-          <TabsTrigger value="suggestions">Suggestions ({suggestions.filter(s => s.status === 'pending').length})</TabsTrigger>
-          <TabsTrigger value="all">All ({markets.length})</TabsTrigger>
+          <TabsTrigger value="active">{t('admin.active')} ({activeMarkets})</TabsTrigger>
+          <TabsTrigger value="resolved">{t('admin.resolved')} ({resolvedMarkets})</TabsTrigger>
+          <TabsTrigger value="suggestions">{t('admin.suggestions_tab')} ({suggestions.filter(s => s.status === 'pending').length})</TabsTrigger>
+          <TabsTrigger value="all">{t('common.all')} ({markets.length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="active" className="space-y-4">
@@ -517,7 +524,7 @@ export default function AdminPage() {
         <TabsContent value="suggestions" className="space-y-4">
           {suggestions.length === 0 ? (
             <div className="text-center py-10 text-muted-foreground">
-              No market suggestions found. Run the news scraper to get suggestions.
+              {t('admin.no_suggestions')}
             </div>
           ) : (
             suggestions
