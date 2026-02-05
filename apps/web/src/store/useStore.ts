@@ -30,6 +30,7 @@ import {
   subscribeToMarket,
   subscribeToTrades,
 } from '@/lib/supabase';
+import { loginRateLimiter } from '@/lib/security';
 
 // ===================================
 // STORE STATE INTERFACE
@@ -39,8 +40,8 @@ interface StoreState {
   // Auth
   currentUser: User | null;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<boolean>;
-  register: (email: string, password: string, fullName: string) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<boolean | string>;
+  register: (email: string, password: string, fullName: string) => Promise<boolean | string>;
   logout: () => void;
 
   // Data
@@ -100,10 +101,20 @@ export const useStore = create<StoreState>()(
       // ===================================
 
       login: async (email: string, password: string): Promise<boolean | string> => {
+        // Rate limiting check
+        if (loginRateLimiter.isRateLimited(email)) {
+          const remainingTime = loginRateLimiter.getRemainingTime(email);
+          return `Too many login attempts. Please try again in ${remainingTime} seconds.`;
+        }
+
         try {
           const { data, error } = await signIn(email, password);
           if (error) {
             console.error('Login error:', error);
+
+            // Record attempt on failure
+            loginRateLimiter.recordAttempt(email);
+
             // Return specific error message
             if (error.message.includes('Invalid login credentials')) {
               return 'Invalid email or password. Please try again.';
@@ -142,6 +153,10 @@ export const useStore = create<StoreState>()(
 
             return true;
           }
+
+          // Reset rate limiter on success
+          loginRateLimiter.reset(email);
+
           return 'Login failed. Please try again.';
         } catch (error: any) {
           console.error('Login error:', error);
