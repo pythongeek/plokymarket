@@ -1,5 +1,7 @@
 'use client';
 
+import { supabase } from '@/lib/supabase';
+
 import { useState } from 'react';
 import Link from 'next/link';
 import { useStore } from '@/store/useStore';
@@ -402,13 +404,50 @@ export default function AdminPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="image_url">Image URL</Label>
+                  <Label htmlFor="image">Market Image</Label>
+                  <div className="flex gap-2 items-center">
+                    <Input
+                      id="image"
+                      type="file"
+                      accept="image/*"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+
+                        // Upload logic
+                        const fileExt = file.name.split('.').pop();
+                        const fileName = `${Math.random()}.${fileExt}`;
+                        const filePath = `${fileName}`;
+
+                        const { error: uploadError } = await supabase.storage
+                          .from('market-images')
+                          .upload(filePath, file);
+
+                        if (uploadError) {
+                          alert('Error uploading image: ' + uploadError.message);
+                          return;
+                        }
+
+                        const { data: { publicUrl } } = supabase.storage
+                          .from('market-images')
+                          .getPublicUrl(filePath);
+
+                        setFormData({ ...formData, image_url: publicUrl });
+                      }}
+                    />
+                    {formData.image_url && (
+                      <div className="h-10 w-10 relative rounded overflow-hidden border">
+                        <img src={formData.image_url} alt="Preview" className="object-cover w-full h-full" />
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Upload an image or paste URL below</p>
                   <Input
-                    id="image_url"
                     type="url"
-                    placeholder="https://..."
+                    placeholder="Or paste image URL..."
                     value={formData.image_url}
                     onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
+                    className="mt-2"
                   />
                 </div>
               </div>
