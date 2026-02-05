@@ -2,6 +2,7 @@
 
 import { motion } from 'framer-motion';
 import { TrendingUp } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface Market {
     title: string;
@@ -14,9 +15,11 @@ interface LiveMarketsTickerProps {
 }
 
 export default function LiveMarketsTicker({ initialMarkets = [] }: LiveMarketsTickerProps) {
+    const { t } = useTranslation();
+
     // Fallback to initialMarkets or empty array
     const displayMarkets = initialMarkets.length > 0 ? initialMarkets : [
-        { title: "Waiting for live data...", change: "...", color: "text-gray-500" }
+        { title: t('common.waiting_for_data', 'Waiting for live data...'), change: "...", color: "text-gray-500" }
     ];
 
     return (
@@ -47,3 +50,4 @@ export default function LiveMarketsTicker({ initialMarkets = [] }: LiveMarketsTi
         </div>
     );
 }
+

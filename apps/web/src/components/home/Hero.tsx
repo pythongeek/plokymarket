@@ -4,8 +4,11 @@ import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { ArrowRight, TrendingUp, Zap } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 export default function Hero() {
+    const { t } = useTranslation();
+
     return (
         <section className="relative overflow-hidden pt-20 pb-32 md:pt-32 md:pb-48">
             {/* Background Gradients */}
@@ -26,7 +29,7 @@ export default function Hero() {
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
                     </span>
-                    Live in Bangladesh
+                    {t('hero.live_badge')}
                 </motion.div>
 
                 <motion.h1
@@ -35,10 +38,10 @@ export default function Hero() {
                     transition={{ duration: 0.5, delay: 0.1 }}
                     className="text-5xl md:text-7xl font-bold tracking-tight mb-6 bg-gradient-to-b from-white to-white/60 bg-clip-text text-transparent"
                 >
-                    Predict the Future.
+                    {t('hero.title')}
                     <br />
                     <span className="bg-gradient-to-r from-primary to-purple-400 bg-clip-text text-transparent">
-                        Profit from Truth.
+                        {t('hero.subtitle')}
                     </span>
                 </motion.h1>
 
@@ -48,7 +51,7 @@ export default function Hero() {
                     transition={{ duration: 0.5, delay: 0.2 }}
                     className="text-lg md:text-xl text-muted-foreground mb-10 max-w-2xl mx-auto leading-relaxed"
                 >
-                    The premier prediction market for Bangladesh. Trade on sports, politics, and crypto with instant settlements and transparent odds.
+                    {t('hero.description')}
                 </motion.p>
 
                 <motion.div
@@ -59,13 +62,13 @@ export default function Hero() {
                 >
                     <Link href="/markets">
                         <Button size="lg" className="h-12 px-8 text-lg gap-2 rounded-full shadow-[0_0_20px_-5px_rgba(var(--primary),0.5)] hover:shadow-[0_0_30px_-5px_rgba(var(--primary),0.6)] transition-all">
-                            Start Trading
+                            {t('common.start_trading')}
                             <ArrowRight className="h-4 w-4" />
                         </Button>
                     </Link>
                     <Link href="/how-it-works">
                         <Button size="lg" variant="outline" className="h-12 px-8 text-lg rounded-full bg-white/5 border-white/10 hover:bg-white/10 backdrop-blur-sm">
-                            How it works
+                            {t('common.how_it_works')}
                         </Button>
                     </Link>
                 </motion.div>

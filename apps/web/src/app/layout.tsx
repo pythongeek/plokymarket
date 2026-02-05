@@ -1,9 +1,10 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { I18nProvider } from '@/components/providers/I18nProvider';
 
 export const metadata: Metadata = {
   title: 'Plokymarket - Prediction Marketplace',
-  description: 'A Polymarket-style prediction marketplace',
+  description: 'Bangladesh\'s first and only prediction marketplace',
 };
 
 export default function RootLayout({
@@ -12,9 +13,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="bn">
       <body className="min-h-screen bg-background font-sans antialiased">
-        {children}
+        <I18nProvider>
+          {children}
+        </I18nProvider>
       </body>
     </html>
   );

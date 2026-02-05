@@ -17,14 +17,23 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useTranslation } from 'react-i18next';
 
 function PositionCard({ position }: { position: any }) {
+  const { t } = useTranslation();
   const market = position.market;
   const currentPrice = position.outcome === 'YES' ? market?.yes_price : market?.no_price;
   const currentValue = position.quantity * (currentPrice || position.average_price);
   const investedValue = position.quantity * position.average_price;
   const pnl = currentValue - investedValue;
   const pnlPercentage = (pnl / investedValue) * 100;
+
+  // Translate category
+  const translateCategory = (cat: string) => {
+    const key = `categories.${cat}`;
+    const translated = t(key);
+    return translated !== key ? translated : cat;
+  };
 
   return (
     <Card className="hover:shadow-md transition-shadow">
@@ -41,27 +50,28 @@ function PositionCard({ position }: { position: any }) {
                 ) : (
                   <TrendingDown className="h-3 w-3 mr-1" />
                 )}
-                {position.outcome}
+                {position.outcome === 'YES' ? t('common.yes') : t('common.no')}
               </Badge>
-              <Badge variant="secondary">{market?.category}</Badge>
+              <Badge variant="secondary">{translateCategory(market?.category)}</Badge>
             </div>
             <h3 className="font-semibold text-lg mb-1">{market?.question}</h3>
             <p className="text-sm text-muted-foreground">
-              {position.quantity.toLocaleString()} shares @ ৳{position.average_price.toFixed(2)} avg
+              {position.quantity.toLocaleString()} {t('portfolio.shares_at_avg', { quantity: '', price: position.average_price.toFixed(2) }).replace('{{quantity}}', '').replace('{{price}}', '')}
+              {position.quantity.toLocaleString()} শেয়ার @ ৳{position.average_price.toFixed(2)} গড়ে
             </p>
           </div>
 
           <div className="grid grid-cols-3 gap-6 text-right">
             <div>
-              <p className="text-sm text-muted-foreground">Invested</p>
+              <p className="text-sm text-muted-foreground">{t('portfolio.invested')}</p>
               <p className="font-semibold">৳{investedValue.toLocaleString()}</p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Current Value</p>
+              <p className="text-sm text-muted-foreground">{t('portfolio.current_value')}</p>
               <p className="font-semibold">৳{currentValue.toLocaleString()}</p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">P&L</p>
+              <p className="text-sm text-muted-foreground">{t('portfolio.pnl')}</p>
               <p className={cn('font-semibold', pnl >= 0 ? 'text-green-500' : 'text-red-500')}>
                 {pnl >= 0 ? '+' : ''}৳{pnl.toLocaleString()}
                 <span className="text-xs ml-1">
@@ -73,7 +83,7 @@ function PositionCard({ position }: { position: any }) {
 
           <Link href={`/markets/${market?.id}`}>
             <Button variant="outline" size="sm">
-              Trade
+              {t('common.trade')}
             </Button>
           </Link>
         </div>
@@ -83,6 +93,7 @@ function PositionCard({ position }: { position: any }) {
 }
 
 function EmptyPositionsState() {
+  const { t } = useTranslation();
   return (
     <Card>
       <CardContent className="p-12 text-center">
@@ -91,15 +102,14 @@ function EmptyPositionsState() {
             <PieChart className="h-8 w-8 text-muted-foreground" />
           </div>
         </div>
-        <h3 className="text-lg font-semibold mb-2">No positions yet</h3>
+        <h3 className="text-lg font-semibold mb-2">{t('portfolio.no_positions')}</h3>
         <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-          Start trading on prediction markets to build your portfolio. Browse active markets and
-          place your first order.
+          {t('portfolio.no_positions_desc')}
         </p>
         <Link href="/markets">
           <Button>
             <TrendingUp className="h-4 w-4 mr-2" />
-            Browse Markets
+            {t('portfolio.browse_markets')}
           </Button>
         </Link>
       </CardContent>
@@ -109,6 +119,7 @@ function EmptyPositionsState() {
 
 export default function PortfolioPage() {
   const { isAuthenticated, positions, fetchPositions } = useStore();
+  const { t } = useTranslation();
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -120,14 +131,14 @@ export default function PortfolioPage() {
     return (
       <div className="flex flex-col items-center justify-center py-20">
         <AlertCircle className="h-16 w-16 text-muted-foreground mb-4" />
-        <h2 className="text-2xl font-bold mb-2">Login Required</h2>
-        <p className="text-muted-foreground mb-6">Please login to view your portfolio</p>
+        <h2 className="text-2xl font-bold mb-2">{t('common.login_required')}</h2>
+        <p className="text-muted-foreground mb-6">{t('portfolio.login_to_view')}</p>
         <div className="flex gap-4">
           <Link href="/login">
-            <Button variant="outline">Login</Button>
+            <Button variant="outline">{t('common.login')}</Button>
           </Link>
           <Link href="/register">
-            <Button>Get Started</Button>
+            <Button>{t('common.get_started')}</Button>
           </Link>
         </div>
       </div>
@@ -149,8 +160,8 @@ export default function PortfolioPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold">Portfolio</h1>
-        <p className="text-muted-foreground">Track your positions and performance</p>
+        <h1 className="text-3xl font-bold">{t('portfolio.title')}</h1>
+        <p className="text-muted-foreground">{t('portfolio.subtitle')}</p>
       </div>
 
       {/* Stats Cards */}
@@ -159,7 +170,7 @@ export default function PortfolioPage() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Total Invested</p>
+                <p className="text-sm text-muted-foreground">{t('portfolio.total_invested')}</p>
                 <p className="text-2xl font-bold">৳{totalInvested.toLocaleString()}</p>
               </div>
               <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
@@ -173,7 +184,7 @@ export default function PortfolioPage() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Potential Return</p>
+                <p className="text-sm text-muted-foreground">{t('portfolio.potential_return')}</p>
                 <p className="text-2xl font-bold">৳{potentialReturn.toLocaleString()}</p>
               </div>
               <div className="h-10 w-10 rounded-full bg-green-500/10 flex items-center justify-center">
@@ -187,7 +198,7 @@ export default function PortfolioPage() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Unrealized P&L</p>
+                <p className="text-sm text-muted-foreground">{t('portfolio.unrealized_pnl')}</p>
                 <p className={cn('text-2xl font-bold', unrealizedPnl >= 0 ? 'text-green-500' : 'text-red-500')}>
                   {unrealizedPnl >= 0 ? '+' : ''}৳{unrealizedPnl.toLocaleString()}
                 </p>
@@ -212,7 +223,7 @@ export default function PortfolioPage() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Active Positions</p>
+                <p className="text-sm text-muted-foreground">{t('portfolio.active_positions')}</p>
                 <p className="text-2xl font-bold">{totalPositions}</p>
               </div>
               <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
@@ -227,15 +238,15 @@ export default function PortfolioPage() {
       <Tabs defaultValue="all">
         <TabsList>
           <TabsTrigger value="all">
-            All Positions ({positions.length})
+            {t('portfolio.all_positions')} ({positions.length})
           </TabsTrigger>
           <TabsTrigger value="yes">
             <TrendingUp className="h-4 w-4 mr-1" />
-            YES ({yesPositions.length})
+            {t('common.yes')} ({yesPositions.length})
           </TabsTrigger>
           <TabsTrigger value="no">
             <TrendingDown className="h-4 w-4 mr-1" />
-            NO ({noPositions.length})
+            {t('common.no')} ({noPositions.length})
           </TabsTrigger>
         </TabsList>
 

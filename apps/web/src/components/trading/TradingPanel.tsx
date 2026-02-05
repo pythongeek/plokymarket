@@ -7,16 +7,17 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  Wallet, 
+import {
+  TrendingUp,
+  TrendingDown,
+  Wallet,
   Info,
   CheckCircle2,
   AlertCircle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Market, OutcomeType } from '@/types';
+import { useTranslation } from 'react-i18next';
 
 interface TradingPanelProps {
   market: Market;
@@ -24,6 +25,7 @@ interface TradingPanelProps {
 
 export function TradingPanel({ market }: TradingPanelProps) {
   const { wallet, placeOrder, isAuthenticated } = useStore();
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<'buy' | 'sell'>('buy');
   const [outcome, setOutcome] = useState<OutcomeType>('YES');
   const [price, setPrice] = useState(market.yes_price?.toFixed(2) || '0.50');
@@ -36,7 +38,7 @@ export function TradingPanel({ market }: TradingPanelProps) {
   const minPrice = 0.01;
 
   const totalCost = parseFloat(price) * parseInt(quantity || '0');
-  const potentialProfit = outcome === 'YES' 
+  const potentialProfit = outcome === 'YES'
     ? (1 - parseFloat(price)) * parseInt(quantity || '0')
     : (1 - parseFloat(price)) * parseInt(quantity || '0');
 
@@ -56,7 +58,7 @@ export function TradingPanel({ market }: TradingPanelProps) {
 
   const handleSubmit = async () => {
     if (!isAuthenticated) {
-      setError('Please login to trade');
+      setError(t('trading.login_required'));
       return;
     }
 
@@ -76,10 +78,10 @@ export function TradingPanel({ market }: TradingPanelProps) {
         setShowSuccess(true);
         setTimeout(() => setShowSuccess(false), 3000);
       } else {
-        setError('Insufficient balance or invalid order');
+        setError(t('trading.insufficient_balance'));
       }
     } catch (err) {
-      setError('Failed to place order. Please try again.');
+      setError(t('trading.failed'));
     } finally {
       setIsSubmitting(false);
     }
@@ -98,17 +100,17 @@ export function TradingPanel({ market }: TradingPanelProps) {
               </div>
             </div>
             <div>
-              <h3 className="font-semibold">Login to Trade</h3>
+              <h3 className="font-semibold">{t('trading.login_to_trade')}</h3>
               <p className="text-sm text-muted-foreground mt-1">
-                Create an account or login to start trading on this market
+                {t('trading.login_desc')}
               </p>
             </div>
             <div className="flex gap-2 justify-center">
               <Button variant="outline" asChild>
-                <a href="/login">Login</a>
+                <a href="/login">{t('common.login')}</a>
               </Button>
               <Button asChild>
-                <a href="/register">Get Started</a>
+                <a href="/register">{t('common.get_started')}</a>
               </Button>
             </div>
           </div>
@@ -120,26 +122,26 @@ export function TradingPanel({ market }: TradingPanelProps) {
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-lg">Place Order</CardTitle>
+        <CardTitle className="text-lg">{t('trading.place_order')}</CardTitle>
       </CardHeader>
-      
+
       <CardContent className="space-y-4">
         {/* Buy/Sell Tabs */}
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'buy' | 'sell')}>
           <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger 
+            <TabsTrigger
               value="buy"
               className="data-[state=active]:bg-green-500 data-[state=active]:text-white"
             >
               <TrendingUp className="h-4 w-4 mr-2" />
-              Buy
+              {t('trading.buy')}
             </TabsTrigger>
-            <TabsTrigger 
+            <TabsTrigger
               value="sell"
               className="data-[state=active]:bg-red-500 data-[state=active]:text-white"
             >
               <TrendingDown className="h-4 w-4 mr-2" />
-              Sell
+              {t('trading.sell')}
             </TabsTrigger>
           </TabsList>
         </Tabs>
@@ -159,12 +161,12 @@ export function TradingPanel({ market }: TradingPanelProps) {
             )}
           >
             <TrendingUp className="h-4 w-4 text-green-500" />
-            <span className="font-medium">YES</span>
+            <span className="font-medium">{t('common.yes')}</span>
             <Badge variant="secondary" className="ml-1">
               ৳{market.yes_price?.toFixed(2)}
             </Badge>
           </button>
-          
+
           <button
             onClick={() => {
               setOutcome('NO');
@@ -178,7 +180,7 @@ export function TradingPanel({ market }: TradingPanelProps) {
             )}
           >
             <TrendingDown className="h-4 w-4 text-red-500" />
-            <span className="font-medium">NO</span>
+            <span className="font-medium">{t('common.no')}</span>
             <Badge variant="secondary" className="ml-1">
               ৳{market.no_price?.toFixed(2)}
             </Badge>
@@ -188,9 +190,9 @@ export function TradingPanel({ market }: TradingPanelProps) {
         {/* Price Input */}
         <div className="space-y-2">
           <div className="flex justify-between">
-            <Label>Price per Share</Label>
+            <Label>{t('trading.price_per_share')}</Label>
             <span className="text-sm text-muted-foreground">
-              Range: ৳{minPrice} - ৳{maxPrice}
+              {t('trading.range')}: ৳{minPrice} - ৳{maxPrice}
             </span>
           </div>
           <div className="flex gap-2">
@@ -218,7 +220,7 @@ export function TradingPanel({ market }: TradingPanelProps) {
 
         {/* Quantity Input */}
         <div className="space-y-2">
-          <Label>Quantity (Shares)</Label>
+          <Label>{t('trading.quantity')}</Label>
           <Input
             type="number"
             value={quantity}
@@ -242,24 +244,24 @@ export function TradingPanel({ market }: TradingPanelProps) {
         {/* Order Summary */}
         <div className="rounded-lg bg-muted p-4 space-y-2">
           <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Total Cost</span>
+            <span className="text-muted-foreground">{t('trading.total_cost')}</span>
             <span className="font-medium">৳{totalCost.toFixed(2)}</span>
           </div>
           <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Potential Profit</span>
+            <span className="text-muted-foreground">{t('trading.potential_profit')}</span>
             <span className="font-medium text-green-500">
               +৳{potentialProfit.toFixed(2)}
             </span>
           </div>
           <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Return on Win</span>
+            <span className="text-muted-foreground">{t('trading.return_on_win')}</span>
             <span className="font-medium text-green-500">
               +{((potentialProfit / totalCost) * 100).toFixed(0)}%
             </span>
           </div>
           {wallet && (
             <div className="flex justify-between text-sm pt-2 border-t">
-              <span className="text-muted-foreground">Available Balance</span>
+              <span className="text-muted-foreground">{t('trading.available_balance')}</span>
               <span className="font-medium">৳{wallet.balance.toLocaleString()}</span>
             </div>
           )}
@@ -277,7 +279,7 @@ export function TradingPanel({ market }: TradingPanelProps) {
         {showSuccess && (
           <div className="flex items-center gap-2 text-sm text-green-500">
             <CheckCircle2 className="h-4 w-4" />
-            Order placed successfully!
+            {t('trading.success_desc')}
           </div>
         )}
 
@@ -293,10 +295,10 @@ export function TradingPanel({ market }: TradingPanelProps) {
           )}
         >
           {isSubmitting ? (
-            'Processing...'
+            t('trading.processing')
           ) : (
             <>
-              {activeTab === 'buy' ? 'Buy' : 'Sell'} {outcome}
+              {activeTab === 'buy' ? t('trading.buy') : t('trading.sell')} {outcome === 'YES' ? t('common.yes') : t('common.no')}
               <span className="ml-2">৳{totalCost.toFixed(2)}</span>
             </>
           )}
@@ -306,8 +308,10 @@ export function TradingPanel({ market }: TradingPanelProps) {
         <div className="flex items-start gap-2 text-xs text-muted-foreground">
           <Info className="h-4 w-4 flex-shrink-0 mt-0.5" />
           <p>
-            If the market resolves to {outcome}, you will receive ৳1 per share. 
-            If it resolves to {outcome === 'YES' ? 'NO' : 'YES'}, you lose your investment.
+            {t('trading.info', {
+              outcome: outcome === 'YES' ? t('common.yes') : t('common.no'),
+              opposite: outcome === 'YES' ? t('common.no') : t('common.yes')
+            })}
           </p>
         </div>
       </CardContent>

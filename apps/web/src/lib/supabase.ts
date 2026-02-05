@@ -5,7 +5,7 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
 // Create client only if credentials are available
-export const supabase = supabaseUrl && supabaseAnonKey 
+export const supabase = supabaseUrl && supabaseAnonKey
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null;
 
@@ -37,8 +37,8 @@ export async function signUp(email: string, password: string, fullName: string) 
       },
     },
   });
-  if (error) throw error;
-  return data;
+  // Return both data and error for proper handling
+  return { data, error };
 }
 
 export async function signIn(email: string, password: string) {
@@ -47,8 +47,8 @@ export async function signIn(email: string, password: string) {
     email,
     password,
   });
-  if (error) throw error;
-  return data;
+  // Return both data and error for proper handling
+  return { data, error };
 }
 
 export async function signOut() {
@@ -201,7 +201,7 @@ export function subscribeToMarket(
   marketId: string,
   callback: (payload: unknown) => void
 ) {
-  if (!supabase) return { unsubscribe: () => {} };
+  if (!supabase) return { unsubscribe: () => { } };
   return supabase
     .channel(`market:${marketId}`)
     .on(
@@ -221,7 +221,7 @@ export function subscribeToTrades(
   marketId: string,
   callback: (payload: unknown) => void
 ) {
-  if (!supabase) return { unsubscribe: () => {} };
+  if (!supabase) return { unsubscribe: () => { } };
   return supabase
     .channel(`trades:${marketId}`)
     .on(

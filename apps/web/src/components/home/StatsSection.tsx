@@ -1,15 +1,18 @@
 'use client';
 
 import { motion } from 'framer-motion';
-
-const stats = [
-    { value: "৳10M+", label: "Volume Traded" },
-    { value: "50,000+", label: "Active Predictions" },
-    { value: "Instant", label: "Withdrawals" },
-    { value: "0%", label: "Trading Fees (Beta)" },
-];
+import { useTranslation } from 'react-i18next';
 
 export default function StatsSection() {
+    const { t, i18n } = useTranslation();
+
+    const stats = [
+        { value: i18n.language === 'en' ? "৳10M+" : "৳১০M+", label: t('stats.volume_traded') },
+        { value: i18n.language === 'en' ? "50,000+" : "৫০,০০০+", label: t('stats.active_predictions') },
+        { value: t('stats.instant_withdrawals'), label: t('stats.instant_withdrawals') },
+        { value: "0%", label: t('stats.trading_fees') },
+    ];
+
     return (
         <section className="py-20 border-y border-white/5 bg-white/5 backdrop-blur-sm">
             <div className="container mx-auto px-4">
@@ -36,3 +39,4 @@ export default function StatsSection() {
         </section>
     );
 }
+

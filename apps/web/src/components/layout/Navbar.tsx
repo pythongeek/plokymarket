@@ -2,24 +2,32 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { TrendingUp, Wallet, LayoutDashboard, LogOut, User, Menu, X, Shield } from 'lucide-react';
+import { TrendingUp, Wallet, LayoutDashboard, LogOut, User, Menu, X, Shield, Languages } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useStore } from '@/store/useStore';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 export function Navbar() {
   const { currentUser, isAuthenticated, logout, wallet } = useStore();
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { t, i18n } = useTranslation();
 
-  const navItems = [
-    { label: 'Markets', href: '/markets', icon: TrendingUp },
-    { label: 'Portfolio', href: '/portfolio', icon: LayoutDashboard, authOnly: true },
-    { label: 'Wallet', href: '/wallet', icon: Wallet, authOnly: true },
+  const languages = [
+    { code: 'bn', label: 'বাংলা', flag: 'BD' },
+    { code: 'en', label: 'English', flag: 'US' },
+    { code: 'hi', label: 'हिन्दी', flag: 'IN' }
   ];
 
-  const adminItems = [
-    { label: 'Admin', href: '/admin', icon: Shield, adminOnly: true },
+  const changeLanguage = (code: string) => {
+    i18n.changeLanguage(code);
+  };
+
+  const navItems = [
+    { label: t('common.markets'), href: '/markets', icon: TrendingUp },
+    { label: t('common.portfolio'), href: '/portfolio', icon: LayoutDashboard, authOnly: true },
+    { label: t('common.leaderboard'), href: '/leaderboard', icon: TrendingUp }, // Added leaderboard for parity
   ];
 
   const isActive = (path: string) => pathname?.startsWith(path) || false;
@@ -32,7 +40,7 @@ export function Navbar() {
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
             <TrendingUp className="h-5 w-5 text-primary-foreground" />
           </div>
-          <span className="text-xl font-bold">Polymarket BD</span>
+          <span className="text-xl font-bold">Plokymarket</span>
         </Link>
 
         {/* Desktop Navigation */}
@@ -54,27 +62,26 @@ export function Navbar() {
               </Link>
             );
           })}
-
-          {currentUser?.is_admin && adminItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${isActive(item.href)
-                  ? 'bg-primary/10 text-primary'
-                  : 'text-muted-foreground hover:bg-accent hover:text-foreground'
-                  }`}
-              >
-                <Icon className="h-4 w-4" />
-                {item.label}
-              </Link>
-            );
-          })}
         </div>
 
         {/* Right Side */}
         <div className="hidden md:flex items-center gap-4">
+          {/* Language Switcher */}
+          <div className="flex items-center gap-1 border-x px-4 border-white/10 h-8">
+            {languages.map((lang) => (
+              <button
+                key={lang.code}
+                onClick={() => changeLanguage(lang.code)}
+                className={`px-2 py-1 text-xs rounded-md transition-all ${i18n.language === lang.code
+                  ? 'bg-primary text-primary-foreground font-bold'
+                  : 'text-muted-foreground hover:text-foreground'
+                  }`}
+              >
+                {lang.label}
+              </button>
+            ))}
+          </div>
+
           {isAuthenticated ? (
             <>
               {wallet && (
@@ -100,22 +107,30 @@ export function Navbar() {
           ) : (
             <div className="flex items-center gap-2">
               <Link href="/login">
-                <Button variant="ghost">Login</Button>
+                <Button variant="ghost">{t('common.login')}</Button>
               </Link>
               <Link href="/register">
-                <Button>Get Started</Button>
+                <Button>{t('common.signup')}</Button>
               </Link>
             </div>
           )}
         </div>
 
         {/* Mobile Menu Button */}
-        <button
-          className="md:hidden p-2"
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-        >
-          {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-        </button>
+        <div className="md:hidden flex items-center gap-2">
+          {/* Mobile Lang Switch */}
+          <div className="flex gap-1 mr-2">
+            <Button variant="ghost" size="icon" onClick={() => changeLanguage(i18n.language === 'bn' ? 'en' : 'bn')}>
+              <Languages className="h-5 w-5" />
+            </Button>
+          </div>
+          <button
+            className="p-2"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          >
+            {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+          </button>
+        </div>
       </div>
 
       {/* Mobile Menu */}
@@ -124,24 +139,6 @@ export function Navbar() {
           <div className="container py-4 space-y-2">
             {navItems.map((item) => {
               if (item.authOnly && !isAuthenticated) return null;
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium ${isActive(item.href)
-                    ? 'bg-primary/10 text-primary'
-                    : 'text-muted-foreground hover:bg-accent'
-                    }`}
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  <Icon className="h-5 w-5" />
-                  {item.label}
-                </Link>
-              );
-            })}
-
-            {currentUser?.is_admin && adminItems.map((item) => {
               const Icon = item.icon;
               return (
                 <Link
@@ -168,15 +165,15 @@ export function Navbar() {
                 className="flex w-full items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-muted-foreground hover:bg-accent"
               >
                 <LogOut className="h-5 w-5" />
-                Logout
+                {t('common.logout')}
               </button>
             ) : (
               <div className="flex flex-col gap-2 pt-2 border-t">
                 <Link href="/login" onClick={() => setMobileMenuOpen(false)}>
-                  <Button variant="outline" className="w-full">Login</Button>
+                  <Button variant="outline" className="w-full">{t('common.login')}</Button>
                 </Link>
                 <Link href="/register" onClick={() => setMobileMenuOpen(false)}>
-                  <Button className="w-full">Get Started</Button>
+                  <Button className="w-full">{t('common.signup')}</Button>
                 </Link>
               </div>
             )}

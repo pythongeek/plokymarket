@@ -3,29 +3,32 @@
 import { motion } from 'framer-motion';
 import { Card, CardContent } from '@/components/ui/card';
 import { Search, TrendingUp, HandCoins } from 'lucide-react';
-
-const steps = [
-    {
-        icon: Search,
-        title: "1. Select a Market",
-        description: "Browse trending topics in sports, crypto, and politics. Find an event you have an opinion on.",
-        color: "bg-blue-500/10 text-blue-500"
-    },
-    {
-        icon: TrendingUp,
-        title: "2. Take a Position",
-        description: "Buy 'Yes' if you think it will happen, or 'No' if you don't. Trade continuously as odds change.",
-        color: "bg-purple-500/10 text-purple-500"
-    },
-    {
-        icon: HandCoins,
-        title: "3. Profit on Win",
-        description: "When the event resolves, shares settle at $1.00. Cash out your winnings instantly.",
-        color: "bg-green-500/10 text-green-500"
-    }
-];
+import { useTranslation } from 'react-i18next';
 
 export default function HowItWorks() {
+    const { t } = useTranslation();
+
+    const steps = [
+        {
+            icon: Search,
+            title: t('how_it_works.step1_title'),
+            description: t('how_it_works.step1_desc'),
+            color: "bg-blue-500/10 text-blue-500"
+        },
+        {
+            icon: TrendingUp,
+            title: t('how_it_works.step2_title'),
+            description: t('how_it_works.step2_desc'),
+            color: "bg-purple-500/10 text-purple-500"
+        },
+        {
+            icon: HandCoins,
+            title: t('how_it_works.step3_title'),
+            description: t('how_it_works.step3_desc'),
+            color: "bg-green-500/10 text-green-500"
+        }
+    ];
+
     return (
         <section className="py-24 relative overflow-hidden">
             <div className="container mx-auto px-4">
@@ -35,9 +38,9 @@ export default function HowItWorks() {
                     viewport={{ once: true }}
                     className="text-center mb-16"
                 >
-                    <h2 className="text-3xl md:text-5xl font-bold mb-4">How it works</h2>
+                    <h2 className="text-3xl md:text-5xl font-bold mb-4">{t('how_it_works.title')}</h2>
                     <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-                        Prediction markets are the most accurate way to forecast the future. Here's how to get started.
+                        {t('how_it_works.subtitle')}
                     </p>
                 </motion.div>
 
@@ -71,3 +74,4 @@ export default function HowItWorks() {
         </section>
     );
 }
+

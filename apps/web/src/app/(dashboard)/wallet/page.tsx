@@ -20,8 +20,27 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
+import { bn } from 'date-fns/locale';
+import { useTranslation } from 'react-i18next';
 
 function TransactionList({ transactions }: { transactions: any[] }) {
+  const { t, i18n } = useTranslation();
+
+  const getLocale = () => {
+    return i18n.language === 'bn' ? bn : undefined;
+  };
+
+  const getTransactionTypeLabel = (type: string) => {
+    const labels: Record<string, string> = {
+      deposit: t('wallet.deposit'),
+      withdrawal: t('wallet.withdraw'),
+      trade_buy: t('common.trade') + ' (Buy)',
+      trade_sell: t('common.trade') + ' (Sell)',
+      settlement: 'Settlement',
+    };
+    return labels[type] || type.replace('_', ' ');
+  };
+
   if (transactions.length === 0) {
     return (
       <Card>
@@ -31,8 +50,8 @@ function TransactionList({ transactions }: { transactions: any[] }) {
               <WalletIcon className="h-8 w-8 text-muted-foreground" />
             </div>
           </div>
-          <h3 className="text-lg font-semibold mb-2">No transactions yet</h3>
-          <p className="text-muted-foreground">Your transaction history will appear here</p>
+          <h3 className="text-lg font-semibold mb-2">{t('wallet.no_transactions')}</h3>
+          <p className="text-muted-foreground">{t('wallet.transaction_history_here')}</p>
         </CardContent>
       </Card>
     );
@@ -65,9 +84,9 @@ function TransactionList({ transactions }: { transactions: any[] }) {
                   {txn.type === 'settlement' && <CheckCircle2 className="h-5 w-5 text-purple-500" />}
                 </div>
                 <div>
-                  <div className="font-medium capitalize">{txn.type.replace('_', ' ')}</div>
+                  <div className="font-medium">{getTransactionTypeLabel(txn.type)}</div>
                   <div className="text-sm text-muted-foreground">
-                    {format(new Date(txn.created_at), 'MMM d, yyyy h:mm a')}
+                    {format(new Date(txn.created_at), 'MMM d, yyyy h:mm a', { locale: getLocale() })}
                   </div>
                 </div>
               </div>
@@ -76,7 +95,7 @@ function TransactionList({ transactions }: { transactions: any[] }) {
                   {txn.amount > 0 ? '+' : ''}৳{Math.abs(txn.amount).toLocaleString()}
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  Balance: ৳{txn.balance_after.toLocaleString()}
+                  {t('wallet.balance_after')}: ৳{txn.balance_after.toLocaleString()}
                 </div>
               </div>
             </div>
@@ -89,6 +108,7 @@ function TransactionList({ transactions }: { transactions: any[] }) {
 
 export default function WalletPage() {
   const { isAuthenticated, wallet, transactions, fetchWallet, fetchTransactions } = useStore();
+  const { t } = useTranslation();
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -101,14 +121,14 @@ export default function WalletPage() {
     return (
       <div className="flex flex-col items-center justify-center py-20">
         <AlertCircle className="h-16 w-16 text-muted-foreground mb-4" />
-        <h2 className="text-2xl font-bold mb-2">Login Required</h2>
-        <p className="text-muted-foreground mb-6">Please login to view your wallet</p>
+        <h2 className="text-2xl font-bold mb-2">{t('common.login_required')}</h2>
+        <p className="text-muted-foreground mb-6">{t('wallet.login_to_view')}</p>
         <div className="flex gap-4">
           <Link href="/login">
-            <Button variant="outline">Login</Button>
+            <Button variant="outline">{t('common.login')}</Button>
           </Link>
           <Link href="/register">
-            <Button>Get Started</Button>
+            <Button>{t('common.get_started')}</Button>
           </Link>
         </div>
       </div>
@@ -128,8 +148,8 @@ export default function WalletPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold">Wallet</h1>
-        <p className="text-muted-foreground">Manage your funds and view transaction history</p>
+        <h1 className="text-3xl font-bold">{t('wallet.title')}</h1>
+        <p className="text-muted-foreground">{t('wallet.subtitle')}</p>
       </div>
 
       {/* Balance Cards */}
@@ -137,7 +157,7 @@ export default function WalletPage() {
         <Card className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground">
           <CardContent className="p-6">
             <div className="flex items-center justify-between mb-4">
-              <div className="text-primary-foreground/80">Total Balance</div>
+              <div className="text-primary-foreground/80">{t('wallet.total_balance')}</div>
               <div className="h-10 w-10 rounded-full bg-white/20 flex items-center justify-center">
                 <WalletIcon className="h-5 w-5" />
               </div>
@@ -149,7 +169,7 @@ export default function WalletPage() {
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between mb-4">
-              <div className="text-muted-foreground">Available</div>
+              <div className="text-muted-foreground">{t('wallet.available')}</div>
               <div className="h-10 w-10 rounded-full bg-green-500/10 flex items-center justify-center">
                 <CheckCircle2 className="h-5 w-5 text-green-500" />
               </div>
@@ -161,7 +181,7 @@ export default function WalletPage() {
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between mb-4">
-              <div className="text-muted-foreground">Locked in Orders</div>
+              <div className="text-muted-foreground">{t('wallet.locked_in_orders')}</div>
               <div className="h-10 w-10 rounded-full bg-amber-500/10 flex items-center justify-center">
                 <Clock className="h-5 w-5 text-amber-500" />
               </div>
@@ -175,16 +195,16 @@ export default function WalletPage() {
       <div className="flex flex-wrap gap-4">
         <Button size="lg" className="gap-2">
           <ArrowDownLeft className="h-5 w-5" />
-          Deposit
+          {t('wallet.deposit')}
         </Button>
         <Button size="lg" variant="outline" className="gap-2">
           <ArrowUpRight className="h-5 w-5" />
-          Withdraw
+          {t('wallet.withdraw')}
         </Button>
         <Link href="/markets">
           <Button size="lg" variant="secondary" className="gap-2">
             <TrendingUp className="h-5 w-5" />
-            Trade
+            {t('wallet.trade')}
           </Button>
         </Link>
       </div>
@@ -192,7 +212,7 @@ export default function WalletPage() {
       {/* Payment Methods */}
       <Card>
         <CardHeader>
-          <CardTitle>Payment Methods</CardTitle>
+          <CardTitle>{t('wallet.payment_methods')}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -202,7 +222,7 @@ export default function WalletPage() {
               </div>
               <div>
                 <div className="font-semibold">bKash</div>
-                <div className="text-sm text-muted-foreground">Instant deposit</div>
+                <div className="text-sm text-muted-foreground">{t('wallet.instant_deposit')}</div>
               </div>
             </div>
 
@@ -212,7 +232,7 @@ export default function WalletPage() {
               </div>
               <div>
                 <div className="font-semibold">Nagad</div>
-                <div className="text-sm text-muted-foreground">Instant deposit</div>
+                <div className="text-sm text-muted-foreground">{t('wallet.instant_deposit')}</div>
               </div>
             </div>
 
@@ -222,7 +242,7 @@ export default function WalletPage() {
               </div>
               <div>
                 <div className="font-semibold">Bank Transfer</div>
-                <div className="text-sm text-muted-foreground">1-2 business days</div>
+                <div className="text-sm text-muted-foreground">{t('wallet.business_days')}</div>
               </div>
             </div>
           </div>
@@ -232,10 +252,10 @@ export default function WalletPage() {
       {/* Transaction History */}
       <Tabs defaultValue="all">
         <TabsList>
-          <TabsTrigger value="all">All ({transactions.length})</TabsTrigger>
-          <TabsTrigger value="deposits">Deposits ({deposits.length})</TabsTrigger>
-          <TabsTrigger value="withdrawals">Withdrawals ({withdrawals.length})</TabsTrigger>
-          <TabsTrigger value="trades">Trades ({trades.length})</TabsTrigger>
+          <TabsTrigger value="all">{t('common.all')} ({transactions.length})</TabsTrigger>
+          <TabsTrigger value="deposits">{t('wallet.deposits')} ({deposits.length})</TabsTrigger>
+          <TabsTrigger value="withdrawals">{t('wallet.withdrawals')} ({withdrawals.length})</TabsTrigger>
+          <TabsTrigger value="trades">{t('wallet.trades')} ({trades.length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="all">

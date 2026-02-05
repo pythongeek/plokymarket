@@ -1,0 +1,94 @@
+{
+    "name": "News Scraper",
+    "nodes": [
+        {
+            "parameters": {
+                "rule": {
+                    "interval": [
+                        {
+                            "field": "hours"
+                        }
+                    ]
+                }
+            },
+            "name": "Schedule",
+            "type": "n8n-nodes-base.scheduleTrigger",
+            "typeVersion": 1,
+            "position": [
+                250,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "url": "https://en.prothomalo.com/feed"
+            },
+            "name": "Fetch RSS",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 1,
+            "position": [
+                450,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "dataPropertyName": "data"
+            },
+            "name": "XML to JSON",
+            "type": "n8n-nodes-base.xml",
+            "typeVersion": 1,
+            "position": [
+                650,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "functionCode": "return items[0].json.rss.channel.item.map(item => {\n  return {\n    json: {\n      title: item.title,\n      link: item.link,\n      pubDate: item.pubDate,\n      description: item.description\n    }\n  }\n});"
+            },
+            "name": "Split Items",
+            "type": "n8n-nodes-base.function",
+            "typeVersion": 1,
+            "position": [
+                850,
+                300
+            ]
+        }
+    ],
+    "connections": {
+        "Schedule": {
+            "main": [
+                [
+                    {
+                        "node": "Fetch RSS",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Fetch RSS": {
+            "main": [
+                [
+                    {
+                        "node": "XML to JSON",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "XML to JSON": {
+            "main": [
+                [
+                    {
+                        "node": "Split Items",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    }
+}

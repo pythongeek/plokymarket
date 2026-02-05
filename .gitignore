@@ -37,3 +37,4 @@ yarn-error.log*
 
 # Supabase
 supabase/functions/*/deno.lock
+.env*.local

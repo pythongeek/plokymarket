@@ -19,6 +19,7 @@ import {
   Mail,
   Lock,
 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -30,6 +31,7 @@ export default function LoginPage() {
 
   const { login } = useStore();
   const router = useRouter();
+  const { t } = useTranslation();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,14 +39,17 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      const success = await login(email, password);
-      if (success) {
+      const result = await login(email, password);
+      if (result === true) {
         router.push('/markets');
+      } else if (typeof result === 'string') {
+        // Display the specific error message from Supabase
+        setError(result);
       } else {
-        setError('Invalid email or password. Try using admin@polymarket.bd / password');
+        setError(t('auth.login_failed'));
       }
     } catch (err) {
-      setError('An error occurred. Please try again.');
+      setError(t('auth.error_occurred'));
     } finally {
       setIsLoading(false);
     }
@@ -52,8 +57,8 @@ export default function LoginPage() {
 
   // Demo credentials helper
   const fillDemoCredentials = () => {
-    setEmail('admin@polymarket.bd');
-    setPassword('password');
+    setEmail('admin@plokymarket.bd');
+    setPassword('PlokyAdmin2026!');
   };
 
   return (
@@ -65,15 +70,15 @@ export default function LoginPage() {
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
               <TrendingUp className="h-6 w-6 text-primary-foreground" />
             </div>
-            <span className="text-2xl font-bold">Polymarket BD</span>
+            <span className="text-2xl font-bold">Plokymarket</span>
           </Link>
         </div>
 
         <Card>
           <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl text-center">Welcome back</CardTitle>
+            <CardTitle className="text-2xl text-center">{t('auth.welcome_back')}</CardTitle>
             <CardDescription className="text-center">
-              Enter your credentials to access your account
+              {t('auth.enter_credentials')}
             </CardDescription>
           </CardHeader>
 
@@ -87,13 +92,13 @@ export default function LoginPage() {
               )}
 
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">{t('auth.email')}</Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     id="email"
                     type="email"
-                    placeholder="name@example.com"
+                    placeholder={t('auth.email_placeholder')}
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="pl-10"
@@ -103,13 +108,13 @@ export default function LoginPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password">{t('auth.password')}</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     id="password"
                     type={showPassword ? 'text' : 'password'}
-                    placeholder="Enter your password"
+                    placeholder={t('auth.password_placeholder')}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="pl-10 pr-10"
@@ -133,20 +138,20 @@ export default function LoginPage() {
                     onCheckedChange={(checked) => setRememberMe(checked as boolean)}
                   />
                   <Label htmlFor="remember" className="text-sm font-normal">
-                    Remember me
+                    {t('auth.remember_me')}
                   </Label>
                 </div>
                 <Link href="/forgot-password" className="text-sm text-primary hover:underline">
-                  Forgot password?
+                  {t('auth.forgot_password')}
                 </Link>
               </div>
 
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? (
-                  'Signing in...'
+                  t('auth.signing_in')
                 ) : (
                   <>
-                    Sign In
+                    {t('auth.sign_in')}
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </>
                 )}
@@ -155,30 +160,31 @@ export default function LoginPage() {
 
             {/* Demo credentials */}
             <div className="mt-4 p-3 rounded-lg bg-muted text-center">
-              <p className="text-sm text-muted-foreground mb-2">Demo credentials for testing:</p>
+              <p className="text-sm text-muted-foreground mb-2">{t('auth.demo_credentials')}</p>
               <button onClick={fillDemoCredentials} className="text-sm text-primary hover:underline">
-                Click to use: admin@polymarket.bd / password
+                {t('auth.click_to_use')}: admin@plokymarket.bd / PlokyAdmin2026!
               </button>
             </div>
 
             <div className="mt-6 text-center text-sm">
-              Do not have an account?{' '}
+              {t('auth.no_account')}{' '}
               <Link href="/register" className="text-primary hover:underline font-medium">
-                Create an account
+                {t('auth.create_account')}
               </Link>
             </div>
           </CardContent>
         </Card>
 
         <p className="mt-8 text-center text-sm text-muted-foreground">
-          By signing in, you agree to our{' '}
+          {t('auth.by_signing_in')}{' '}
           <Link href="/terms" className="hover:underline">
-            Terms of Service
+            {t('auth.terms')}
           </Link>{' '}
-          and{' '}
+          {t('auth.and')}{' '}
           <Link href="/privacy" className="hover:underline">
-            Privacy Policy
+            {t('auth.privacy')}
           </Link>
+          {t('auth.agree')}
         </p>
       </div>
     </div>

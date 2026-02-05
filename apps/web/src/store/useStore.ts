@@ -99,12 +99,19 @@ export const useStore = create<StoreState>()(
       // AUTH ACTIONS
       // ===================================
 
-      login: async (email: string, password: string) => {
+      login: async (email: string, password: string): Promise<boolean | string> => {
         try {
           const { data, error } = await signIn(email, password);
           if (error) {
             console.error('Login error:', error);
-            return false;
+            // Return specific error message
+            if (error.message.includes('Invalid login credentials')) {
+              return 'Invalid email or password. Please try again.';
+            }
+            if (error.message.includes('Email not confirmed')) {
+              return 'Please check your email to confirm your account.';
+            }
+            return error.message || 'Login failed. Please try again.';
           }
 
           if (data.user) {
@@ -116,7 +123,15 @@ export const useStore = create<StoreState>()(
               .single();
 
             set({
-              currentUser: profile,
+              currentUser: profile || {
+                id: data.user.id,
+                email: data.user.email || email,
+                full_name: data.user.user_metadata?.full_name || 'User',
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+                is_admin: false,
+                kyc_verified: false,
+              },
               isAuthenticated: true,
             });
 
@@ -127,19 +142,29 @@ export const useStore = create<StoreState>()(
 
             return true;
           }
-          return false;
-        } catch (error) {
+          return 'Login failed. Please try again.';
+        } catch (error: any) {
           console.error('Login error:', error);
-          return false;
+          return error?.message || 'An unexpected error occurred. Please try again.';
         }
       },
 
-      register: async (email: string, password: string, fullName: string) => {
+      register: async (email: string, password: string, fullName: string): Promise<boolean | string> => {
         try {
           const { data, error } = await signUp(email, password, fullName);
           if (error) {
             console.error('Register error:', error);
-            return false;
+            // Return specific error message
+            if (error.message.includes('already registered') || error.message.includes('already exists')) {
+              return 'Email already registered. Please login instead.';
+            }
+            if (error.message.includes('invalid')) {
+              return 'Invalid email address. Please use a valid email.';
+            }
+            if (error.message.includes('Password')) {
+              return error.message;
+            }
+            return error.message || 'Registration failed. Please try again.';
           }
 
           if (data.user) {
@@ -190,10 +215,10 @@ export const useStore = create<StoreState>()(
 
             return true;
           }
-          return false;
-        } catch (error) {
+          return 'Registration failed. Please try again.';
+        } catch (error: any) {
           console.error('Register error:', error);
-          return false;
+          return error?.message || 'An unexpected error occurred. Please try again.';
         }
       },
 

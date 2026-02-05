@@ -4,8 +4,11 @@ import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { ArrowRight, Sparkles } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 export default function CTASection() {
+    const { t } = useTranslation();
+
     return (
         <section className="py-24 relative overflow-hidden">
             {/* Glow Effects */}
@@ -20,30 +23,31 @@ export default function CTASection() {
                 >
                     <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary mb-6">
                         <Sparkles className="h-4 w-4" />
-                        Limited Time Offer
+                        {t('cta.badge')}
                     </div>
 
                     <h2 className="text-4xl md:text-6xl font-bold mb-6 tracking-tight">
-                        Start trading with <span className="text-primary">0% fees</span>
+                        {t('cta.title')}
                     </h2>
                     <p className="text-xl text-muted-foreground mb-10 max-w-2xl mx-auto">
-                        Join the fastest growing prediction market in Bangladesh. No hidden costs. Just pure trading.
+                        {t('cta.description')}
                     </p>
 
                     <div className="flex flex-col sm:flex-row gap-4 justify-center">
                         <Link href="/register">
                             <Button size="lg" className="h-14 px-8 text-lg rounded-full shadow-lg shadow-primary/25">
-                                Create Free Account
+                                {t('cta.button')}
                                 <ArrowRight className="ml-2 h-5 w-5" />
                             </Button>
                         </Link>
                     </div>
 
                     <p className="mt-8 text-sm text-muted-foreground/60">
-                        No credit card required • Secure Bkash/Nagad Deposits
+                        {t('cta.note')}
                     </p>
                 </motion.div>
             </div>
         </section>
     );
 }
+

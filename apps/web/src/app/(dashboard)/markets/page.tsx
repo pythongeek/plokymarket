@@ -20,6 +20,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useTranslation } from 'react-i18next';
 
 type SortOption = 'volume' | 'newest' | 'closing' | 'price';
 type FilterStatus = 'all' | 'active' | 'closing' | 'resolved';
@@ -31,6 +32,7 @@ export default function MarketsPage() {
   const [sortBy, setSortBy] = useState<SortOption>('volume');
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('active');
   const [showFilters, setShowFilters] = useState(false);
+  const { t } = useTranslation();
 
   useEffect(() => {
     fetchMarkets();
@@ -38,6 +40,13 @@ export default function MarketsPage() {
 
   // Get unique categories
   const categories = Array.from(new Set(markets.map((m) => m.category)));
+
+  // Translate category name
+  const translateCategory = (cat: string) => {
+    const key = `categories.${cat}`;
+    const translated = t(key);
+    return translated !== key ? translated : cat;
+  };
 
   // Filter and sort markets
   const filteredMarkets = markets.filter((market) => {
@@ -94,13 +103,27 @@ export default function MarketsPage() {
   const hasActiveFilters =
     searchQuery || selectedCategory || filterStatus !== 'active' || sortBy !== 'volume';
 
+  const statusLabels: Record<FilterStatus, string> = {
+    all: t('common.all'),
+    active: t('common.active'),
+    closing: t('markets.closing_soon'),
+    resolved: t('markets.resolved'),
+  };
+
+  const sortLabels: Record<SortOption, string> = {
+    volume: t('markets.volume_sort'),
+    newest: t('markets.newest_sort'),
+    closing: t('markets.closing_soon'),
+    price: t('markets.price_sort'),
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Markets</h1>
-          <p className="text-muted-foreground">Trade on {markets.length}+ prediction markets</p>
+          <h1 className="text-3xl font-bold">{t('markets.title')}</h1>
+          <p className="text-muted-foreground">{t('markets.subtitle', { count: markets.length })}</p>
         </div>
 
         {/* Search */}
@@ -108,7 +131,7 @@ export default function MarketsPage() {
           <div className="relative flex-1 md:w-80">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search markets..."
+              placeholder={t('markets.search_placeholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10"
@@ -126,10 +149,10 @@ export default function MarketsPage() {
             className={showFilters ? 'bg-primary/10' : ''}
           >
             <SlidersHorizontal className="h-4 w-4 mr-2" />
-            Filters
+            {t('common.filters')}
             {hasActiveFilters && (
               <Badge variant="secondary" className="ml-2">
-                Active
+                {t('common.active')}
               </Badge>
             )}
           </Button>
@@ -142,29 +165,27 @@ export default function MarketsPage() {
           <div className="flex flex-wrap gap-4">
             {/* Category Filter */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Category</label>
+              <label className="text-sm font-medium">{t('common.category')}</label>
               <div className="flex flex-wrap gap-2">
                 <button
                   onClick={() => setSelectedCategory(null)}
-                  className={`px-3 py-1.5 text-sm rounded-full transition-colors ${
-                    selectedCategory === null
+                  className={`px-3 py-1.5 text-sm rounded-full transition-colors ${selectedCategory === null
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-background hover:bg-background/80'
-                  }`}
+                    }`}
                 >
-                  All
+                  {t('common.all')}
                 </button>
                 {categories.map((cat) => (
                   <button
                     key={cat}
                     onClick={() => setSelectedCategory(cat)}
-                    className={`px-3 py-1.5 text-sm rounded-full transition-colors ${
-                      selectedCategory === cat
+                    className={`px-3 py-1.5 text-sm rounded-full transition-colors ${selectedCategory === cat
                         ? 'bg-primary text-primary-foreground'
                         : 'bg-background hover:bg-background/80'
-                    }`}
+                      }`}
                   >
-                    {cat}
+                    {translateCategory(cat)}
                   </button>
                 ))}
               </div>
@@ -172,22 +193,21 @@ export default function MarketsPage() {
 
             {/* Status Filter */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Status</label>
+              <label className="text-sm font-medium">{t('common.status')}</label>
               <div className="flex flex-wrap gap-2">
                 {(['all', 'active', 'closing', 'resolved'] as FilterStatus[]).map((status) => (
                   <button
                     key={status}
                     onClick={() => setFilterStatus(status)}
-                    className={`px-3 py-1.5 text-sm rounded-full transition-colors flex items-center gap-1 ${
-                      filterStatus === status
+                    className={`px-3 py-1.5 text-sm rounded-full transition-colors flex items-center gap-1 ${filterStatus === status
                         ? 'bg-primary text-primary-foreground'
                         : 'bg-background hover:bg-background/80'
-                    }`}
+                      }`}
                   >
                     {status === 'active' && <TrendingUp className="h-3 w-3" />}
                     {status === 'closing' && <Clock className="h-3 w-3" />}
                     {status === 'resolved' && <CheckCircle2 className="h-3 w-3" />}
-                    {status.charAt(0).toUpperCase() + status.slice(1)}
+                    {statusLabels[status]}
                   </button>
                 ))}
               </div>
@@ -195,21 +215,18 @@ export default function MarketsPage() {
 
             {/* Sort */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Sort By</label>
+              <label className="text-sm font-medium">{t('common.sort_by')}</label>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" className="bg-background">
-                    {sortBy === 'volume' && 'Volume'}
-                    {sortBy === 'newest' && 'Newest'}
-                    {sortBy === 'closing' && 'Closing Soon'}
-                    {sortBy === 'price' && 'Price'}
+                    {sortLabels[sortBy]}
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
-                  <DropdownMenuItem onClick={() => setSortBy('volume')}>Volume</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setSortBy('newest')}>Newest</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setSortBy('closing')}>Closing Soon</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setSortBy('price')}>Price</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSortBy('volume')}>{t('markets.volume_sort')}</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSortBy('newest')}>{t('markets.newest_sort')}</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSortBy('closing')}>{t('markets.closing_soon')}</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSortBy('price')}>{t('markets.price_sort')}</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -217,7 +234,7 @@ export default function MarketsPage() {
 
           {hasActiveFilters && (
             <Button variant="ghost" size="sm" onClick={clearFilters} className="text-muted-foreground">
-              Clear all filters
+              {t('common.clear_filters')}
             </Button>
           )}
         </div>
@@ -228,7 +245,7 @@ export default function MarketsPage() {
         <div className="flex flex-wrap gap-2">
           {selectedCategory && (
             <Badge variant="secondary" className="gap-1">
-              {selectedCategory}
+              {translateCategory(selectedCategory)}
               <button onClick={() => setSelectedCategory(null)}>
                 <X className="h-3 w-3" />
               </button>
@@ -236,7 +253,7 @@ export default function MarketsPage() {
           )}
           {filterStatus !== 'active' && (
             <Badge variant="secondary" className="gap-1">
-              {filterStatus}
+              {statusLabels[filterStatus]}
               <button onClick={() => setFilterStatus('active')}>
                 <X className="h-3 w-3" />
               </button>
@@ -244,7 +261,7 @@ export default function MarketsPage() {
           )}
           {sortBy !== 'volume' && (
             <Badge variant="secondary" className="gap-1">
-              Sort: {sortBy}
+              {t('common.sort_by')}: {sortLabels[sortBy]}
               <button onClick={() => setSortBy('volume')}>
                 <X className="h-3 w-3" />
               </button>
@@ -255,7 +272,7 @@ export default function MarketsPage() {
 
       {/* Results Count */}
       <div className="text-sm text-muted-foreground">
-        Showing {sortedMarkets.length} of {markets.length} markets
+        {t('markets.showing_count', { shown: sortedMarkets.length, total: markets.length })}
       </div>
 
       {/* Markets Grid */}
@@ -270,11 +287,11 @@ export default function MarketsPage() {
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
             <Search className="h-8 w-8 text-muted-foreground" />
           </div>
-          <h3 className="text-lg font-semibold mb-2">No markets found</h3>
+          <h3 className="text-lg font-semibold mb-2">{t('markets.no_markets_found')}</h3>
           <p className="text-muted-foreground mb-4">
-            Try adjusting your filters or search query
+            {t('markets.try_adjusting')}
           </p>
-          {hasActiveFilters && <Button onClick={clearFilters}>Clear Filters</Button>}
+          {hasActiveFilters && <Button onClick={clearFilters}>{t('common.clear_filters')}</Button>}
         </div>
       )}
     </div>

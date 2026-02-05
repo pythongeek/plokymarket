@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/store/useStore';
@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Progress } from '@/components/ui/progress';
 import {
   TrendingUp,
   Eye,
@@ -20,7 +21,15 @@ import {
   Mail,
   Lock,
   CheckCircle2,
+  ShieldCheck,
 } from 'lucide-react';
+import {
+  validatePassword,
+  validateEmail,
+  sanitizeInput,
+  registerRateLimiter,
+} from '@/lib/security';
+import { useTranslation } from 'react-i18next';
 
 export default function RegisterPage() {
   const [fullName, setFullName] = useState('');
@@ -32,44 +41,88 @@ export default function RegisterPage() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [rateLimitSeconds, setRateLimitSeconds] = useState(0);
 
   const { register } = useStore();
   const router = useRouter();
+  const { t } = useTranslation();
+
+  // Password strength validation
+  const passwordValidation = useMemo(() => validatePassword(password), [password]);
+  const passwordStrengthPercent = useMemo(() => {
+    if (passwordValidation.strength === 'weak') return 33;
+    if (passwordValidation.strength === 'medium') return 66;
+    return 100;
+  }, [passwordValidation.strength]);
+
+  const getStrengthLabel = (strength: string) => {
+    switch (strength) {
+      case 'weak': return t('auth.password_weak');
+      case 'medium': return t('auth.password_medium');
+      case 'strong': return t('auth.password_strong');
+      default: return strength;
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    // Validation
-    if (password !== confirmPassword) {
-      setError('Passwords do not match');
+    // Check rate limit
+    if (registerRateLimiter.isRateLimited('register')) {
+      const remaining = registerRateLimiter.getRemainingTime('register');
+      setRateLimitSeconds(remaining);
+      setError(t('auth.too_many_attempts', { seconds: remaining }));
       return;
     }
 
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters long');
+    // Sanitize inputs
+    const sanitizedName = sanitizeInput(fullName.trim());
+    const sanitizedEmail = email.trim().toLowerCase();
+
+    // Validate email
+    if (!validateEmail(sanitizedEmail)) {
+      setError(t('auth.invalid_email'));
+      return;
+    }
+
+    // Validate password strength
+    if (!passwordValidation.isValid) {
+      setError(passwordValidation.errors[0]);
+      return;
+    }
+
+    // Validation
+    if (password !== confirmPassword) {
+      setError(t('auth.passwords_not_match'));
       return;
     }
 
     if (!agreeTerms) {
-      setError('You must agree to the terms and conditions');
+      setError(t('auth.agree_terms_error'));
       return;
     }
 
+    // Record attempt for rate limiting
+    registerRateLimiter.recordAttempt('register');
     setIsLoading(true);
 
     try {
-      const success = await register(email, password, fullName);
-      if (success) {
+      const result = await register(sanitizedEmail, password, sanitizedName);
+      if (result === true) {
+        registerRateLimiter.reset('register');
         setIsSuccess(true);
         setTimeout(() => {
           router.push('/markets');
         }, 1500);
+      } else if (typeof result === 'string') {
+        // Display the specific error message from Supabase
+        setError(result);
       } else {
-        setError('Email already registered');
+        setError(t('auth.registration_failed'));
       }
     } catch (err) {
-      setError('An error occurred. Please try again.');
+      setError(t('auth.error_occurred'));
     } finally {
       setIsLoading(false);
     }
@@ -85,9 +138,9 @@ export default function RegisterPage() {
                 <CheckCircle2 className="h-8 w-8 text-green-500" />
               </div>
             </div>
-            <h2 className="text-2xl font-bold mb-2">Account Created!</h2>
+            <h2 className="text-2xl font-bold mb-2">{t('auth.account_created')}</h2>
             <p className="text-muted-foreground mb-6">
-              Welcome to Polymarket BD. Redirecting you to markets...
+              {t('auth.welcome_redirect')}
             </p>
           </CardContent>
         </Card>
@@ -104,15 +157,15 @@ export default function RegisterPage() {
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
               <TrendingUp className="h-6 w-6 text-primary-foreground" />
             </div>
-            <span className="text-2xl font-bold">Polymarket BD</span>
+            <span className="text-2xl font-bold">Plokymarket</span>
           </Link>
         </div>
 
         <Card>
           <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl text-center">Create an account</CardTitle>
+            <CardTitle className="text-2xl text-center">{t('auth.create_an_account')}</CardTitle>
             <CardDescription className="text-center">
-              Start trading prediction markets today
+              {t('auth.start_trading_today')}
             </CardDescription>
           </CardHeader>
 
@@ -126,13 +179,13 @@ export default function RegisterPage() {
               )}
 
               <div className="space-y-2">
-                <Label htmlFor="fullName">Full Name</Label>
+                <Label htmlFor="fullName">{t('auth.full_name')}</Label>
                 <div className="relative">
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     id="fullName"
                     type="text"
-                    placeholder="John Doe"
+                    placeholder={t('auth.full_name_placeholder')}
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                     className="pl-10"
@@ -142,13 +195,13 @@ export default function RegisterPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">{t('auth.email')}</Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     id="email"
                     type="email"
-                    placeholder="name@example.com"
+                    placeholder={t('auth.email_placeholder')}
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="pl-10"
@@ -158,13 +211,13 @@ export default function RegisterPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password">{t('auth.password')}</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     id="password"
                     type={showPassword ? 'text' : 'password'}
-                    placeholder="Create a strong password"
+                    placeholder={t('auth.create_strong_password')}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="pl-10 pr-10"
@@ -178,17 +231,40 @@ export default function RegisterPage() {
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
-                <p className="text-xs text-muted-foreground">Must be at least 8 characters long</p>
+                {/* Password Strength Indicator */}
+                {password && (
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Progress
+                        value={passwordStrengthPercent}
+                        className={`h-2 flex-1 ${passwordValidation.strength === 'weak' ? '[&>div]:bg-red-500' :
+                          passwordValidation.strength === 'medium' ? '[&>div]:bg-yellow-500' :
+                            '[&>div]:bg-green-500'
+                          }`}
+                      />
+                      <span className={`text-xs font-medium ${passwordValidation.strength === 'weak' ? 'text-red-500' :
+                        passwordValidation.strength === 'medium' ? 'text-yellow-500' :
+                          'text-green-500'
+                        }`}>
+                        {getStrengthLabel(passwordValidation.strength)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <ShieldCheck className="h-3 w-3" />
+                      <span>{t('auth.password_hint')}</span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirm Password</Label>
+                <Label htmlFor="confirmPassword">{t('auth.confirm_password')}</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     id="confirmPassword"
                     type={showPassword ? 'text' : 'password'}
-                    placeholder="Confirm your password"
+                    placeholder={t('auth.confirm_password_placeholder')}
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     className="pl-10"
@@ -205,24 +281,24 @@ export default function RegisterPage() {
                   className="mt-1"
                 />
                 <Label htmlFor="terms" className="text-sm font-normal leading-relaxed">
-                  I agree to the{' '}
+                  {t('auth.i_agree_to')}{' '}
                   <Link href="/terms" className="text-primary hover:underline">
-                    Terms of Service
+                    {t('auth.terms')}
                   </Link>{' '}
-                  and{' '}
+                  {t('auth.and')}{' '}
                   <Link href="/privacy" className="text-primary hover:underline">
-                    Privacy Policy
+                    {t('auth.privacy')}
                   </Link>
-                  . I confirm I am 18 years or older.
+                  {t('auth.agree_terms_suffix')}
                 </Label>
               </div>
 
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? (
-                  'Creating account...'
+                  t('auth.creating_account')
                 ) : (
                   <>
-                    Create Account
+                    {t('auth.create_account')}
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </>
                 )}
@@ -230,9 +306,9 @@ export default function RegisterPage() {
             </form>
 
             <div className="mt-6 text-center text-sm">
-              Already have an account?{' '}
+              {t('auth.already_have_account')}{' '}
               <Link href="/login" className="text-primary hover:underline font-medium">
-                Sign in
+                {t('auth.sign_in')}
               </Link>
             </div>
           </CardContent>
