@@ -1,5 +1,7 @@
 
 import { InversionDetector, CrossedMarketState } from './InversionDetector';
+import { OrderValidator } from './OrderValidator';
+import { RiskEngine } from './RiskEngine';
 import { RedBlackTree } from './ds/RedBlackTree';
 import { DoublyLinkedList, ListNode } from './ds/DoublyLinkedList';
 import { Order, FillResult, Trade, Side, OrderLevel } from './types';
@@ -57,6 +59,9 @@ export class OrderBookEngine {
     // NEW: Inversion Detector
     private inversionDetector: InversionDetector;
 
+    // NEW: Risk Engine
+    private riskEngine: RiskEngine;
+
     constructor(
         marketId: string,
         tickSize: bigint = 100n,
@@ -69,6 +74,8 @@ export class OrderBookEngine {
         this.wal = new WALService();
         this.depthManager = new DepthManager();
         this.inversionDetector = new InversionDetector(this.tickSize);
+        this.riskEngine = new RiskEngine(); // Initialize Risk Engine
+
 
         // Bids: Descending price (Highest buy is best)
         this.bids = new RedBlackTree<OrderLevel>((a, b) => {
@@ -106,17 +113,100 @@ export class OrderBookEngine {
     // So 0.1% = 0.001 * 1e6 = 1000n.
     // 5000n (taker) = 0.5%. Correct.
 
-    async placeOrder(order: Order): Promise<FillResult> {
-        // 1. Rate Limit
-        if (!RateLimiter.check(order.userId, 'place')) {
-            throw new Error('Rate Limit Exceeded: Order Placement');
+    async placeOrder(order: Order, contextOverride?: Partial<import('./types').RiskContext>): Promise<FillResult> {
+        // console.log('[DEBUG] placeOrder called for', order.id);
+
+        // 0. SANITIZATION & BOUNDS CHECK
+        const validation = OrderValidator.validate(order, !this.isHalted);
+        if (!validation.valid) {
+            console.error(`[PANIC] Order Validation Failed: ${validation.error} (Code: ${validation.code})`, order);
+            throw new Error(`Order Validation Failed: ${validation.error}`);
         }
+        // Use sanitized order proceeding forward
+        if (validation.sanitizedOrder) {
+            order = validation.sanitizedOrder;
+        }
+
+        // Resolving import in file first.
+
 
         // WAL Commit (Start of Transaction)
         this.wal.append({ type: 'PLACE_ORDER', order });
 
         if (this.isHalted) {
             throw new Error(`Market Halted: ${this.haltReason}`);
+        }
+
+        // RISK VALIDATION
+        // Construct Context (Mocking external values for now)
+        const baseContext: import('./types').RiskContext = {
+            balance: undefined, // Needs Wallet Service integration
+            position: 0n, // Needs Position Service
+            openOrders: 0, // Needs User Index
+
+            // New Position Limit Fields (MOCKED)
+            // In prod, fetch from User Profile / Risk Service
+            tier: 'TIER_3', // Default access for test
+            totalNotional: 0n,
+            correlatedExposure: 0n,
+            portfolioVolatility: 0.1 // Low volatility
+        };
+
+        const riskContext = { ...baseContext, ...contextOverride };
+
+        // For STP, we fetch the top matches from the opposite book to check for self-trades.
+        // We check the top 10 levels for potential matches.
+        const relevantOrders: Order[] = [];
+        const riskOppositeBook = order.side === 'bid' ? this.asks : this.bids;
+        const iter = (riskOppositeBook as any).iterator(); // Now exists and returns Generator
+        let node = iter.next();
+        let levelsChecked = 0;
+
+        while (!node.done && levelsChecked < 10) {
+            const level = node.value;
+
+            // If Limit Order risk check:
+            if (order.type === 'LIMIT') {
+                if (order.side === 'bid' && order.price < level.price) {
+                    // Start of Ask book (Lowest Price) is higher than our Bid. No match possible.
+                    // Wait, Asks are sorted Ascending. Yes.
+                    break;
+                }
+                if (order.side === 'ask' && order.price > level.price) {
+                    // Start of Bid book (Highest Price) is lower than our Ask. No match possible.
+                    // Bids are sorted Descending.
+                    // So first element is Highest.
+                    break;
+                }
+            }
+
+
+            // Collect orders from this level
+            for (const existingOrder of level.orders) {
+                if (existingOrder.userId === order.userId) {
+                    relevantOrders.push(existingOrder);
+                }
+            }
+
+            levelsChecked++;
+            node = iter.next();
+        }
+        const riskResult = await this.riskEngine.validateOrderRisk(order, riskContext, relevantOrders);
+        if (!riskResult.passed) {
+            console.warn(`[RISK] Order Rejected: ${riskResult.failedCheck}`, riskResult.details);
+            // We should probably explicitly FAIL the order in the system or just return rejected?
+            // "Throwing" prevents matching.
+            // Mark as cancelled/rejected?
+            order.status = 'cancelled';
+            return { fills: [], remainingQuantity: order.quantity, order };
+        }
+
+        // Circuit Breaker Check
+        if (this.tradeHistory.length > 0) {
+            this.checkCircuitBreaker(this.tradeHistory[this.tradeHistory.length - 1].price);
+            if (this.isHalted) {
+                throw new Error(`Market Halted: ${this.haltReason}`);
+            }
         }
 
         // Validate Price
@@ -571,20 +661,68 @@ export class OrderBookEngine {
 
         const state = this.inversionDetector.detect(this.bids, this.asks);
         if (state) {
-            console.error(`[CRITICAL] Market Inversion Detected: ${this.marketId}`, state);
+            console.warn(`[WARN] Market Inversion Detected: ${this.marketId}`, state);
 
-            // Log to WAL
             this.wal.append({
                 type: 'MARKET_INVERSION',
                 marketId: this.marketId,
                 details: state
             });
 
-            if (state.severity === 'critical' || state.severity === 'severe') {
+            // Escalation Level 2: Persistent > 5s
+            if (state.duration > 5000) {
+                console.error(`[ALERT] PagerDuty: Persistent Inversion > 5s on ${this.marketId}`);
+            }
+
+            // Escalation Level 3: Persistent > 30s -> HALT
+            if (state.duration > 30000) {
                 this.isHalted = true;
-                this.haltReason = `Inversion Halt: ${state.severity.toUpperCase()} (${state.inversionDepth} spread)`;
+                this.haltReason = `Inversion Halt: Persistent > 30s`;
+                this.wal.append({ type: 'MARKET_HALT', reason: this.haltReason });
+                return;
+            }
+
+            // Auto-Cancellation Trigger: > 100ms
+            if (state.duration > 100) {
+                this.resolveInversion(state);
+            }
+
+            // Critical Depth check (Immediate Halt still applies)
+            if (state.severity === 'critical') {
+                this.isHalted = true;
+                this.haltReason = `Inversion Halt: CRITICAL DEPTH`;
                 this.wal.append({ type: 'MARKET_HALT', reason: this.haltReason });
             }
+        }
+    }
+
+    private resolveInversion(state: any) {
+        // "Cancel newest orders causing cross"
+        const crossedOrderIds = this.inversionDetector.getCrossedOrders(this.bids, this.asks);
+
+        if (crossedOrderIds.length === 0) return;
+
+        // Retrieve actual order objects
+        const orders: Order[] = [];
+        for (const id of crossedOrderIds) {
+            const o = this.orderMap.get(id);
+            if (o) orders.push(o);
+        }
+
+        // Sort by CreatedAt Descending (Newest first)
+        orders.sort((a, b) => b.createdAt - a.createdAt);
+
+        // Cancel until uncrossed? Or just cancel the newest batch?
+        // Requirement: "Cancel newest orders causing cross". 
+        // We'll conservative cancel the single newest one first per check loop, 
+        // or a batch. Let's cancel the top offender.
+
+        if (orders.length > 0) {
+            const newest = orders[0];
+            console.log(`[AUTO-RESOLVE] Cancelling Crossing Order ${newest.id} (Time: ${newest.createdAt})`);
+            this.cancelOrder(newest.id);
+            // We only cancel one per check loop (every order placement/action checks inversion). 
+            // If still crossed, next check will cancel next newest.
         }
     }
 

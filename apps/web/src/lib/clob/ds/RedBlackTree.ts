@@ -336,4 +336,22 @@ export class RedBlackTree<T> {
         acc.push(node.data);
         this.inOrder(node.right, acc);
     }
+
+    *iterator(): Generator<T> {
+        if (!this.root) return;
+
+        // Iterative In-Order Traversal
+        const stack: Node<T>[] = [];
+        let current: Node<T> | null = this.root;
+
+        while (current || stack.length > 0) {
+            while (current) {
+                stack.push(current);
+                current = current.left;
+            }
+            current = stack.pop()!;
+            yield current.data;
+            current = current.right;
+        }
+    }
 }

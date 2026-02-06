@@ -149,6 +149,31 @@ export async function placeOrder(order: {
   return data;
 }
 
+export async function placeAtomicOrder(order: {
+  market_id: string;
+  side: 'buy' | 'sell';
+  outcome: 'YES' | 'NO';
+  price: number;
+  quantity: number;
+  order_type?: 'limit' | 'market';
+}) {
+  if (!supabase) throw new Error('Supabase client not initialized');
+  const { data, error } = await supabase.rpc('place_atomic_order', {
+    p_market_id: order.market_id,
+    p_side: order.side,
+    p_outcome: order.outcome,
+    p_price: order.price,
+    p_quantity: order.quantity,
+    p_order_type: order.order_type || 'limit'
+  });
+
+  if (error) {
+    console.error('Atomic order error:', error);
+    throw error;
+  }
+  return data; // Returns the order UUID
+}
+
 export async function cancelOrder(orderId: string) {
   if (!supabase) return;
   const { error } = await supabase

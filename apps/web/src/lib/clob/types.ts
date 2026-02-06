@@ -72,3 +72,32 @@ export interface FillResult {
     remainingQuantity: bigint; // Renamed to match style
     order: Order;
 }
+
+export type RiskCheckType =
+    | 'BALANCE'
+    | 'POSITION_LIMIT'
+    | 'RATE_LIMIT'
+    | 'MARKET_STATUS'
+    | 'SELF_TRADE'
+    | 'WASH_TRADING';
+
+export interface RiskValidationResult {
+    passed: boolean;
+    failedCheck?: RiskCheckType;
+    details?: Record<string, unknown>;
+    retryable: boolean;
+}
+
+export type UserTier = 'TIER_1' | 'TIER_2' | 'TIER_3';
+
+export interface RiskContext {
+    balance?: bigint; // Passed from external wallet service if available
+    position?: bigint; // Current position
+    openOrders?: number; // Count of open orders
+
+    // Position Limits
+    tier: UserTier;
+    totalNotional: bigint; // Current total exposure
+    correlatedExposure: bigint; // For delta-adjusted checks
+    portfolioVolatility: number; // For stress test (0-1 range or distinct metric)
+}

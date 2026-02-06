@@ -25,6 +25,7 @@ import {
   fetchWallet,
   fetchTransactions,
   placeOrder,
+  placeAtomicOrder,
   cancelOrder,
   createMarket,
   resolveMarket,
@@ -388,19 +389,8 @@ export const useStore = create<StoreState>()(
         price: number,
         quantity: number
       ) => {
-        const { currentUser, wallet } = get();
-        if (!currentUser || !wallet) return false;
-
         try {
-          const totalCost = price * quantity;
-
-          // Check balance for buy orders
-          if (side === 'buy' && wallet.balance < totalCost) {
-            console.error('Insufficient balance');
-            return false;
-          }
-
-          const order = await placeOrder({
+          const orderId = await placeAtomicOrder({
             market_id: marketId,
             side,
             outcome,
@@ -408,8 +398,7 @@ export const useStore = create<StoreState>()(
             quantity,
           });
 
-          // If using matching engine, trigger it
-          await supabase!.rpc('match_order', { p_order_id: order.id });
+          if (!orderId) return false;
 
           // Refresh data
           await get().fetchOrders(marketId);
