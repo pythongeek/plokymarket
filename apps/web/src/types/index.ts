@@ -3,6 +3,7 @@
 // ===================================
 
 export type MarketStatus = 'active' | 'closed' | 'resolved' | 'cancelled';
+export type TradingPhase = 'PRE_OPEN' | 'CONTINUOUS' | 'AUCTION' | 'HALTED' | 'CLOSED';
 export type OutcomeType = 'YES' | 'NO';
 export type OrderType = 'limit' | 'market';
 export type OrderSide = 'buy' | 'sell';
@@ -61,6 +62,12 @@ export interface Market {
   resolution_source_type?: string;
   resolution_data?: Record<string, any>;
   resolution_details?: Record<string, any>;
+  trading_phase?: TradingPhase;
+  next_phase_time?: string;
+  auction_data?: {
+    indicative_price: number;
+    indicative_volume: number;
+  };
   total_volume: number;
   yes_shares_outstanding: number;
   no_shares_outstanding: number;

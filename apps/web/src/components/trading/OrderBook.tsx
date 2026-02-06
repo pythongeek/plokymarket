@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { TrendingUp, TrendingDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTranslation } from 'react-i18next';
+import { SpreadIndicator } from '@/components/market/SpreadIndicator';
 
 interface OrderBookProps {
   marketId: string;
@@ -157,8 +158,8 @@ export function OrderBook({ marketId }: OrderBookProps) {
         </div>
 
         {/* Spread indicator */}
-        <div className="py-2 text-center text-xs text-muted-foreground border-y">
-          {t('order_book.spread')}: ৳{spread.toFixed(3)}
+        <div className="py-2 text-center text-xs text-muted-foreground border-y flex justify-center">
+          <SpreadIndicator spread={spread} bestAsk={bestAsk} />
         </div>
 
         {/* Bids (Buys) - Green */}

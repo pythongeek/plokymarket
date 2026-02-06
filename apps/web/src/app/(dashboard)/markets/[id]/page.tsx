@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useStore } from '@/store/useStore';
 import { OrderBook } from '@/components/clob/OrderBook';
+import { MarketStatusDisplay } from '@/components/market/MarketStatusDisplay';
 import { CommentSection } from '@/components/comments/CommentSection';
 import { TradingPanel } from '@/components/trading/TradingPanel';
 import { PriceChart } from '@/components/trading/PriceChart';
@@ -122,6 +123,11 @@ export default function MarketDetailPage() {
           )}
         </div>
       </div>
+
+      <MarketStatusDisplay
+        market={market}
+        oracleConfidence={market.resolution_details?.ai_confidence || 85} // Mock default if not present
+      />
 
       <Separator />
 
