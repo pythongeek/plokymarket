@@ -83,8 +83,12 @@ export async function updateSession(request: NextRequest) {
     }
   }
 
-  // If accessing auth routes while logged in, redirect to markets
+  // If accessing auth routes while logged in, redirect to markets or intended page
   if (isAuthRoute && user) {
+    const redirectUrl = request.nextUrl.searchParams.get('redirect');
+    if (redirectUrl && redirectUrl.startsWith('/')) {
+      return NextResponse.redirect(new URL(redirectUrl, request.url));
+    }
     return NextResponse.redirect(new URL('/markets', request.url));
   }
 

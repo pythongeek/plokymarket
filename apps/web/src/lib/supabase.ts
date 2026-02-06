@@ -166,6 +166,11 @@ export async function createMarket(market: {
   source_url?: string;
   trading_closes_at: string;
   event_date: string;
+  resolution_source_type?: string;
+  resolution_data?: any;
+  fee_percent?: number;
+  initial_liquidity?: number;
+  maker_rebate_percent?: number;
 }) {
   if (!supabase) throw new Error('Supabase client not initialized');
   const { data, error } = await supabase

@@ -35,6 +35,9 @@
     "i18next-browser-languagedetector": "^8.2.0",
     "lucide-react": "^0.414.0",
     "next": "15.3",
+    "next-themes": "^0.4.6",
+    "node-fetch": "^3.3.2",
+    "qrcode.react": "^4.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-i18next": "^16.5.4",
@@ -52,6 +55,7 @@
     "eslint": "^8.57.0",
     "eslint-config-next": "15.3",
     "postcss": "^8.4.40",
+    "puppeteer": "^24.37.1",
     "tailwindcss": "^3.4.7",
     "typescript": "^5.5.0"
   }

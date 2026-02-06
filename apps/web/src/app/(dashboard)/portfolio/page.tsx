@@ -15,9 +15,19 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   AlertCircle,
+  Activity,
+  Award,
+  BarChart3,
+  Percent,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTranslation } from 'react-i18next';
+import { PerformanceChart } from '@/components/portfolio/PerformanceChart';
+import { AchievementCard } from '@/components/leaderboard/AchievementCard';
+import { CopyTradingSettings } from '@/components/portfolio/CopyTradingSettings';
+import { calculatePortfolioMetrics } from '@/lib/analytics/portfolio';
+import { motion } from 'framer-motion';
+import { WalletDashboard } from '@/components/wallet/WalletDashboard';
 
 function PositionCard({ position }: { position: any }) {
   const { t } = useTranslation();
@@ -150,11 +160,14 @@ export default function PortfolioPage() {
   const yesPositions = positions.filter((p) => p.outcome === 'YES');
   const noPositions = positions.filter((p) => p.outcome === 'NO');
 
-  const totalInvested = positions.reduce((sum, p) => sum + p.quantity * p.average_price, 0);
+  // Hardcoded wallet for demo/simplification (should come from store)
+  const metrics = calculatePortfolioMetrics(positions, [], 5000);
 
-  const potentialReturn = positions.reduce((sum, p) => sum + p.quantity * 1, 0);
-
-  const unrealizedPnl = potentialReturn - totalInvested;
+  const ACHIEVEMENTS_DEMO = [
+    { id: '1', name: 'Rookie Trader', description: 'Placed first trade', rarity: 'COMMON' as const },
+    { id: '2', name: 'Unstoppable', description: '10 consecutive wins', rarity: 'LEGENDARY' as const, isLocked: true },
+    { id: '3', name: 'Whale', description: 'Traded $1M volume', rarity: 'EPIC' as const, isLocked: true },
+  ];
 
   return (
     <div className="space-y-6">
@@ -166,72 +179,53 @@ export default function PortfolioPage() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">{t('portfolio.total_invested')}</p>
-                <p className="text-2xl font-bold">৳{totalInvested.toLocaleString()}</p>
-              </div>
-              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                <Wallet className="h-5 w-5 text-primary" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        {[
+          { label: 'Total Value', value: metrics.totalValue, icon: Wallet, color: 'text-primary' },
+          { label: 'Sharpe Ratio', value: metrics.sharpeRatio.toFixed(2), icon: Activity, color: 'text-blue-500' },
+          { label: 'Max Drawdown', value: `-${(metrics.maxDrawdown * 100).toFixed(1)}%`, icon: TrendingDown, color: 'text-red-500' },
+          { label: 'Total Return', value: `${(metrics.totalReturn * 100).toFixed(1)}%`, icon: Percent, color: 'text-green-500' },
+        ].map((stat, i) => (
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.1 }}
+          >
+            <Card className="bg-slate-900/40 border-slate-800 backdrop-blur-md">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider">{stat.label}</p>
+                    <p className="text-2xl font-bold">
+                      {typeof stat.value === 'number' ? `৳${stat.value.toLocaleString()}` : stat.value}
+                    </p>
+                  </div>
+                  <div className={cn("h-10 w-10 rounded-xl bg-slate-800 flex items-center justify-center", stat.color)}>
+                    <stat.icon className="h-5 w-5" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        ))}
+      </div>
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">{t('portfolio.potential_return')}</p>
-                <p className="text-2xl font-bold">৳{potentialReturn.toLocaleString()}</p>
-              </div>
-              <div className="h-10 w-10 rounded-full bg-green-500/10 flex items-center justify-center">
-                <TrendingUp className="h-5 w-5 text-green-500" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">{t('portfolio.unrealized_pnl')}</p>
-                <p className={cn('text-2xl font-bold', unrealizedPnl >= 0 ? 'text-green-500' : 'text-red-500')}>
-                  {unrealizedPnl >= 0 ? '+' : ''}৳{unrealizedPnl.toLocaleString()}
-                </p>
-              </div>
-              <div
-                className={cn(
-                  'h-10 w-10 rounded-full flex items-center justify-center',
-                  unrealizedPnl >= 0 ? 'bg-green-500/10' : 'bg-red-500/10'
-                )}
-              >
-                {unrealizedPnl >= 0 ? (
-                  <ArrowUpRight className="h-5 w-5 text-green-500" />
-                ) : (
-                  <ArrowDownRight className="h-5 w-5 text-red-500" />
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">{t('portfolio.active_positions')}</p>
-                <p className="text-2xl font-bold">{totalPositions}</p>
-              </div>
-              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                <PieChart className="h-5 w-5 text-primary" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div className="lg:col-span-3">
+          <PerformanceChart />
+        </div>
+        <div className="space-y-4">
+          <h3 className="text-lg font-bold flex items-center gap-2">
+            <Award className="h-5 w-5 text-amber-500" />
+            Achievements
+          </h3>
+          {ACHIEVEMENTS_DEMO.map(a => (
+            <AchievementCard key={a.id} {...a} />
+          ))}
+          <div className="pt-4">
+            <CopyTradingSettings />
+          </div>
+        </div>
       </div>
 
       {/* Positions Tabs */}
@@ -247,6 +241,10 @@ export default function PortfolioPage() {
           <TabsTrigger value="no">
             <TrendingDown className="h-4 w-4 mr-1" />
             {t('common.no')} ({noPositions.length})
+          </TabsTrigger>
+          <TabsTrigger value="wallet" className="ml-auto bg-indigo-500/10 text-indigo-400 data-[state=active]:bg-indigo-500 data-[state=active]:text-white">
+            <Wallet className="h-4 w-4 mr-1" />
+            Advanced Wallet
           </TabsTrigger>
         </TabsList>
 
@@ -272,6 +270,10 @@ export default function PortfolioPage() {
           ) : (
             <EmptyPositionsState />
           )}
+        </TabsContent>
+
+        <TabsContent value="wallet">
+          <WalletDashboard />
         </TabsContent>
       </Tabs>
     </div>

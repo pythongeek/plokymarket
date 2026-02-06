@@ -58,10 +58,15 @@ export interface Market {
   event_date: string;
   resolved_at?: string;
   winning_outcome?: OutcomeType;
+  resolution_source_type?: string;
+  resolution_data?: Record<string, any>;
   resolution_details?: Record<string, any>;
   total_volume: number;
   yes_shares_outstanding: number;
   no_shares_outstanding: number;
+  fee_percent?: number;
+  initial_liquidity?: number;
+  maker_rebate_percent?: number;
   // Computed fields
   yes_price?: number;
   no_price?: number;

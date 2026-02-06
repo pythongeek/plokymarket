@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { useStore } from '@/store/useStore';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ModeToggle } from '../mode-toggle';
+import { NotificationCenter } from '../notifications/NotificationCenter';
 
 export function Navbar() {
   const { currentUser, isAuthenticated, logout, wallet } = useStore();
@@ -81,6 +83,7 @@ export function Navbar() {
               </button>
             ))}
           </div>
+          <ModeToggle />
 
           {isAuthenticated ? (
             <>
@@ -93,6 +96,7 @@ export function Navbar() {
                 </div>
               )}
               <div className="flex items-center gap-2">
+                <NotificationCenter />
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
                   <User className="h-4 w-4 text-primary" />
                 </div>
@@ -106,6 +110,7 @@ export function Navbar() {
             </>
           ) : (
             <div className="flex items-center gap-2">
+              <NotificationCenter />
               <Link href="/login">
                 <Button variant="ghost">{t('common.login')}</Button>
               </Link>
@@ -120,6 +125,7 @@ export function Navbar() {
         <div className="md:hidden flex items-center gap-2">
           {/* Mobile Lang Switch */}
           <div className="flex gap-1 mr-2">
+            <ModeToggle />
             <Button variant="ghost" size="icon" onClick={() => changeLanguage(i18n.language === 'bn' ? 'en' : 'bn')}>
               <Languages className="h-5 w-5" />
             </Button>

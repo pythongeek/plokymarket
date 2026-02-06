@@ -82,6 +82,11 @@ interface StoreState {
   updateSuggestion: (id: string, status: 'approved' | 'rejected') => Promise<void>;
   suggestions: MarketSuggestion[];
 
+  // Wallet Management
+  generateDepositAddress: (network: string) => Promise<any>;
+  verifyDeposit: (txid: string, network: string) => Promise<any>;
+  activeWallet: any | null;
+
   // Real-time
   subscribeToMarket: (marketId: string) => () => void;
 }
@@ -103,6 +108,7 @@ export const useStore = create<StoreState>()(
       transactions: [],
       wallet: null,
       suggestions: [],
+      activeWallet: null,
 
       // ===================================
       // AUTH ACTIONS
@@ -421,6 +427,8 @@ export const useStore = create<StoreState>()(
             source_url: marketData.source_url,
             trading_closes_at: marketData.trading_closes_at || new Date().toISOString(),
             event_date: marketData.event_date || new Date().toISOString(),
+            resolution_source_type: (marketData as any).resolution_source_type,
+            resolution_data: (marketData as any).resolution_data,
           });
 
           await get().fetchMarkets();
@@ -462,6 +470,56 @@ export const useStore = create<StoreState>()(
         } catch (error) {
           console.error('Error updating suggestion:', error);
         }
+      },
+
+      // ===================================
+      // WALLET MANAGEMENT
+      // ===================================
+
+      generateDepositAddress: async (network: string) => {
+        const { currentUser } = get();
+        if (!currentUser) return null;
+
+        const { data, error } = await supabase!
+          .from('wallets')
+          .select('*')
+          .eq('user_id', currentUser.id)
+          .eq('network_type', network)
+          .single();
+
+        if (data) {
+          set({ activeWallet: data });
+          return data;
+        }
+
+        // Logic handled by service or RPC in production
+        // For now, let's assume we insert a new one if not exists
+        const mockAddress = network === 'TRC20' ? 'T' + Math.random().toString(36).substring(7) : '0x' + Math.random().toString(36).substring(7);
+        const { data: newWallet } = await supabase!
+          .from('wallets')
+          .insert({
+            user_id: currentUser.id,
+            network_type: network,
+            usdt_address: mockAddress,
+            qr_code_url: `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${mockAddress}`
+          })
+          .select()
+          .single();
+
+        set({ activeWallet: newWallet });
+        return newWallet;
+      },
+
+      verifyDeposit: async (txid: string, network: string) => {
+        const { currentUser } = get();
+        if (!currentUser) return { status: 'INVALID' };
+
+        // Simulate verification logic for Demo
+        if (txid.length < 10) return { status: 'NOT_FOUND' };
+
+        // Finalize demo
+        await get().fetchWallet();
+        return { status: 'SUCCESS', amount: 500 };
       },
 
       // ===================================

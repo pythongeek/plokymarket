@@ -41,7 +41,10 @@ export default function LoginPage() {
     try {
       const result = await login(email, password);
       if (result === true) {
-        router.push('/markets');
+        // Check for redirect parameter
+        const searchParams = new URLSearchParams(window.location.search);
+        const redirectTo = searchParams.get('redirect');
+        router.push(redirectTo && redirectTo.startsWith('/') ? redirectTo : '/markets');
       } else if (typeof result === 'string') {
         // Display the specific error message from Supabase
         setError(result);

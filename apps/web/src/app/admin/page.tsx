@@ -24,6 +24,13 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { format } from 'date-fns';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 import { useTranslation } from 'react-i18next';
 
@@ -186,6 +193,12 @@ export default function AdminPage() {
     trading_closes_at: '',
     event_date: '',
     resolution_source: '',
+    resolution_source_type: 'MANUAL',
+    uma_bond: '100',
+    ai_context: '',
+    initial_liquidity: '1000',
+    fee_percent: '2.0',
+    maker_rebate_percent: '0.05',
   });
   const [isCreating, setIsCreating] = useState(false);
 
@@ -248,6 +261,14 @@ export default function AdminPage() {
       ...formData,
       trading_closes_at: new Date(formData.trading_closes_at).toISOString(),
       event_date: new Date(formData.event_date).toISOString(),
+      resolution_source_type: formData.resolution_source_type,
+      resolution_data: {
+        uma_bond: formData.uma_bond,
+        ai_evidence: formData.ai_context,
+        initial_liquidity: parseFloat(formData.initial_liquidity),
+        fee_percent: parseFloat(formData.fee_percent),
+        maker_rebate_percent: parseFloat(formData.maker_rebate_percent),
+      } as any
     });
 
     if (success) {
@@ -261,6 +282,12 @@ export default function AdminPage() {
         trading_closes_at: '',
         event_date: '',
         resolution_source: '',
+        resolution_source_type: 'MANUAL',
+        uma_bond: '100',
+        ai_context: '',
+        initial_liquidity: '1000',
+        fee_percent: '2.0',
+        maker_rebate_percent: '0.05',
       });
     }
 
@@ -481,6 +508,89 @@ export default function AdminPage() {
                     required
                   />
                 </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-primary/5 rounded-xl border border-primary/10">
+                <div className="space-y-2">
+                  <Label htmlFor="initial_liquidity">Initial Liquidity (৳)</Label>
+                  <Input
+                    id="initial_liquidity"
+                    type="number"
+                    value={formData.initial_liquidity}
+                    onChange={(e) => setFormData({ ...formData, initial_liquidity: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="fee_percent">Platform Fee (%)</Label>
+                  <Input
+                    id="fee_percent"
+                    type="number"
+                    step="0.01"
+                    value={formData.fee_percent}
+                    onChange={(e) => setFormData({ ...formData, fee_percent: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="maker_rebate_percent">Maker Rebate (%)</Label>
+                  <Input
+                    id="maker_rebate_percent"
+                    type="number"
+                    step="0.01"
+                    value={formData.maker_rebate_percent}
+                    onChange={(e) => setFormData({ ...formData, maker_rebate_percent: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              {/* Resolution Strategy Optimization */}
+              <div className="space-y-4 pt-4 border-t">
+                <div className="space-y-2">
+                  <Label>{t('admin.form.resolution_strategy')}</Label>
+                  <Select
+                    value={formData.resolution_source_type}
+                    onValueChange={(value) => setFormData({ ...formData, resolution_source_type: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('admin.form.select_strategy')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="MANUAL">{t('admin.strategies.manual')}</SelectItem>
+                      <SelectItem value="AI">{t('admin.strategies.ai')}</SelectItem>
+                      <SelectItem value="UMA">{t('admin.strategies.uma')}</SelectItem>
+                      <SelectItem value="CENTRALIZED">{t('admin.strategies.centralized')}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {formData.resolution_source_type === 'UMA' && (
+                  <div className="space-y-2">
+                    <Label htmlFor="uma_bond">{t('admin.form.uma_bond')}</Label>
+                    <Input
+                      id="uma_bond"
+                      type="number"
+                      value={formData.uma_bond}
+                      onChange={(e) => setFormData({ ...formData, uma_bond: e.target.value })}
+                    />
+                  </div>
+                )}
+
+                {formData.resolution_source_type === 'AI' && (
+                  <div className="space-y-2">
+                    <Label htmlFor="ai_context">{t('admin.form.ai_context')}</Label>
+                    <Textarea
+                      id="ai_context"
+                      placeholder={t('admin.form.ai_context_placeholder')}
+                      value={formData.ai_context}
+                      onChange={(e) => setFormData({ ...formData, ai_context: e.target.value })}
+                    />
+                  </div>
+                )}
+
+                {formData.resolution_source_type === 'CENTRALIZED' && (
+                  <p className="text-xs text-muted-foreground italic">
+                    {t('admin.form.multisig_hint')}
+                  </p>
+                )}
               </div>
 
               <div className="flex gap-2">
