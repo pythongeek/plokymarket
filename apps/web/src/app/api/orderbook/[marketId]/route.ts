@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { OrderBookService } from '@/lib/clob/service';
+import { Granularity } from '@/lib/clob/ds/DepthManager';
 
 // Use Service Role for engine hydration to ensure we see all OPEN orders?
 // Or just anon? Anon can see OPEN orders via RLS.
@@ -20,9 +21,19 @@ export async function GET(
         const supabase = createClient(supabaseUrl, supabaseKey);
 
         const engine = await OrderBookService.getEngine(supabase, marketId);
+
+        const granularityParam = request.nextUrl.searchParams.get('granularity');
+        if (granularityParam) {
+            const g = parseInt(granularityParam) as Granularity;
+            // Validate
+            if ([1, 5, 10, 50, 100].includes(g)) {
+                return NextResponse.json(OrderBookService.getDepthDTO(engine, g));
+            }
+        }
+
         const snapshot = engine.getSnapshot();
 
-        return NextResponse.json(snapshot);
+        return NextResponse.json(OrderBookService.mapSnapshotToDTO(snapshot));
     } catch (error) {
         console.error('Error fetching orderbook:', error);
         return NextResponse.json({ error: 'Failed to fetch orderbook' }, { status: 500 });

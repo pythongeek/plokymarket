@@ -1,304 +1,485 @@
-import { RedBlackTree } from './ds/RedBlackTree';
-import { Order, FillResult, Trade, Side, OrderLevel } from './types';
 
-// Constants for Circuit Breaker
-const CB_LOOKBACK_MS = 60 * 1000; // 1 Minute
-const CB_THRESHOLD_PERCENT = 0.10; // 10% move
-const TICK_SIZE = 0.01; // Default tick size
+import { RedBlackTree } from './ds/RedBlackTree';
+import { DoublyLinkedList, ListNode } from './ds/DoublyLinkedList';
+import { Order, FillResult, Trade, Side, OrderLevel } from './types';
+import { OrderArena } from './ds/OrderArena';
+import { DepthManager, Granularity } from './ds/DepthManager';
+import { WALService } from './persistence/WALService';
+import * as crypto from 'crypto';
+
+// Constants
+const CB_LOOKBACK_MS = 60 * 1000;
+const CB_THRESHOLD_PERCENT = 0.10; // 10%
+const TICK_SIZE = 100n; // 0.0001 assuming 6 decimals (1,000,000 scale)
+const SCALE = 1000000n;
 
 interface FeeTier {
-    volume: number;
-    maker: number;
-    taker: number;
+    volume: bigint;
+    maker: bigint; // scaled by 1e6 (e.g. -200n for -0.0002)
+    taker: bigint; // scaled by 1e6 (e.g. 5000n for 0.005)
 }
 
 const FEE_TIERS: FeeTier[] = [
-    { volume: 0, maker: -0.0002, taker: 0.005 },
-    { volume: 10000, maker: -0.0003, taker: 0.004 },
-    { volume: 100000, maker: -0.0005, taker: 0.003 },
-    { volume: 1000000, maker: -0.0008, taker: 0.002 }
+    { volume: 0n, maker: -200n, taker: 5000n },
+    { volume: 10000n * SCALE, maker: -300n, taker: 4000n },
+    { volume: 100000n * SCALE, maker: -500n, taker: 3000n },
+    { volume: 1000000n * SCALE, maker: -800n, taker: 2000n }
 ];
 
 export class OrderBookEngine {
-    private bids: RedBlackTree<Order>;
-    private asks: RedBlackTree<Order>;
+    private bids: RedBlackTree<OrderLevel>;
+    private asks: RedBlackTree<OrderLevel>;
     private marketId: string;
 
-    // Circuit Breaker State
-    private tradeHistory: { price: number, time: number }[] = [];
+    // Index for O(1) lookups
+    private orderMap: Map<string, Order> = new Map();
+
+    // NEW: Arena for Order storage (replaces some object usage)
+    private arena: OrderArena;
+    // Map orderID -> Arena Index
+    private orderIndexMap: Map<string, number> = new Map();
+
+    // NEW: Depth Manager
+    public depthManager: DepthManager;
+
+    // NEW: WAL Service
+    private wal: WALService;
+
+    // Circuit Breaker
+    private tradeHistory: { price: bigint, time: number }[] = [];
     private isHalted: boolean = false;
     private haltReason: string | null = null;
 
-    constructor(marketId: string, predefinedBids: Order[] = [], predefinedAsks: Order[] = []) {
+    constructor(marketId: string, initialBids: Order[] = [], initialAsks: Order[] = []) {
         this.marketId = marketId;
+        this.arena = new OrderArena(1000000); // 1 Million Orders
+        this.wal = new WALService();
+        this.depthManager = new DepthManager();
 
-        // Sort Bids: Highest Price First, then Oldest Time
-        this.bids = new RedBlackTree<Order>((a, b) => {
-            if (b.price !== a.price) return b.price - a.price; // Descending price
-            return a.createdAt - b.createdAt; // Ascending time
+        // Bids: Descending price (Highest buy is best)
+        this.bids = new RedBlackTree<OrderLevel>((a, b) => {
+            if (a.price > b.price) return -1;
+            if (a.price < b.price) return 1;
+            return 0;
         });
 
-        // Sort Asks: Lowest Price First, then Oldest Time
-        this.asks = new RedBlackTree<Order>((a, b) => {
-            if (a.price !== b.price) return a.price - b.price; // Ascending price
-            return a.createdAt - b.createdAt; // Ascending time
+        // Asks: Ascending price (Lowest sell is best)
+        this.asks = new RedBlackTree<OrderLevel>((a, b) => {
+            if (a.price < b.price) return -1;
+            if (a.price > b.price) return 1;
+            return 0;
         });
 
-        predefinedBids.forEach(o => this.bids.insert(o));
-        predefinedAsks.forEach(o => this.asks.insert(o));
+        // Hydrate
+        for (const order of initialBids) this.addToBook(this.bids, order);
+        for (const order of initialAsks) this.addToBook(this.asks, order);
     }
 
-    /**
-     * Main entry point to place an order.
-     */
     async placeOrder(order: Order): Promise<FillResult> {
-        // 0. Circuit Breaker Check
+        // WAL Commit (Start of Transaction)
+        this.wal.append({ type: 'PLACE_ORDER', order });
+
         if (this.isHalted) {
             throw new Error(`Market Halted: ${this.haltReason}`);
         }
 
-        // 1. Validation: Tick Size
-        // Using epsilon for float comparison safety
-        const remainder = order.price % TICK_SIZE;
-        if (Math.abs(remainder) > 0.0000001 && Math.abs(remainder - TICK_SIZE) > 0.0000001) {
-            throw new Error(`Invalid Price Tick: Must be multiple of ${TICK_SIZE}`);
+        // Validate Price
+        if (order.price % TICK_SIZE !== 0n) {
+            throw new Error(`Invalid Price Tick: Must be multiple of 0.01`);
         }
 
-        // 2. FOK (Fill-Or-Kill) Pre-flight Check
-        // Must be able to fill ENTIRELY immediately.
+        // FOK Check
         if (order.timeInForce === 'FOK') {
-            const oppositeBook = order.side === 'BUY' ? this.asks : this.bids;
-            let simulatedFill = 0;
-            // We need to iterate without modifying (peek)
-            // Simulating using values() array which is sorted
-            const candidates = oppositeBook.values();
-            for (const candidate of candidates) {
-                const canMatch = order.side === 'BUY' ? order.price >= candidate.price : order.price <= candidate.price;
-                if (!canMatch) break;
-
-                // Sim Check STP
-                if (order.userId === candidate.userId) continue; // STP skip logic roughly
-
-                simulatedFill += Math.min(order.size - simulatedFill, candidate.remaining);
-                if (simulatedFill >= order.size) break;
+            if (!this.checkFOK(order)) {
+                order.status = 'cancelled';
+                this.wal.append({ type: 'ORDER_CANCELLED', id: order.id, reason: 'FOK_FAILED' });
+                return { fills: [], remainingQuantity: order.quantity, order };
             }
+        }
 
-            if (simulatedFill < order.size) {
-                order.status = 'CANCELED'; // Kill immediately
-                return { fills: [], remainingSize: order.size, order };
-            }
+        if (order.marketId !== this.marketId) {
+            throw new Error(`Market mismatch`);
         }
 
         const fills: Trade[] = [];
-        const oppositeBook = order.side === 'BUY' ? this.asks : this.bids;
         const now = Date.now();
+        let remainingQuantity = order.quantity - order.filledQuantity;
+        order.remainingQuantity = remainingQuantity;
 
-        // Safety: ensure order belongs to this market
-        if (order.marketId !== this.marketId) {
-            throw new Error(`Order marketId ${order.marketId} does not match engine marketId ${this.marketId}`);
-        }
+        const oppositeBook = order.side === 'bid' ? this.asks : this.bids;
 
-        let remainingSize = order.size - order.filled;
-        order.remaining = remainingSize; // Sync helper
+        // Matching Loop
+        while (remainingQuantity > 0n && !oppositeBook.isEmpty()) {
+            const bestLevelNode = oppositeBook.minimum();
+            if (!bestLevelNode) break;
+            const bestLevel = bestLevelNode.data;
 
-        // MATCHING LOOP
-        while (remainingSize > 0 && !oppositeBook.isEmpty()) {
-            const bestOrder = oppositeBook.min();
-            if (!bestOrder) break;
-
-            // GTD (Good Till Date) Expiry Check on Maker Order
-            // If bestOrder is GTD and Expired, remove it and continue
-            // (Assuming Order interface has 'expiration' field if GTD, let's cast or check)
-            if (bestOrder.timeInForce === 'GTD' && (bestOrder as any).expiration && now > (bestOrder as any).expiration) {
-                oppositeBook.remove(bestOrder);
-                bestOrder.status = 'CANCELED';
-                continue;
-            }
-
-            const canMatch = order.side === 'BUY'
-                ? order.price >= bestOrder.price
-                : order.price <= bestOrder.price;
+            // Check Price Match
+            const canMatch = order.side === 'bid'
+                ? order.price >= bestLevel.price
+                : order.price <= bestLevel.price;
 
             if (!canMatch) break;
 
-            // Check Circuit Breaker Logic Before Execution
-            // If this trade would deviate price > 10% from 1 min ago
-            this.checkCircuitBreaker(bestOrder.price);
+            // Circuit Breaker
+            this.checkCircuitBreaker(bestLevel.price);
             if (this.isHalted) {
-                throw new Error(`Market Halted during match: Price moved > 10% in 1 min. Last: ${bestOrder.price}`);
+                throw new Error(`Market Halted during match`);
             }
 
-            // Self-Trade Prevention (STP)
-            if (order.userId === bestOrder.userId) {
-                const stpMode = order.stpMode || 'STP_CANCEL_OLDER'; // Default
+            let makerOrderNode = bestLevel.orders.head;
 
-                if (stpMode === 'STP_CANCEL_BOTH') {
-                    // Cancel both
-                    oppositeBook.remove(bestOrder);
-                    bestOrder.status = 'CANCELED';
+            while (makerOrderNode && remainingQuantity > 0n) {
+                const makerOrder = makerOrderNode.value;
+                const nextNode = makerOrderNode.next;
 
-                    order.status = 'CANCELED';
-                    remainingSize = 0; // Ensure loop breaks and we treat as done
-                    order.remaining = 0;
-                    // Return immediately as taker is dead and we don't want standard post-loop logic to set it to FILLED
-                    return { fills, remainingSize: 0, order };
-
-                } else if (stpMode === 'STP_DECREMENT') {
-                    // Decrement both by smaller size (No trade)
-                    const decrement = Math.min(remainingSize, bestOrder.remaining);
-
-                    // Decrease Taker
-                    remainingSize -= decrement;
-                    order.remaining = remainingSize;
-
-                    // Decrease Maker
-                    bestOrder.remaining -= decrement;
-                    // Note: bestOrder.filled is NOT increased because no trade happened?
-                    // Or should we track 'filled' as 'processed'? usually filled = traded.
-                    // We simply reduce remaining.
-
-                    if (bestOrder.remaining <= 0) {
-                        bestOrder.status = 'CANCELED'; // Consumed by STP
-                        oppositeBook.remove(bestOrder);
-                    } else {
-                        // Update maker in book if needed (RBT usually handles value changes if key is constant)
-                    }
-
-                    // If Taker exhausted
-                    if (remainingSize <= 0) {
-                        order.status = 'CANCELED'; // Consumed
-                        break;
-                    }
-
-                    continue; // Continue to next match
-
-                } else {
-                    // STP_CANCEL_OLDER (Default)
-                    oppositeBook.remove(bestOrder);
-                    bestOrder.status = 'CANCELED';
+                // Resolve Arena Index
+                const makerIdx = this.orderIndexMap.get(makerOrder.id);
+                if (makerIdx === undefined) {
+                    makerOrderNode = nextNode;
                     continue;
                 }
+
+                // Read from Arena
+                const makerRem = this.arena.getRemainingQuantity(makerIdx);
+                const makerPrice = this.arena.getPrice(makerIdx);
+
+                // STP Custom Logic
+                if (order.userId === makerOrder.userId) {
+                    remainingQuantity = this.handleSTP(order, makerOrder, bestLevel, bestLevelNode, oppositeBook, remainingQuantity);
+                    if (order.status === 'cancelled') {
+                        return { fills, remainingQuantity: 0n, order };
+                    }
+                    makerOrderNode = nextNode;
+                    continue;
+                }
+
+                // Match
+                const tradeSize = remainingQuantity < makerRem ? remainingQuantity : makerRem;
+                const tradePrice = makerPrice;
+
+                const trade: Trade = {
+                    id: crypto.randomUUID(),
+                    marketId: this.marketId,
+                    makerOrderId: makerOrder.id,
+                    takerOrderId: order.id,
+                    price: tradePrice,
+                    size: tradeSize,
+                    side: order.side,
+                    createdAt: now,
+                    fee: this.calculateFee(order, tradeSize, false),
+                    makerRebate: this.calculateFee(makerOrder, tradeSize, true)
+                };
+
+                fills.push(trade);
+                this.wal.append({ type: 'TRADE', trade });
+                this.recordTradePrice(tradePrice);
+
+                remainingQuantity -= tradeSize;
+                order.filledQuantity += tradeSize;
+                order.remainingQuantity = remainingQuantity;
+
+                // Update Maker in Arena
+                const makerFilled = this.arena.getFilledQuantity(makerIdx) + tradeSize;
+                const makerNewRem = makerRem - tradeSize;
+                this.arena.setFilledQuantity(makerIdx, makerFilled);
+                this.arena.setRemainingQuantity(makerIdx, makerNewRem);
+
+                // Sync Object
+                makerOrder.filledQuantity = makerFilled;
+                makerOrder.remainingQuantity = makerNewRem;
+
+                // Update Level Stats
+                bestLevel.totalQuantity -= tradeSize;
+
+                if (makerNewRem === 0n) {
+                    makerOrder.status = 'filled';
+                    this.wal.append({ type: 'ORDER_FILLED', id: makerOrder.id });
+
+                    // Remove from Level DLL
+                    bestLevel.orders.remove(makerOrderNode);
+                    bestLevel.orderCount--;
+                    this.orderMap.delete(makerOrder.id);
+
+                    // Free Arena
+                    this.arena.free(makerIdx);
+                    this.orderIndexMap.delete(makerOrder.id);
+
+                    // Depth Update (Maker Filled - Remove remaining)
+                    // Maker was partially filled above, but now it's fully gone.
+                    // Wait, logic:
+                    // 1. We decreased remainingQuantity by tradeSize.
+                    // 2. We should decrease depth by tradeSize.
+                } else {
+                    makerOrder.status = 'partial';
+                }
+
+                // Depth Update: Maker liquidity decreased by tradeSize
+                this.depthManager.update(makerOrder.side === 'bid' ? 'bid' : 'ask', tradePrice, -tradeSize);
+
+                makerOrderNode = nextNode;
             }
 
-            // Execute Match
-            const tradeSize = Math.min(remainingSize, bestOrder.remaining);
-            const tradePrice = bestOrder.price;
-
-            const trade: Trade = {
-                id: crypto.randomUUID(),
-                marketId: this.marketId,
-                makerOrderId: bestOrder.id,
-                takerOrderId: order.id,
-                price: tradePrice,
-                size: tradeSize,
-                side: order.side,
-                createdAt: now,
-                fee: this.calculateFee(order, tradeSize, false),
-                makerRebate: this.calculateFee(bestOrder, tradeSize, true)
-            };
-
-            fills.push(trade);
-            this.recordTradePrice(tradePrice); // Record for CB
-
-            // Update states
-            remainingSize -= tradeSize;
-            order.filled += tradeSize;
-            order.remaining = remainingSize;
-
-            bestOrder.filled += tradeSize;
-            bestOrder.remaining -= tradeSize;
-
-            if (bestOrder.remaining <= 0) {
-                bestOrder.status = 'FILLED';
-                oppositeBook.remove(bestOrder);
-            } else {
-                bestOrder.status = 'PARTIAL';
+            if (bestLevel.orders.isEmpty()) {
+                oppositeBook.remove(bestLevel);
             }
         }
 
-        if (order.status !== 'CANCELED') {
-            order.status = remainingSize <= 0 ? 'FILLED' : (order.filled > 0 ? 'PARTIAL' : 'OPEN');
+        // Post-Loop
+        if (order.status !== 'cancelled') {
+            order.status = remainingQuantity === 0n ? 'filled' : (order.filledQuantity > 0n ? 'partial' : 'open');
         }
 
-        // ADD TO BOOK
-        if (remainingSize > 0 && order.type === 'LIMIT') {
+        // Add to Book (Limit Orders)
+        if (remainingQuantity > 0n && order.type === 'LIMIT') {
             if (order.timeInForce === 'IOC' || order.timeInForce === 'FOK') {
-                order.status = 'CANCELED';
-            } else if (order.timeInForce === 'GTD' && (order as any).expiration && now > (order as any).expiration) {
-                order.status = 'CANCELED'; // Instant expire if sent late
+                order.status = 'cancelled';
+                this.wal.append({ type: 'ORDER_CANCELLED', id: order.id, reason: 'IOC_EXPIRED' });
             } else {
-                const myBook = order.side === 'BUY' ? this.bids : this.asks;
-                myBook.insert(order);
+                const myBook = order.side === 'bid' ? this.bids : this.asks;
+                this.addToBook(myBook, order);
             }
-        } else if (remainingSize > 0 && order.type === 'MARKET') {
-            order.status = 'CANCELED';
+        } else if (remainingQuantity > 0n && order.type === 'MARKET') {
+            order.status = 'cancelled';
         }
 
-        return {
-            fills,
-            remainingSize,
-            order
-        };
+        return { fills, remainingQuantity, order };
     }
 
-    private recordTradePrice(price: number) {
+    private addToBook(book: RedBlackTree<OrderLevel>, order: Order) {
+        const dummyLevel: OrderLevel = {
+            price: order.price, totalQuantity: 0n, orderCount: 0, orders: new DoublyLinkedList(),
+            dirty: false, lastModified: 0, maxOrderId: ''
+        };
+
+        let node = book.find(dummyLevel);
+        let level: OrderLevel;
+
+        if (!node) {
+            level = {
+                price: order.price,
+                totalQuantity: 0n,
+                orderCount: 0,
+                orders: new DoublyLinkedList<Order>(),
+                lastModified: Date.now(),
+                dirty: true,
+                maxOrderId: ''
+            };
+            node = book.insert(level);
+        } else {
+            level = node.data;
+        }
+
+        // Allocate Arena Slot
+        const idx = this.arena.allocate();
+        this.arena.setPrice(idx, order.price);
+        this.arena.setQuantity(idx, order.quantity);
+        this.arena.setRemainingQuantity(idx, order.remainingQuantity);
+        this.arena.setFilledQuantity(idx, order.filledQuantity);
+        this.arena.setMeta(idx, order.id, order.userId);
+
+        this.orderIndexMap.set(order.id, idx);
+
+        const listNode = level.orders.push(order);
+        order._node = listNode;
+        level.totalQuantity += order.remainingQuantity;
+        level.orderCount++;
+
+        // Tracking maxOrderId logic?
+        // Simple string comparison or assumption lexical UUID v7
+        if (order.id > level.maxOrderId) {
+            level.maxOrderId = order.id;
+        }
+
+        this.orderMap.set(order.id, order);
+        this.wal.append({ type: 'ORDER_ADDED', id: order.id, price: order.price, size: order.remainingQuantity });
+
+        // Depth Update: New liquidity
+        this.depthManager.update(order.side === 'bid' ? 'bid' : 'ask', order.price, order.remainingQuantity);
+    }
+
+    cancelOrder(orderId: string): boolean {
+        const order = this.orderMap.get(orderId);
+        if (!order) return false;
+
+        const book = order.side === 'bid' ? this.bids : this.asks;
+
+        const dummyLevel: OrderLevel = {
+            price: order.price, totalQuantity: 0n, orderCount: 0, orders: new DoublyLinkedList(),
+            dirty: false, lastModified: 0, maxOrderId: ''
+        };
+
+        const levelNode = book.find(dummyLevel);
+        if (!levelNode) return false;
+
+        const level = levelNode.data;
+
+        if (order._node) {
+            level.orders.remove(order._node);
+        } else {
+            return false;
+        }
+
+        level.totalQuantity -= order.remainingQuantity;
+        level.orderCount--;
+
+        this.orderMap.delete(orderId);
+
+        const idx = this.orderIndexMap.get(orderId);
+        if (idx !== undefined) {
+            this.arena.free(idx);
+            this.orderIndexMap.delete(orderId);
+        }
+
+        order.status = 'cancelled';
+        this.wal.append({ type: 'ORDER_CANCELLED', id: orderId });
+
+        if (level.orderCount === 0) {
+            book.remove(level);
+        }
+
+        if (level.orderCount === 0) {
+            book.remove(level);
+        }
+
+        // Depth Update: Remove liquidity
+        this.depthManager.update(order.side === 'bid' ? 'bid' : 'ask', order.price, -order.remainingQuantity);
+
+        return true;
+    }
+
+    private handleSTP(taker: Order, maker: Order, level: OrderLevel, levelNode: any, book: RedBlackTree<OrderLevel>, remaining: bigint): bigint {
+        const mode = taker.stpFlag || 'cancel'; // Default to cancel older? User spec: 'none' | 'decrease' | 'cancel' | 'both'
+        // Assuming 'cancel' maps to STP_CANCEL_OLDER
+        // 'decrease' maps to STP_DECREMENT
+        // 'both' maps to STP_CANCEL_BOTH
+
+        const makerIdx = this.orderIndexMap.get(maker.id)!;
+
+        if (mode === 'both') {
+            // Cancel Maker
+            level.orders.remove(maker._node);
+            level.totalQuantity -= maker.remainingQuantity;
+            level.orderCount--;
+            this.orderMap.delete(maker.id);
+            this.arena.free(makerIdx);
+            this.orderIndexMap.delete(maker.id);
+
+            maker.status = 'cancelled';
+            this.wal.append({ type: 'ORDER_CANCELLED', id: maker.id, reason: 'STP' });
+
+            if (level.orderCount === 0) book.remove(level);
+
+            // Depth Update (STP Both) - Remove Maker
+            this.depthManager.update(maker.side === 'bid' ? 'bid' : 'ask', maker.price, -maker.remainingQuantity);
+
+            // Cancel Taker
+            taker.status = 'cancelled';
+            return 0n;
+        } else if (mode === 'decrease') {
+            const dec = remaining < maker.remainingQuantity ? remaining : maker.remainingQuantity;
+
+            taker.remainingQuantity -= dec;
+            maker.remainingQuantity -= dec;
+
+            // Update Arena
+            this.arena.setRemainingQuantity(makerIdx, maker.remainingQuantity);
+
+            // Depth Update (STP Decrease) - Reduce Maker
+            this.depthManager.update(maker.side === 'bid' ? 'bid' : 'ask', maker.price, -dec);
+
+            level.totalQuantity -= dec;
+
+            if (maker.remainingQuantity === 0n) {
+                maker.status = 'cancelled';
+                level.orders.remove(maker._node);
+                level.orderCount--;
+                this.orderMap.delete(maker.id);
+                this.arena.free(makerIdx);
+                this.orderIndexMap.delete(maker.id);
+                this.wal.append({ type: 'ORDER_CANCELLED', id: maker.id, reason: 'STP_DEC' });
+
+                if (level.orderCount === 0) book.remove(level);
+            }
+
+            if (taker.remainingQuantity === 0n) {
+                taker.status = 'cancelled';
+                return 0n;
+            }
+            return taker.remainingQuantity;
+        } else {
+            // CANCEL OLDER (Maker) - 'cancel' mode or 'none'? 
+            // Ideally if 'none', we self-trade. But wash trading prevention usually implies strictness.
+            // If spec says 'none', we might allow it? But usually 'cancel' is safe default.
+
+            level.orders.remove(maker._node);
+            level.totalQuantity -= maker.remainingQuantity;
+            level.orderCount--;
+            this.orderMap.delete(maker.id);
+            this.arena.free(makerIdx);
+            this.orderIndexMap.delete(maker.id);
+
+            maker.status = 'cancelled';
+            this.wal.append({ type: 'ORDER_CANCELLED', id: maker.id, reason: 'STP_OLDER' });
+
+            if (level.orderCount === 0) book.remove(level);
+
+            // Depth Update (STP Cancel Maker)
+            this.depthManager.update(maker.side === 'bid' ? 'bid' : 'ask', maker.price, -maker.remainingQuantity);
+
+            return remaining;
+        }
+    }
+
+    private checkFOK(order: Order): boolean {
+        let needed = order.quantity;
+        const book = order.side === 'bid' ? this.asks : this.bids;
+        const levels = book.values();
+        for (const level of levels) {
+            const canMatch = order.side === 'bid' ? order.price >= level.price : order.price <= level.price;
+            if (!canMatch) break;
+
+            if (level.totalQuantity >= needed) return true;
+            needed -= level.totalQuantity;
+        }
+        return false;
+    }
+
+    private calculateFee(order: Order, size: bigint, isMaker: boolean): bigint {
+        const tier = FEE_TIERS[0];
+        const rate = isMaker ? tier.maker : tier.taker;
+        return (order.price * size * rate) / SCALE / SCALE;
+    }
+
+    private recordTradePrice(price: bigint) {
         const now = Date.now();
         this.tradeHistory.push({ price, time: now });
-        // Clean old history
         this.tradeHistory = this.tradeHistory.filter(t => now - t.time <= CB_LOOKBACK_MS);
     }
 
-    private checkCircuitBreaker(currentMatchPrice: number) {
+    private checkCircuitBreaker(currentPrice: bigint) {
         if (this.tradeHistory.length === 0) return;
+        const startPrice = this.tradeHistory[0].price;
+        let diff = currentPrice - startPrice;
+        if (diff < 0n) diff = -diff;
 
-        // Find oldest price in window (approx "start" price)
-        const startPrice = this.tradeHistory[0].price; // Oldest due to push/filter
-        const deviation = Math.abs(currentMatchPrice - startPrice) / startPrice;
-
-        if (deviation > CB_THRESHOLD_PERCENT) {
+        if (diff * 10n > startPrice) {
             this.isHalted = true;
-            this.haltReason = `Price moved ${(deviation * 100).toFixed(2)}% in last minute`;
+            this.haltReason = `Volatility Halt`;
+            this.wal.append({ type: 'MARKET_HALT', reason: this.haltReason });
         }
-    }
-
-    private calculateFee(order: Order, size: number, isMaker: boolean): number {
-        const volume = (order as any).userThirtyDayVolume || 0;
-        const tier = [...FEE_TIERS].reverse().find(t => volume >= t.volume) || FEE_TIERS[0];
-        const rate = isMaker ? tier.maker : tier.taker;
-        return (order.price * size) * rate;
     }
 
     getSnapshot() {
-        const depth = 20;
-        const aggregate = (orders: Order[], isBuy: boolean): OrderLevel[] => {
-            const levels: Map<number, number> = new Map();
-            for (const o of orders) {
-                const p = o.price;
-                const s = o.remaining;
-                levels.set(p, (levels.get(p) || 0) + s);
-            }
-            const res: OrderLevel[] = Array.from(levels.entries()).map(([price, size]) => ({ price, size, total: 0 }));
-            res.sort((a, b) => isBuy ? b.price - a.price : a.price - b.price);
-            return res.slice(0, depth);
-        };
-
         return {
             marketId: this.marketId,
-            bids: aggregate(this.bids.values(), true),
-            asks: aggregate(this.asks.values(), false),
-            lastUpdateId: Date.now()
+            bids: this.bids.values().map(l => ({ price: l.price, size: l.totalQuantity })),
+            asks: this.asks.values().map(l => ({ price: l.price, size: l.totalQuantity })),
+            timestamp: Date.now()
         };
     }
 
-    cancelOrder(orderId: string, side: Side): boolean {
-        const book = side === 'BUY' ? this.bids : this.asks;
-        const orders = book.values();
-        const target = orders.find(o => o.id === orderId);
-        if (target) {
-            book.remove(target);
-            target.status = 'CANCELED';
-            return true;
-        }
-        return false;
+    async shutdown() {
+        await this.wal.stop();
     }
 }

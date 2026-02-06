@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
             userId, side, price, size, type, timeInForce, stpMode
         });
 
-        return NextResponse.json(result);
+        return NextResponse.json(OrderBookService.mapFillResultToDTO(result));
     } catch (error: any) {
         console.error('Error placing order:', error);
         return NextResponse.json({ error: error.message || 'Failed to place order' }, { status: 500 });

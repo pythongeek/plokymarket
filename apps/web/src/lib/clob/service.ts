@@ -1,13 +1,75 @@
 import { createClient } from '@supabase/supabase-js';
 import { OrderBookEngine } from './OrderBookEngine';
 import { Order, OrderStatus, FillResult } from './types';
+import { Granularity } from './ds/DepthManager';
+import { MarketDataPublisher } from './realtime/MarketDataPublisher';
 
 // NOTE: In a real app, use the authenticated client from the request context.
 // Here we might use a service role for internal matching logic if trusted, 
 // but usually we pass the client or use a singleton if acceptable.
 // For this helper, we will accept a supabase client instance.
 
+// Polyfill for BigInt serialization
+(BigInt.prototype as any).toJSON = function () { return this.toString(); };
+
 export class OrderBookService {
+    private static SCALING_FACTOR = 1_000_000n; // 6 decimals precision
+
+    // Helper to convert frontend number to engine BigInt
+    private static toBigInt(val: number): bigint {
+        return BigInt(Math.round(val * 1_000_000));
+    }
+
+    // Helper to convert engine BigInt to frontend number
+    public static toNumber(val: bigint): number {
+        return Number(val) / 1_000_000;
+    }
+
+    public static mapOrderToDTO(order: Order): any {
+        return {
+            ...order,
+            price: this.toNumber(order.price),
+            quantity: this.toNumber(order.quantity),
+            filledQuantity: this.toNumber(order.filledQuantity),
+            remainingQuantity: this.toNumber(order.remainingQuantity),
+            // Ensure any other BigInts are converted
+        };
+    }
+
+    public static getDepthDTO(engine: OrderBookEngine, granularity: Granularity): any {
+        const bids = engine.depthManager.getDepth('bid', granularity);
+        const asks = engine.depthManager.getDepth('ask', granularity);
+
+        return {
+            marketId: (engine as any).marketId, // Access private or use params
+            bids: bids.map(l => ({ price: this.toNumber(l.price), size: this.toNumber(l.size) })),
+            asks: asks.map(l => ({ price: this.toNumber(l.price), size: this.toNumber(l.size) })),
+            timestamp: Date.now()
+        };
+    }
+
+    public static mapSnapshotToDTO(snapshot: any): any {
+        return {
+            marketId: snapshot.marketId,
+            bids: snapshot.bids.map((l: any) => ({ price: this.toNumber(l.price), size: this.toNumber(l.size) })),
+            asks: snapshot.asks.map((l: any) => ({ price: this.toNumber(l.price), size: this.toNumber(l.size) })),
+            timestamp: snapshot.timestamp
+        };
+    }
+
+    public static mapFillResultToDTO(result: FillResult): any {
+        return {
+            fills: result.fills.map(f => ({
+                ...f,
+                price: this.toNumber(f.price),
+                size: this.toNumber(f.size),
+                fee: this.toNumber(f.fee),
+                makerRebate: this.toNumber(f.makerRebate)
+            })),
+            remainingQuantity: this.toNumber(result.remainingQuantity),
+            order: this.mapOrderToDTO(result.order)
+        };
+    }
 
     // Hydrate an engine from DB
     static async getEngine(supabase: any, marketId: string): Promise<OrderBookEngine> {
@@ -33,17 +95,18 @@ export class OrderBookService {
             marketId,
             userId: orderInput.userId,
             side: orderInput.side,
-            price: Number(orderInput.price),
-            size: Number(orderInput.size),
-            filled: 0,
-            remaining: Number(orderInput.size),
-            status: 'OPEN',
+            price: this.toBigInt(Number(orderInput.price)),
+            quantity: this.toBigInt(Number(orderInput.size)),
+            filledQuantity: 0n,
+            remainingQuantity: this.toBigInt(Number(orderInput.size)),
+            status: 'open',
             type: orderInput.type || 'LIMIT',
             timeInForce: orderInput.timeInForce || 'GTC',
             postOnly: orderInput.postOnly || false,
-            stpMode: orderInput.stpMode,
+            stpFlag: orderInput.stpMode || 'none', // Map stpMode to stpFlag
             createdAt: Date.now(),
-            updatedAt: Date.now()
+            updatedAt: Date.now(),
+            cancelRequested: false
         };
 
         // 2. Load Engine (This locks the market ideally, but for now Optimistic/Naive)
@@ -53,8 +116,13 @@ export class OrderBookService {
         // Only for BUY orders (assuming Base Asset/Cash). 
         // For SELL orders, we should check Asset Balance (handled by `user_positions` or similar, but let's stick to Cash for now or Mock).
         // Let's implement Cash Freeze for BUY.
-        if (order.side === 'BUY') {
-            const cost = order.price * order.size;
+        // CORRECTION: Map input side to lowercase bid/ask if needed
+        if (orderInput.side === 'BUY') order.side = 'bid';
+        else if (orderInput.side === 'SELL') order.side = 'ask';
+
+        // RISK ENGINE: Check Balance & Freeze Funds
+        if (order.side === 'bid') {
+            const cost = this.toNumber(order.price * order.quantity); // Convert back for numeric Check
             // Call checking function
             const { data: success, error } = await supabase.rpc('freeze_funds', {
                 p_user_id: order.userId,
@@ -72,7 +140,7 @@ export class OrderBookService {
         const result: FillResult = await engine.placeOrder(order);
 
         // Handle Immediate Cancellations (FOK/IOC) -> Unfreeze
-        if (result.order.status === 'CANCELED' && order.side === 'BUY') {
+        if (order.status === 'cancelled' && order.side === 'bid') { // Map 'CANCELED' -> 'cancelled'
             // Calculate refund (Frozen - Spent). 
             // If CANCELED immediately (FOK failed), refund element.
             // If PARTIAL (IOC), filled part is settled, remaining is cancelled (refunded).
@@ -81,7 +149,10 @@ export class OrderBookService {
             // WAIT: Trade execution settles cash (deducts frozen).
             // So we only need to refund the UNFILLED portion from frozen.
 
-            const refundAmount = (result.order.size - result.order.filled) * result.order.price;
+            // Using BigInt calculation then convert to Number for DB
+            const refundBig = (order.quantity - order.filledQuantity) * order.price;
+            const refundAmount = this.toNumber(refundBig);
+
             if (refundAmount > 0) {
                 await supabase.rpc('unfreeze_funds', {
                     p_user_id: order.userId,
@@ -92,15 +163,16 @@ export class OrderBookService {
 
         // 4. Persist Updates Transactionally (ideally)
         // A. Insert the Main Order
+        // Convert BigInt back to Number/Float for DB persistence
         const { error: orderError } = await supabase.from('order_book').insert({
             id: result.order.id,
             market_id: result.order.marketId,
             user_id: result.order.userId,
-            side: result.order.side,
-            price: result.order.price,
-            size: result.order.size,
-            filled: result.order.filled,
-            status: result.order.status,
+            side: result.order.side === 'bid' ? 'BUY' : 'SELL', // Map back to DB enum
+            price: this.toNumber(result.order.price),
+            size: this.toNumber(result.order.quantity),
+            filled: this.toNumber(result.order.filledQuantity),
+            status: result.order.status === 'cancelled' ? 'CANCELED' : result.order.status.toUpperCase(), // Map status
             order_type: result.order.type,
             time_in_force: result.order.timeInForce,
             post_only: result.order.postOnly,
@@ -116,26 +188,15 @@ export class OrderBookService {
                 market_id: f.marketId,
                 maker_order_id: f.makerOrderId,
                 taker_order_id: f.takerOrderId,
-                buyer_id: f.side === 'BUY' ? result.order.userId : 'unknown', // Simplification: we need to know who the maker was to fetch their ID. 
+                buyer_id: f.side === 'bid' ? result.order.userId : 'unknown', // Map 'bid' check correctly
                 // Logic Gap: 'Trade' object in engine doesn't store Maker User ID. 
-                // We need to fetch maker orders to know user IDs or store them in memory orders.
-                // Implication: The memory order object should have userId. Check types.ts... Yes it does.
-                // So engine 'match' needs access to maker userId.
-                // Let's assume Trade object needs enhancing or we lookup.
-                // FIX: For now, map simple fields. We'll set buyer_id/seller_id to the Order's userID for the taker side, 
-                // and we assume we need to join for maker. 
-                // ACTUALLY: The table has buyer_id/seller_id.
-                // If Taker is BUY, Taker=Buyer, Maker=Seller.
-                // Use placeholder UUID or fetch maker order details.
-                // For speed, let's just insert basic trade info or fix Types. 
-                // Let's look up maker user ID if possible or skip strictly enforcing non-null temporarily or fix Engine.
-                // Best fix: The engine's 'bestOrder' has userId. We should include it in Trade struct.
-                // For this step, I'll pass simple trades, and maybe omit buyer/seller columns if not strictly required OR fake them.
-                price: f.price,
-                size: f.size,
-                taker_side: f.side,
+                // We assume we need to fetch or ignore for MVP.
+                price: this.toNumber(f.price),
+                size: this.toNumber(f.size),
+                taker_side: f.side === 'bid' ? 'BUY' : 'SELL',
                 created_at: new Date(f.createdAt).toISOString()
             }));
+
 
             // Note: Migration had NOT NULL on buyer_id/seller_id. 
             // Strategy: We will do a Quick Fix in Engine or here.
@@ -168,13 +229,31 @@ export class OrderBookService {
             // Let's just update `filled` = `filled` + fill.size
             const { error: updateError } = await supabase.rpc('increment_filled', {
                 p_order_id: fill.makerOrderId,
-                p_amount: fill.size
+                p_amount: this.toNumber(fill.size) // Convert BigInt size to Number
             });
             // We also need to update status if filled >= size.
             // This logic is complex to sync.
             // PROPOSAL: Trust the Engine's memory state if valid?
             // Iterate engine.bids/asks to find the order?
             // No, some might be removed (FILLED).
+        }
+
+        // [New] Integration: Broadcast Updates (Real-time ProtoBuf)
+        try {
+            // Channel name convention: market:<marketId>
+            const channel = supabase.channel(`market:${marketId}`);
+            // Use Date.now() as sequence seed for stateless monotonicity
+            const publisher = new MarketDataPublisher(engine as any, channel, Date.now());
+
+            // Publish L1 and L2 (Delta/Snapshot logic handled by Publisher)
+            // L2 provides depth 5, usually enough for UI
+            publisher.publishL2();
+
+            // Force flush immediately since we are in a serverless function about to exit
+            publisher.flushBatch();
+        } catch (err) {
+            console.error('Failed to broadcast market update:', err);
+            // Do not fail the order execution if broadcast fails
         }
 
         return result;
@@ -224,6 +303,7 @@ export class OrderBookService {
         await supabase.from('order_commitments').delete().eq('id', data.id);
 
         // 4. Execute
+        // Since executeOrder maps back to number for DB, we need to be careful with 'nonce' reuse if any.
         return this.executeOrder(supabase, marketId, orderInput);
     }
 
@@ -237,20 +317,28 @@ export class OrderBookService {
 }
 
 function mapDbOrderToMemory(dbOrder: any): Order {
+    // DB stores numeric/float. We convert to BigInt for Engine.
+    // Assuming DB precision matches or we scale.
+    // Use scaling helper from class? Or duplicate.
+    // Let's use simple scaling here.
     return {
         id: dbOrder.id,
         marketId: dbOrder.market_id,
         userId: dbOrder.user_id,
         side: dbOrder.side as any,
-        price: Number(dbOrder.price),
-        size: Number(dbOrder.size),
-        filled: Number(dbOrder.filled),
-        remaining: Number(dbOrder.size) - Number(dbOrder.filled),
+        price: BigInt(Math.round(Number(dbOrder.price) * 1_000_000)),
+        quantity: BigInt(Math.round(Number(dbOrder.size) * 1_000_000)),
+        filledQuantity: BigInt(Math.round(Number(dbOrder.filled) * 1_000_000)),
+        remainingQuantity: BigInt(Math.round((Number(dbOrder.size) - Number(dbOrder.filled)) * 1_000_000)),
         status: dbOrder.status as any,
-        type: dbOrder.order_type as any,
         timeInForce: dbOrder.time_in_force as any,
         postOnly: dbOrder.post_only,
+        stpFlag: 'none', // DB might not have stp explicitly or we map
+        // Note: 'status' is duplicated in original map, types.ts says `status: OrderStatus`.
+        // Types update: stpFlag is new.
         createdAt: new Date(dbOrder.created_at).getTime(),
-        updatedAt: new Date(dbOrder.updated_at).getTime()
+        updatedAt: new Date(dbOrder.updated_at).getTime(),
+        cancelRequested: false, // Default
+        type: dbOrder.order_type as any
     };
 }
