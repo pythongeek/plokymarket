@@ -1,8 +1,8 @@
 -- Wallet System for Risk Engine
-CREATE TABLE wallets (
+CREATE TABLE IF NOT EXISTS wallets (
   user_id UUID PRIMARY KEY REFERENCES auth.users(id),
   balance DECIMAL(36, 18) DEFAULT 0 CHECK (balance >= 0),
-  frozen_balance DECIMAL(36, 18) DEFAULT 0 CHECK (frozen_balance >= 0),
+  locked_balance DECIMAL(36, 18) DEFAULT 0 CHECK (locked_balance >= 0),
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -26,7 +26,7 @@ BEGIN
   UPDATE wallets
   SET 
     balance = balance - p_amount,
-    frozen_balance = frozen_balance + p_amount,
+    locked_balance = locked_balance + p_amount,
     updated_at = NOW()
   WHERE user_id = p_user_id;
 
@@ -44,31 +44,27 @@ BEGIN
   UPDATE wallets
   SET 
     balance = balance + p_amount,
-    frozen_balance = frozen_balance - p_amount,
+    locked_balance = locked_balance - p_amount,
     updated_at = NOW()
   WHERE user_id = p_user_id;
 END;
 $$;
 
--- Function to execute trade (deduct frozen, add asset? Asset tracking is in `user_positions` likely, but here we handle CASH)
--- For a simplified CLOB, the 'trade' implies cash movement.
--- We'll assume strict cash settlement for now.
+-- Function to execute trade (deduct locked, add asset? Asset tracking is in `user_positions` likely, but here we handle CASH)
 CREATE OR REPLACE FUNCTION settle_trade_cash(p_buyer_id UUID, p_seller_id UUID, p_amount DECIMAL)
 RETURNS VOID
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 BEGIN
-  -- Buyer: Already frozen, so just reduce frozen (burn the cash used)
+  -- Buyer: Already locked, so just reduce locked (burn the cash used)
   UPDATE wallets
-  SET frozen_balance = frozen_balance - p_amount
+  SET locked_balance = locked_balance - p_amount
   WHERE user_id = p_buyer_id;
 
   -- Seller: Receives cash
   UPDATE wallets
   SET balance = balance + p_amount
   WHERE user_id = p_seller_id;
-  
-  -- Note: This is simplified. Real logic needs to handle fees, etc.
 END;
 $$;

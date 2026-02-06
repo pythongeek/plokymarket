@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useStore } from '@/store/useStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,13 +7,16 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import {
   TrendingUp,
   TrendingDown,
   Wallet,
   Info,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Zap,
+  Target
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Market, OutcomeType } from '@/types';
@@ -24,7 +27,17 @@ interface TradingPanelProps {
 }
 
 export function TradingPanel({ market }: TradingPanelProps) {
-  const { wallet, placeOrder, isAuthenticated } = useStore();
+  const {
+    wallet,
+    placeOrder,
+    isAuthenticated,
+    tradingState,
+    setTradingPrice,
+    setTradingQuantity,
+    toggleOneClick,
+    toggleBracket,
+    setBracketPrices
+  } = useStore();
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<'buy' | 'sell'>('buy');
   const [outcome, setOutcome] = useState<OutcomeType>('YES');
@@ -34,8 +47,25 @@ export function TradingPanel({ market }: TradingPanelProps) {
   const [showSuccess, setShowSuccess] = useState(false);
   const [error, setError] = useState('');
 
+  // Bracket Order State
+  const [stopLoss, setStopLoss] = useState<string>('');
+  const [takeProfit, setTakeProfit] = useState<string>('');
+
   const maxPrice = 0.99;
   const minPrice = 0.01;
+
+  // Sync Store -> Local
+  useEffect(() => {
+    if (tradingState.price !== null && tradingState.price !== parseFloat(price)) {
+      setPrice(tradingState.price.toFixed(2));
+    }
+  }, [tradingState.price]); // Intentionally omitting 'price' dependency to avoid loop
+
+  useEffect(() => {
+    if (tradingState.side && tradingState.side !== activeTab) {
+      setActiveTab(tradingState.side);
+    }
+  }, [tradingState.side]);
 
   const totalCost = parseFloat(price) * parseInt(quantity || '0');
   const potentialProfit = outcome === 'YES'
@@ -46,14 +76,29 @@ export function TradingPanel({ market }: TradingPanelProps) {
     const numValue = parseFloat(value);
     if (!isNaN(numValue) && numValue >= minPrice && numValue <= maxPrice) {
       setPrice(value);
+      setTradingPrice(numValue);
     }
   };
 
   const handleQuantityChange = (value: string) => {
-    const numValue = parseInt(value);
-    if (!isNaN(numValue) && numValue > 0) {
-      setQuantity(value);
-    }
+    setQuantity(value);
+    const num = parseInt(value);
+    if (!isNaN(num)) setTradingQuantity(num);
+  };
+
+  const setPercentageQuantity = (pct: number) => {
+    if (!wallet) return;
+    // For BUY: Cost = Price * Qty -> Qty = Balance * Pct / Price
+    // For SELL: Qty = Held Shares * Pct (Complex logic, let's stick to Wallet Balance for buys)
+
+    const balance = wallet.balance;
+    const currentPrice = parseFloat(price);
+    if (currentPrice <= 0) return;
+
+    const maxAffordable = Math.floor(balance / currentPrice);
+    const targetQty = Math.floor(maxAffordable * pct);
+
+    handleQuantityChange(targetQty.toString());
   };
 
   const handleSubmit = async () => {
@@ -76,6 +121,11 @@ export function TradingPanel({ market }: TradingPanelProps) {
 
       if (success) {
         setShowSuccess(true);
+        // If Bracket Order, place SL/TP (Simulation)
+        if (tradingState.isBracket && success) {
+          console.log("Placing bracket orders...", { stopLoss, takeProfit });
+          // Logic to place separate OCO orders or conditional orders would go here
+        }
         setTimeout(() => setShowSuccess(false), 3000);
       } else {
         setError(t('trading.insufficient_balance'));
@@ -121,8 +171,18 @@ export function TradingPanel({ market }: TradingPanelProps) {
 
   return (
     <Card>
-      <CardHeader className="pb-3">
+      <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
         <CardTitle className="text-lg">{t('trading.place_order')}</CardTitle>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1" title="One-Click Trading">
+            <Zap className={cn("h-4 w-4", tradingState.isOneClick ? "text-yellow-500 fill-yellow-500" : "text-muted-foreground")} />
+            <Switch
+              checked={tradingState.isOneClick}
+              onCheckedChange={toggleOneClick}
+              className="scale-75"
+            />
+          </div>
+        </div>
       </CardHeader>
 
       <CardContent className="space-y-4">
@@ -151,7 +211,8 @@ export function TradingPanel({ market }: TradingPanelProps) {
           <button
             onClick={() => {
               setOutcome('YES');
-              setPrice(market.yes_price?.toFixed(2) || '0.50');
+              // Only update price if not manually locked? For now reset to market default
+              if (!tradingState.price) setPrice(market.yes_price?.toFixed(2) || '0.50');
             }}
             className={cn(
               "flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 transition-all",
@@ -170,7 +231,7 @@ export function TradingPanel({ market }: TradingPanelProps) {
           <button
             onClick={() => {
               setOutcome('NO');
-              setPrice(market.no_price?.toFixed(2) || '0.50');
+              if (!tradingState.price) setPrice(market.no_price?.toFixed(2) || '0.50');
             }}
             className={cn(
               "flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 transition-all",
@@ -211,7 +272,7 @@ export function TradingPanel({ market }: TradingPanelProps) {
           </div>
           <Slider
             value={[parseFloat(price)]}
-            onValueChange={([v]) => setPrice(v.toFixed(2))}
+            onValueChange={([v]) => handlePriceChange(v.toFixed(2))}
             min={minPrice}
             max={maxPrice}
             step={0.01}
@@ -220,7 +281,20 @@ export function TradingPanel({ market }: TradingPanelProps) {
 
         {/* Quantity Input */}
         <div className="space-y-2">
-          <Label>{t('trading.quantity')}</Label>
+          <div className="flex justify-between">
+            <Label>{t('trading.quantity')}</Label>
+            <div className="flex gap-1">
+              {[0.25, 0.5, 0.75, 1].map((pct) => (
+                <button
+                  key={pct}
+                  onClick={() => setPercentageQuantity(pct)}
+                  className="px-1.5 py-0.5 text-[10px] bg-muted hover:bg-muted/80 rounded"
+                >
+                  {pct * 100}%
+                </button>
+              ))}
+            </div>
+          </div>
           <Input
             type="number"
             value={quantity}
@@ -232,7 +306,7 @@ export function TradingPanel({ market }: TradingPanelProps) {
             {quickAmounts.map((amount) => (
               <button
                 key={amount}
-                onClick={() => setQuantity(amount.toString())}
+                onClick={() => handleQuantityChange(amount.toString())}
                 className="flex-1 px-2 py-1 text-xs font-medium rounded bg-muted hover:bg-muted/80 transition-colors"
               >
                 {amount}
@@ -240,6 +314,39 @@ export function TradingPanel({ market }: TradingPanelProps) {
             ))}
           </div>
         </div>
+
+        {/* Advanced Settings Checkbox/Toggle */}
+        <div className="flex items-center justify-between py-2 border-t border-b">
+          <div className="flex items-center gap-2">
+            <Target className="h-4 w-4" />
+            <span className="text-sm font-medium">Bracket Order</span>
+          </div>
+          <Switch checked={tradingState.isBracket} onCheckedChange={toggleBracket} />
+        </div>
+
+        {/* Bracket Inputs */}
+        {tradingState.isBracket && (
+          <div className="grid grid-cols-2 gap-2 animate-in slide-in-from-top-2">
+            <div className="space-y-1">
+              <Label className="text-xs">Take Profit</Label>
+              <Input
+                placeholder="TP"
+                className="h-8 text-sm"
+                value={takeProfit}
+                onChange={(e) => setTakeProfit(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Stop Loss</Label>
+              <Input
+                placeholder="SL"
+                className="h-8 text-sm"
+                value={stopLoss}
+                onChange={(e) => setStopLoss(e.target.value)}
+              />
+            </div>
+          </div>
+        )}
 
         {/* Order Summary */}
         <div className="rounded-lg bg-muted p-4 space-y-2">
@@ -256,7 +363,7 @@ export function TradingPanel({ market }: TradingPanelProps) {
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">{t('trading.return_on_win')}</span>
             <span className="font-medium text-green-500">
-              +{((potentialProfit / totalCost) * 100).toFixed(0)}%
+              +{((potentialProfit / totalCost || 0) * 100).toFixed(0)}%
             </span>
           </div>
           {wallet && (
@@ -303,6 +410,14 @@ export function TradingPanel({ market }: TradingPanelProps) {
             </>
           )}
         </Button>
+
+        {/* Info & Warning for One Click */}
+        {tradingState.isOneClick && (
+          <div className="flex items-start gap-2 text-xs text-yellow-600 bg-yellow-50 p-2 rounded border border-yellow-200">
+            <Zap className="h-3 w-3 mt-0.5" />
+            <p>One-Click Trading is Active. Orders placed via ladder are instant.</p>
+          </div>
+        )}
 
         {/* Info */}
         <div className="flex items-start gap-2 text-xs text-muted-foreground">

@@ -89,6 +89,23 @@ interface StoreState {
 
   // Real-time
   subscribeToMarket: (marketId: string) => () => void;
+
+  // Trading UI Slice
+  tradingState: {
+    price: number | null;
+    quantity: number;
+    side: 'buy' | 'sell';
+    isOneClick: boolean;
+    isBracket: boolean;
+    stopLoss: number | null;
+    takeProfit: number | null;
+  };
+  setTradingPrice: (price: number) => void;
+  setTradingQuantity: (quantity: number) => void;
+  setTradingSide: (side: 'buy' | 'sell') => void;
+  toggleOneClick: (enabled: boolean) => void;
+  toggleBracket: (enabled: boolean) => void;
+  setBracketPrices: (stopLoss: number | null, takeProfit: number | null) => void;
 }
 
 // ===================================
@@ -109,6 +126,17 @@ export const useStore = create<StoreState>()(
       wallet: null,
       suggestions: [],
       activeWallet: null,
+
+      // Trading UI Initial State
+      tradingState: {
+        price: null,
+        quantity: 100,
+        side: 'buy',
+        isOneClick: false,
+        isBracket: false,
+        stopLoss: null,
+        takeProfit: null,
+      },
 
       // ===================================
       // AUTH ACTIONS
@@ -546,6 +574,29 @@ export const useStore = create<StoreState>()(
           }
         };
       },
+
+      // ===================================
+      // TRADING UI ACTIONS
+      // ===================================
+
+      setTradingPrice: (price) =>
+        set((state) => ({ tradingState: { ...state.tradingState, price } })),
+
+      setTradingQuantity: (quantity) =>
+        set((state) => ({ tradingState: { ...state.tradingState, quantity } })),
+
+      setTradingSide: (side) =>
+        set((state) => ({ tradingState: { ...state.tradingState, side } })),
+
+      toggleOneClick: (isOneClick) =>
+        set((state) => ({ tradingState: { ...state.tradingState, isOneClick } })),
+
+      toggleBracket: (isBracket) =>
+        set((state) => ({ tradingState: { ...state.tradingState, isBracket } })),
+
+      setBracketPrices: (stopLoss, takeProfit) =>
+        set((state) => ({ tradingState: { ...state.tradingState, stopLoss, takeProfit } })),
+
     }),
     {
       name: 'polymarket-storage',

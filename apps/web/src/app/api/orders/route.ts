@@ -12,8 +12,11 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
         }
 
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-        const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL!;
+        const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY ||
+            process.env.SUPABASE_SECRET_KEY ||
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+            process.env.SUPABASE_ANON_KEY!;
         // Use Service Role if available to bypass RLS for internal logic if needed, 
         // or ensure the user is authenticated (userId should match token).
         // For MVP, we trust the userId passed in body (Insecure for Prod, OK for Demo/Test if we don't valid auth header).

@@ -10,7 +10,6 @@ import * as crypto from 'crypto';
 // Constants
 const CB_LOOKBACK_MS = 60 * 1000;
 const CB_THRESHOLD_PERCENT = 0.10; // 10%
-const TICK_SIZE = 100n; // 0.0001 assuming 6 decimals (1,000,000 scale)
 const SCALE = 1000000n;
 
 interface FeeTier {
@@ -30,6 +29,7 @@ export class OrderBookEngine {
     private bids: RedBlackTree<OrderLevel>;
     private asks: RedBlackTree<OrderLevel>;
     private marketId: string;
+    private tickSize: bigint;
 
     // Index for O(1) lookups
     private orderMap: Map<string, Order> = new Map();
@@ -50,8 +50,14 @@ export class OrderBookEngine {
     private isHalted: boolean = false;
     private haltReason: string | null = null;
 
-    constructor(marketId: string, initialBids: Order[] = [], initialAsks: Order[] = []) {
+    constructor(
+        marketId: string,
+        tickSize: bigint = 100n,
+        initialBids: Order[] = [],
+        initialAsks: Order[] = []
+    ) {
         this.marketId = marketId;
+        this.tickSize = tickSize;
         this.arena = new OrderArena(1000000); // 1 Million Orders
         this.wal = new WALService();
         this.depthManager = new DepthManager();
@@ -84,8 +90,8 @@ export class OrderBookEngine {
         }
 
         // Validate Price
-        if (order.price % TICK_SIZE !== 0n) {
-            throw new Error(`Invalid Price Tick: Must be multiple of 0.01`);
+        if (order.price % this.tickSize !== 0n) {
+            throw new Error(`Invalid Price Tick: Must be multiple of ${(Number(this.tickSize) / Number(SCALE)).toFixed(4)}`);
         }
 
         // FOK Check
@@ -98,7 +104,7 @@ export class OrderBookEngine {
         }
 
         if (order.marketId !== this.marketId) {
-            throw new Error(`Market mismatch`);
+            throw new Error(`Order Market Mismatch: ${order.marketId} !== ${this.marketId}`);
         }
 
         const fills: Trade[] = [];
@@ -481,5 +487,43 @@ export class OrderBookEngine {
 
     async shutdown() {
         await this.wal.stop();
+    }
+
+    /**
+     * Updates the market's tick size.
+     * Requirement: Automatic adjustment of existing orders to prevent disruption.
+     */
+    public async updateTickSize(newTick: bigint) {
+        if (newTick === this.tickSize) return;
+
+        console.log(`Updating market ${this.marketId} tick size from ${this.tickSize} to ${newTick}`);
+        this.tickSize = newTick;
+
+        // Requirement: "automatic position adjustment"
+        // We round all existing order prices to the new tick to ensure book consistency.
+        const allOrders = Array.from(this.orderMap.values());
+
+        for (const order of allOrders) {
+            const remainder = order.price % newTick;
+            if (remainder !== 0n) {
+                // Round down for orders to be safe (conservative rounding)
+                const oldPrice = order.price;
+                const newPrice = order.price - remainder;
+
+                // We must remove and re-add to maintain tree sort if price changes
+                this.cancelOrder(order.id);
+                order.price = newPrice;
+                order.status = 'open';
+                delete order._node; // Prevent circular reference in WAL logging
+                await this.placeOrder(order);
+
+                this.wal.append({
+                    type: 'TICK_ADJUSTMENT',
+                    orderId: order.id,
+                    oldPrice,
+                    newPrice
+                });
+            }
+        }
     }
 }

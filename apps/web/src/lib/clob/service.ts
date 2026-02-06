@@ -41,9 +41,17 @@ export class OrderBookService {
         const asks = engine.depthManager.getDepth('ask', granularity);
 
         return {
-            marketId: (engine as any).marketId, // Access private or use params
-            bids: bids.map(l => ({ price: this.toNumber(l.price), size: this.toNumber(l.size) })),
-            asks: asks.map(l => ({ price: this.toNumber(l.price), size: this.toNumber(l.size) })),
+            marketId: (engine as any).marketId,
+            bids: bids.map(l => ({
+                price: this.toNumber(l.price),
+                size: this.toNumber(l.size),
+                total: this.toNumber(l.total)
+            })),
+            asks: asks.map(l => ({
+                price: this.toNumber(l.price),
+                size: this.toNumber(l.size),
+                total: this.toNumber(l.total)
+            })),
             timestamp: Date.now()
         };
     }
@@ -51,8 +59,16 @@ export class OrderBookService {
     public static mapSnapshotToDTO(snapshot: any): any {
         return {
             marketId: snapshot.marketId,
-            bids: snapshot.bids.map((l: any) => ({ price: this.toNumber(l.price), size: this.toNumber(l.size) })),
-            asks: snapshot.asks.map((l: any) => ({ price: this.toNumber(l.price), size: this.toNumber(l.size) })),
+            bids: snapshot.bids.map((l: any) => ({
+                price: this.toNumber(l.price),
+                size: this.toNumber(l.size),
+                total: this.toNumber(l.total || 0n) // Default for backward compat if snapshot lacks it
+            })),
+            asks: snapshot.asks.map((l: any) => ({
+                price: this.toNumber(l.price),
+                size: this.toNumber(l.size),
+                total: this.toNumber(l.total || 0n)
+            })),
             timestamp: snapshot.timestamp
         };
     }
@@ -122,7 +138,7 @@ export class OrderBookService {
 
         // RISK ENGINE: Check Balance & Freeze Funds
         if (order.side === 'bid') {
-            const cost = this.toNumber(order.price * order.quantity); // Convert back for numeric Check
+            const cost = Number(order.price * order.quantity) / 1e12; // Correct scaling (1e6 * 1e6 = 1e12)
             // Call checking function
             const { data: success, error } = await supabase.rpc('freeze_funds', {
                 p_user_id: order.userId,
@@ -325,7 +341,7 @@ function mapDbOrderToMemory(dbOrder: any): Order {
         id: dbOrder.id,
         marketId: dbOrder.market_id,
         userId: dbOrder.user_id,
-        side: dbOrder.side as any,
+        side: dbOrder.side === 'BUY' ? 'bid' : 'ask',
         price: BigInt(Math.round(Number(dbOrder.price) * 1_000_000)),
         quantity: BigInt(Math.round(Number(dbOrder.size) * 1_000_000)),
         filledQuantity: BigInt(Math.round(Number(dbOrder.filled) * 1_000_000)),

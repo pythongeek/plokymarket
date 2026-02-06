@@ -41,6 +41,19 @@ export interface OrderLevel {
     lastModified: number; // Unix timestamp (nanoseconds)
 }
 
+export interface MarketDataLevel {
+    price: number;
+    size: number;
+    total: number;
+}
+
+export interface OrderBookState {
+    marketId: string;
+    bids: MarketDataLevel[];
+    asks: MarketDataLevel[];
+    timestamp: number;
+}
+
 export interface Trade {
     id: string;
     marketId: string;

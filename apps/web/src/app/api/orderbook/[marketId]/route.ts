@@ -16,8 +16,10 @@ export async function GET(
 
         // In a real high-scale app, we would cache this snapshot or use Redis.
         // Here we reconstruct from DB on demand (expensive but correct for MVP).
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-        const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!; // Anon is enough for reading open book
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL!;
+        const supabaseKey = process.env.SUPABASE_SECRET_KEY ||
+            process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY ||
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
         const supabase = createClient(supabaseUrl, supabaseKey);
 
         const engine = await OrderBookService.getEngine(supabase, marketId);

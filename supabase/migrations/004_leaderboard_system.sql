@@ -1,7 +1,24 @@
 -- Leaderboard System Migration (Advanced)
 
--- 1. Enhanced Leaderboard Cache (Add Advanced Metrics)
--- We first check if columns exist to avoid errors on re-run
+BEGIN;
+
+-- 1. Ensure Leaderboard Cache table exists
+CREATE TABLE IF NOT EXISTS public.leaderboard_cache (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    timeframe VARCHAR(20) NOT NULL, -- 'daily', 'weekly', 'monthly', 'all_time'
+    trading_volume BIGINT DEFAULT 0,
+    realized_pnl BIGINT DEFAULT 0,
+    unrealized_pnl BIGINT DEFAULT 0,
+    score BIGINT DEFAULT 0,
+    period_start DATE NOT NULL DEFAULT CURRENT_DATE,
+    period_end DATE NOT NULL DEFAULT (CURRENT_DATE + INTERVAL '7 days'),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(user_id, timeframe)
+);
+
+-- 2. Add Advanced Metrics Columns if they don't exist
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'leaderboard_cache' AND column_name = 'roi') THEN
@@ -96,3 +113,5 @@ CREATE TABLE IF NOT EXISTS public.user_badges (
 -- 4. Indexes
 CREATE INDEX IF NOT EXISTS idx_user_leagues_points ON public.user_leagues(league_id, current_points DESC);
 CREATE INDEX IF NOT EXISTS idx_leaderboard_roi ON public.leaderboard_cache(timeframe, roi DESC);
+
+COMMIT;
