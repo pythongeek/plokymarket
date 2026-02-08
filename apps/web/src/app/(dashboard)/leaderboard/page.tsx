@@ -31,7 +31,9 @@ import {
   ArrowRight,
   Lock,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  RotateCcw,
+  Search
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -562,10 +564,18 @@ export default function LeaderboardPage() {
 
   const categoryConfig = LEADERBOARD_CATEGORIES[category];
 
+  // Show loading state
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-background to-muted/20 p-4">
         <div className="max-w-6xl mx-auto space-y-6">
+          {/* Hero Header Skeleton */}
+          <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-blue-600 text-white rounded-lg">
+            <div className="container mx-auto px-4 py-8 text-center">
+              <div className="h-10 w-48 bg-white/20 rounded mx-auto mb-2 animate-pulse" />
+              <div className="h-5 w-64 bg-white/20 rounded mx-auto animate-pulse" />
+            </div>
+          </div>
           <Card className="animate-pulse h-32" />
           <div className="grid grid-cols-3 gap-4">
             {[...Array(3)].map((_, i) => (
@@ -573,6 +583,39 @@ export default function LeaderboardPage() {
             ))}
           </div>
           <Card className="animate-pulse h-96" />
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-background to-muted/20">
+        {/* Hero Header */}
+        <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-blue-600 text-white">
+          <div className="container mx-auto px-4 py-8">
+            <motion.div className="text-center">
+              <h1 className="text-3xl md:text-4xl font-bold mb-2">🏆 লিডারবোর্ড</h1>
+              <p className="text-white/80">বাংলাদেশের সেরা ট্রেডারদের সাথে প্রতিযোগিতা করুন</p>
+            </motion.div>
+          </div>
+        </div>
+        
+        <div className="container mx-auto px-4 py-12">
+          <Card className="max-w-2xl mx-auto">
+            <CardContent className="p-8 text-center">
+              <div className="w-20 h-20 bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertCircle className="w-10 h-10 text-rose-500" />
+              </div>
+              <h2 className="text-xl font-bold mb-2">কিছু সমস্যা হয়েছে</h2>
+              <p className="text-muted-foreground mb-4">{error}</p>
+              <Button onClick={() => window.location.reload()}>
+                <RotateCcw className="w-4 h-4 mr-2" />
+                পুনরায় চেষ্টা করুন
+              </Button>
+            </CardContent>
+          </Card>
         </div>
       </div>
     );
@@ -710,47 +753,76 @@ export default function LeaderboardPage() {
           </Card>
         </motion.div>
 
-        {/* Top 3 Podium */}
-        <motion.div variants={itemVariants}>
-          <TopTradersPodium entries={entries} />
-        </motion.div>
+        {/* Top 3 Podium or Empty State */}
+        {entries.length === 0 ? (
+          <motion.div variants={itemVariants}>
+            <Card className="py-16">
+              <CardContent className="text-center">
+                <div className="w-24 h-24 bg-muted rounded-full flex items-center justify-center mx-auto mb-6">
+                  <Search className="w-12 h-12 text-muted-foreground" />
+                </div>
+                <h2 className="text-2xl font-bold mb-2">এখনো কোনো ডাটা নেই</h2>
+                <p className="text-muted-foreground max-w-md mx-auto mb-6">
+                  এই ক্যাটেগরিতে এখনো কোনো ট্রেডার যোগ্যতা অর্জন করেনি। 
+                  ট্রেডিং শুরু করুন এবং লিডারবোর্ডে আপনার স্থান অর্জন করুন!
+                </p>
+                <div className="flex flex-wrap justify-center gap-4">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted rounded-lg px-4 py-2">
+                    <BadgeCheck className="w-4 h-4" />
+                    ন্যূনতম {categoryConfig.minTrades} ট্রেড করুন
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted rounded-lg px-4 py-2">
+                    <Clock className="w-4 h-4" />
+                    {TIME_PERIODS[period].nameBn} অপেক্ষা করুন
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        ) : (
+          <motion.div variants={itemVariants}>
+            <TopTradersPodium entries={entries} />
+          </motion.div>
+        )}
 
-        {/* Full Leaderboard Table */}
-        <motion.div variants={itemVariants}>
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <BarChart3 className="w-5 h-5" />
-                সম্পূর্ণ লিডারবোর্ড
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <ScrollArea className="h-[600px]">
-                <table className="w-full">
-                  <thead className="bg-muted sticky top-0">
-                    <tr>
-                      <th className="text-left py-3 px-4 font-medium">র‌্যাঙ্ক</th>
-                      <th className="text-left py-3 px-4 font-medium">ট্রেডার</th>
-                      <th className="text-right py-3 px-4 font-medium">{categoryConfig.nameBn}</th>
-                      <th className="text-right py-3 px-4 font-medium hidden md:table-cell">অর্জন</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {entries.slice(3).map((entry, index) => (
-                      <LeaderboardRow
-                        key={entry.userId}
-                        entry={entry}
-                        category={category}
-                        index={index}
-                        isCurrentUser={entry.userId === user?.id}
-                      />
-                    ))}
-                  </tbody>
-                </table>
-              </ScrollArea>
-            </CardContent>
-          </Card>
-        </motion.div>
+        {/* Full Leaderboard Table - Only show if there are more than 3 entries */}
+        {entries.length > 3 && (
+          <motion.div variants={itemVariants}>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart3 className="w-5 h-5" />
+                  সম্পূর্ণ লিডারবোর্ড
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="h-[600px]">
+                  <table className="w-full">
+                    <thead className="bg-muted sticky top-0">
+                      <tr>
+                        <th className="text-left py-3 px-4 font-medium">র‌্যাঙ্ক</th>
+                        <th className="text-left py-3 px-4 font-medium">ট্রেডার</th>
+                        <th className="text-right py-3 px-4 font-medium">{categoryConfig.nameBn}</th>
+                        <th className="text-right py-3 px-4 font-medium hidden md:table-cell">অর্জন</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {entries.slice(3).map((entry, index) => (
+                        <LeaderboardRow
+                          key={entry.userId}
+                          entry={entry}
+                          category={category}
+                          index={index}
+                          isCurrentUser={entry.userId === user?.id}
+                        />
+                      ))}
+                    </tbody>
+                  </table>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
 
         {/* Achievement Showcase */}
         <motion.div variants={itemVariants}>
