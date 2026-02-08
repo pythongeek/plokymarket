@@ -210,7 +210,14 @@
         "event_date": "ইভেন্ট তারিখ",
         "resolution_source": "রেজোলিউশন সূত্র",
         "created": "তৈরি হয়েছে",
-        "details": "মার্কেট বিস্তারিত"
+        "details": "মার্কেট বিস্তারিত",
+        "depth_semantic": "Market Depth (Semantic)",
+        "range_5": "Range: ±5.0%",
+        "zoom_1": "Zoom: 1.0x",
+        "low_depth": "Low Depth",
+        "high_depth": "High Depth",
+        "discussion": "Discussion",
+        "thoughts": "What are your thoughts?"
     },
     "trading": {
         "place_order": "অর্ডার দিন",

@@ -57,8 +57,8 @@ export function CommentSection({ marketId, marketQuestion }: CommentSectionProps
     };
 
     return (
-        <div className="mt-10 pt-10 border-t border-slate-800">
-            <h3 className="text-xl font-bold mb-6">Discussion</h3>
+        <div className="mt-10 pt-10 border-t border-primary/10">
+            <h3 className="text-xl font-bold mb-6 text-primary">Discussion</h3>
 
             {/* New Comment Input */}
             <div className="mb-8">
@@ -67,7 +67,7 @@ export function CommentSection({ marketId, marketQuestion }: CommentSectionProps
                     onChange={(e) => setNewComment(e.target.value)}
                     placeholder={isAuthenticated ? "What are your thoughts?" : "Login to join the discussion"}
                     disabled={!isAuthenticated}
-                    className="mb-2"
+                    className="mb-2 bg-background/50 border-primary/20 focus:border-primary"
                 />
                 <div className="flex justify-end">
                     <Button onClick={() => handlePostComment()} disabled={!isAuthenticated || !newComment.trim()}>

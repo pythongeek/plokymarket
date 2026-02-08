@@ -12,29 +12,24 @@ export const DepthChart: React.FC<DepthChartProps> = ({ bids, asks }) => {
     const processData = (orders: OrderLevel[], type: 'bid' | 'ask') => {
         let cumulative = 0;
         return orders.map(o => {
-            cumulative += o.size;
+            const size = Number(o.totalQuantity);
+            cumulative += size;
             return {
-                price: o.price,
+                price: Number(o.price) / 1000000,
                 [type]: cumulative,
-                size: o.size // for tooltip
+                size: size // for tooltip
             };
         });
     };
 
     const bidData = processData([...bids].reverse(), 'bid'); // Reverse bids so low->high price
-    const askData = processData(asks, 'ask'); // Asks are already low->high usually? 
-    // Wait: Asks: Low price is best. Sorted Ascending. 10, 11, 12.
-    // Chart X Axis is Price.
-    // Bids: High price is best. Sorted Descending. 9, 8, 7.
-    // We want X axis from 7 -> 12.
-    // So we need Bids reversed (7, 8, 9) and Asks (10, 11, 12).
+    const askData = processData(asks, 'ask');
 
     // Combine:
-    const data = [...bidData, ...askData];
+    const data = [...bidData, ...askData].sort((a, b) => a.price - b.price);
 
     return (
-        <div className="h-64 w-full bg-background p-4 rounded-lg border">
-            <h3 className="text-sm font-medium mb-2 text-foreground">Market Depth</h3>
+        <div className="h-48 w-full bg-background mt-2">
             <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={data}>
                     <defs>
@@ -47,9 +42,12 @@ export const DepthChart: React.FC<DepthChartProps> = ({ bids, asks }) => {
                             <stop offset="95%" stopColor="#EF4444" stopOpacity={0} />
                         </linearGradient>
                     </defs>
-                    <XAxis dataKey="price" />
-                    <YAxis />
-                    <Tooltip />
+                    <XAxis dataKey="price" hide />
+                    <YAxis hide />
+                    <Tooltip
+                        contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: 'none', borderRadius: '4px', fontSize: '10px' }}
+                        itemStyle={{ color: '#fff' }}
+                    />
                     <Area type="stepAfter" dataKey="bid" stroke="#10B981" fillOpacity={1} fill="url(#colorBid)" />
                     <Area type="stepAfter" dataKey="ask" stroke="#EF4444" fillOpacity={1} fill="url(#colorAsk)" />
                 </AreaChart>

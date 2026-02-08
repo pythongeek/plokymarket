@@ -4,6 +4,8 @@ import { useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useStore } from '@/store/useStore';
 import { OrderBook } from '@/components/clob/OrderBook';
+import { DepthChart } from '@/components/clob/DepthChart';
+import { LiquidityHeatMap } from '@/components/clob/LiquidityHeatMap';
 import { MarketStatusDisplay } from '@/components/market/MarketStatusDisplay';
 import { CommentSection } from '@/components/comments/CommentSection';
 import { TradingPanel } from '@/components/trading/TradingPanel';
@@ -29,12 +31,13 @@ import { bn, enUS } from 'date-fns/locale';
 export default function MarketDetailPage() {
   const params = useParams() as { id?: string };
   const router = useRouter();
-  const { markets, fetchMarkets } = useStore();
+  const { markets, orders, fetchMarkets, fetchOrders } = useStore();
   const { t, i18n } = useTranslation();
 
   useEffect(() => {
     fetchMarkets();
-  }, [fetchMarkets]);
+    if (params.id) fetchOrders(params.id);
+  }, [fetchMarkets, fetchOrders, params.id]);
 
   const marketId = params.id;
   const market = marketId ? markets.find((m) => m.id === marketId) : undefined;
@@ -173,62 +176,128 @@ export default function MarketDetailPage() {
           {/* Order Book */}
           <OrderBook marketId={market.id} />
 
-          {/* Market Details */}
-          <Card>
-            <CardHeader>
-              <CardTitle>{t('market_detail.details')}</CardTitle>
+          {/* Advanced Visualizations */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card className="bg-card/50 backdrop-blur-sm border-primary/10">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-bold flex items-center justify-between">
+                  <span>{t('market_detail.depth_semantic')}</span>
+                  <div className="flex gap-2 text-[10px] items-center">
+                    <span className="bg-primary/10 px-2 py-0.5 rounded text-primary">{t('market_detail.range_5')}</span>
+                    <span className="bg-primary/10 px-2 py-0.5 rounded text-primary">{t('market_detail.zoom_1')}</span>
+                  </div>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <DepthChart
+                  bids={orders
+                    .filter(o => o.market_id === market.id && o.side === 'buy' && o.status === 'open')
+                    .map(o => ({
+                      price: BigInt(Math.floor(o.price * 1000000)),
+                      totalQuantity: BigInt(o.quantity),
+                      orderCount: 1,
+                      orders: null as any,
+                      maxOrderId: o.id,
+                      dirty: false,
+                      lastModified: Date.now()
+                    }))}
+                  asks={orders
+                    .filter(o => o.market_id === market.id && o.side === 'sell' && o.status === 'open')
+                    .map(o => ({
+                      price: BigInt(Math.floor(o.price * 1000000)),
+                      totalQuantity: BigInt(o.quantity),
+                      orderCount: 1,
+                      orders: null as any,
+                      maxOrderId: o.id,
+                      dirty: false,
+                      lastModified: Date.now()
+                    }))}
+                />
+              </CardContent>
+            </Card>
+
+            <Card className="bg-card/50 backdrop-blur-sm border-primary/10">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-bold flex items-center justify-between">
+                  <span>{t('market_detail.high_depth')}</span>
+                  <div className="flex gap-4 text-[10px] font-medium">
+                    <div className="flex items-center gap-1">
+                      <div className="w-2 h-2 rounded-full bg-blue-500" /> {t('market_detail.low_depth')}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-2 h-2 rounded-full bg-orange-500" /> {t('market_detail.high_depth')}
+                    </div>
+                  </div>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <LiquidityHeatMap
+                  bids={orders
+                    .filter(o => o.market_id === market.id && o.side === 'buy' && o.status === 'open')
+                    .map(o => ({ price: o.price, size: o.quantity, total: o.quantity }))}
+                  asks={orders
+                    .filter(o => o.market_id === market.id && o.side === 'sell' && o.status === 'open')
+                    .map(o => ({ price: o.price, size: o.quantity, total: o.quantity }))}
+                  windowMinutes={5}
+                />
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Market Details (মার্কেট বিস্তারিত) */}
+          <Card className="bg-card/50 backdrop-blur-sm border-primary/10">
+            <CardHeader className="border-b border-primary/5">
+              <CardTitle className="text-lg font-bold text-primary">{t('market_detail.details')}</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div>
-                  <div className="text-sm text-muted-foreground">{t('market_detail.yes_price')}</div>
-                  <div className="text-lg font-semibold text-green-500">
+            <CardContent className="p-0">
+              <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 border-b border-primary/5">
+                <div className="p-6 text-center group hover:bg-green-500/5 transition-colors">
+                  <div className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-2">{t('market_detail.yes_price')}</div>
+                  <div className="text-3xl font-black text-green-500">
                     ৳{market.yes_price?.toFixed(2) || '0.50'}
                   </div>
                 </div>
-                <div>
-                  <div className="text-sm text-muted-foreground">{t('market_detail.no_price')}</div>
-                  <div className="text-lg font-semibold text-red-500">
+                <div className="p-6 text-center group hover:bg-red-500/5 transition-colors">
+                  <div className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-2">{t('market_detail.no_price')}</div>
+                  <div className="text-3xl font-black text-red-500">
                     ৳{market.no_price?.toFixed(2) || '0.50'}
                   </div>
                 </div>
-                <div>
-                  <div className="text-sm text-muted-foreground">{t('market_detail.yes_shares')}</div>
-                  <div className="text-lg font-semibold">
-                    {market.yes_shares_outstanding.toLocaleString()}
+                <div className="p-6 text-center group hover:bg-primary/5 transition-colors">
+                  <div className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-2">{t('market_detail.yes_shares')}</div>
+                  <div className="text-3xl font-black text-foreground">
+                    {market.yes_shares_outstanding || 0}
                   </div>
                 </div>
-                <div>
-                  <div className="text-sm text-muted-foreground">{t('market_detail.no_shares')}</div>
-                  <div className="text-lg font-semibold">
-                    {market.no_shares_outstanding.toLocaleString()}
+                <div className="p-6 text-center group hover:bg-primary/5 transition-colors">
+                  <div className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-2">{t('market_detail.no_shares')}</div>
+                  <div className="text-3xl font-black text-foreground">
+                    {market.no_shares_outstanding || 0}
                   </div>
                 </div>
               </div>
 
-              <Separator />
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-muted-foreground">{t('market_detail.trading_closes')}:</span>
-                  <span className="ml-2">
-                    {format(new Date(market.trading_closes_at), 'MMM d, yyyy h:mm a', { locale: dateLocale })}
+              <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-12 text-sm">
+                <div className="flex justify-between items-center border-b border-primary/5 pb-2">
+                  <span className="text-muted-foreground font-medium">{t('market_detail.trading_closes')}:</span>
+                  <span className="font-bold text-red-500/80">
+                    {format(new Date(market.trading_closes_at), 'MMMM d, yyyy h:mm a', { locale: dateLocale })}
                   </span>
                 </div>
-                <div>
-                  <span className="text-muted-foreground">{t('market_detail.event_date')}:</span>
-                  <span className="ml-2">{format(new Date(market.event_date), 'MMM d, yyyy', { locale: dateLocale })}</span>
+                <div className="flex justify-between items-center border-b border-primary/5 pb-2">
+                  <span className="text-muted-foreground font-medium">{t('market_detail.event_date')}:</span>
+                  <span className="font-bold text-foreground/80">{format(new Date(market.event_date), 'MMMM d, yyyy', { locale: dateLocale })}</span>
+                </div>
+                <div className="flex justify-between items-center border-b border-primary/5 pb-2">
+                  <span className="text-muted-foreground font-medium">{t('market_detail.created')}:</span>
+                  <span className="font-bold text-foreground/80">{format(new Date(market.created_at), 'MMMM d, yyyy', { locale: dateLocale })}</span>
                 </div>
                 {market.resolution_source && (
-                  <div>
-                    <span className="text-muted-foreground">{t('market_detail.resolution_source')}:</span>
-                    <span className="ml-2">{market.resolution_source}</span>
+                  <div className="flex justify-between items-center border-b border-primary/5 pb-2">
+                    <span className="text-muted-foreground font-medium">{t('market_detail.resolution_source')}:</span>
+                    <span className="font-bold text-primary/80 truncate max-w-[200px]">{market.resolution_source}</span>
                   </div>
                 )}
-                <div>
-                  <span className="text-muted-foreground">{t('market_detail.created')}:</span>
-                  <span className="ml-2">{format(new Date(market.created_at), 'MMM d, yyyy', { locale: dateLocale })}</span>
-                </div>
               </div>
             </CardContent>
           </Card>
