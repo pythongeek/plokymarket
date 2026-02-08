@@ -1,281 +1,475 @@
-'use client';
+"use client";
 
-import { useEffect } from 'react';
-import Link from 'next/link';
-import { useStore } from '@/store/useStore';
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { useState, useEffect, Suspense } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  Wallet,
+  TrendingUp,
+  PieChart,
+  BarChart3,
+  History,
+  Sparkles,
+  Trophy,
+  Target,
+  Zap,
+  ChevronRight,
+  Flame,
+  Award,
+  Crown
+} from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  TrendingUp,
-  TrendingDown,
-  Wallet,
-  PieChart,
-  ArrowUpRight,
-  ArrowDownRight,
-  AlertCircle,
-  Activity,
-  Award,
-  BarChart3,
-  Percent,
-} from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Progress } from '@/components/ui/progress';
+import { useUser } from '@/hooks/useUser';
+import { PnLDashboard } from '@/components/portfolio/PnLDashboard';
+import { PositionHistory } from '@/components/portfolio/PositionHistory';
+import { PerformanceCharts } from '@/components/portfolio/PerformanceCharts';
+import { PortfolioErrorBoundary } from '@/components/portfolio/ErrorBoundary';
 import { cn } from '@/lib/utils';
-import { useTranslation } from 'react-i18next';
-import { PerformanceChart } from '@/components/portfolio/PerformanceChart';
-import { AchievementCard } from '@/components/leaderboard/AchievementCard';
-import { CopyTradingSettings } from '@/components/portfolio/CopyTradingSettings';
-import { calculatePortfolioMetrics } from '@/lib/analytics/portfolio';
-import { motion } from 'framer-motion';
-import { WalletDashboard } from '@/components/wallet/WalletDashboard';
 
-function PositionCard({ position }: { position: any }) {
-  const { t } = useTranslation();
-  const market = position.market;
-  const currentPrice = position.outcome === 'YES' ? market?.yes_price : market?.no_price;
-  const currentValue = position.quantity * (currentPrice || position.average_price);
-  const investedValue = position.quantity * position.average_price;
-  const pnl = currentValue - investedValue;
-  const pnlPercentage = (pnl / investedValue) * 100;
+// Motivational quotes in Bangla
+const motivationalQuotes = [
+  { text: "ধৈর্য্য ধারণ করুন, সফলতা আসবেই।", author: "প্রফেশনাল ট্রেডার" },
+  { text: "ছোট লাভ বারবার = বড় সফলতা", author: "ওয়ারেন বাফেট" },
+  { text: "বাজার সবসময় সুযোগ দেয়, সঠিক সময়ে কাজ করুন।", author: "বাংলাদেশ ট্রেডিং একাডেমি" },
+  { text: "আপনার স্ট্র্যাটেজিতে বিশ্বাস রাখুন।", author: "টপ ট্রেডার" },
+  { text: "প্রতিটি লস শেখার সুযোগ।", author: "রেয়া দালিও" }
+];
 
-  // Translate category
-  const translateCategory = (cat: string) => {
-    const key = `categories.${cat}`;
-    const translated = t(key);
-    return translated !== key ? translated : cat;
-  };
+// Achievement badges
+const achievements = [
+  { id: 'first_trade', name: 'প্রথম ট্রেড', icon: Target, color: 'blue', requirement: '১টি ট্রেড সম্পন্ন' },
+  { id: 'profit_streak', name: 'প্রফিট স্ট্রীক', icon: Flame, color: 'amber', requirement: '৩টি কনসেকিউটিভ উইন' },
+  { id: 'big_winner', name: 'বিগ উইনার', icon: Trophy, color: 'emerald', requirement: 'এক ট্রেডে ১০০০+ BDT লাভ' },
+  { id: 'consistent', name: 'কনসিস্টেন্ট', icon: Award, color: 'purple', requirement: '৩০ দিন পজিটিভ রিটার্ন' },
+  { id: 'master', name: 'মাস্টার ট্রেডার', icon: Crown, color: 'rose', requirement: '১০০টি সফল ট্রেড' }
+];
 
+const pageVariants = {
+  initial: { opacity: 0, y: 20 },
+  animate: { 
+    opacity: 1, 
+    y: 0,
+    transition: { duration: 0.5, ease: "easeOut" }
+  },
+  exit: { opacity: 0, y: -20 }
+};
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { staggerChildren: 0.1 }
+  }
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { type: "spring", stiffness: 100 }
+  }
+};
+
+// Loading fallback
+function LoadingFallback() {
   return (
-    <Card className="hover:shadow-md transition-shadow">
-      <CardContent className="p-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-2">
-              <Badge
-                variant={position.outcome === 'YES' ? 'default' : 'destructive'}
-                className={position.outcome === 'YES' ? 'bg-green-500' : ''}
-              >
-                {position.outcome === 'YES' ? (
-                  <TrendingUp className="h-3 w-3 mr-1" />
-                ) : (
-                  <TrendingDown className="h-3 w-3 mr-1" />
-                )}
-                {position.outcome === 'YES' ? t('common.yes') : t('common.no')}
-              </Badge>
-              <Badge variant="secondary">{translateCategory(market?.category)}</Badge>
-            </div>
-            <h3 className="font-semibold text-lg mb-1">{market?.question}</h3>
-            <p className="text-sm text-muted-foreground">
-              {position.quantity.toLocaleString()} {t('portfolio.shares_at_avg', { quantity: '', price: position.average_price.toFixed(2) }).replace('{{quantity}}', '').replace('{{price}}', '')}
-              {position.quantity.toLocaleString()} শেয়ার @ ৳{position.average_price.toFixed(2)} গড়ে
-            </p>
-          </div>
-
-          <div className="grid grid-cols-3 gap-6 text-right">
-            <div>
-              <p className="text-sm text-muted-foreground">{t('portfolio.invested')}</p>
-              <p className="font-semibold">৳{investedValue.toLocaleString()}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">{t('portfolio.current_value')}</p>
-              <p className="font-semibold">৳{currentValue.toLocaleString()}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">{t('portfolio.pnl')}</p>
-              <p className={cn('font-semibold', pnl >= 0 ? 'text-green-500' : 'text-red-500')}>
-                {pnl >= 0 ? '+' : ''}৳{pnl.toLocaleString()}
-                <span className="text-xs ml-1">
-                  ({pnlPercentage >= 0 ? '+' : ''}{pnlPercentage.toFixed(1)}%)
-                </span>
-              </p>
-            </div>
-          </div>
-
-          <Link href={`/markets/${market?.id}`}>
-            <Button variant="outline" size="sm">
-              {t('common.trade')}
-            </Button>
-          </Link>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function EmptyPositionsState() {
-  const { t } = useTranslation();
-  return (
-    <Card>
-      <CardContent className="p-12 text-center">
-        <div className="flex justify-center mb-4">
-          <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center">
-            <PieChart className="h-8 w-8 text-muted-foreground" />
-          </div>
-        </div>
-        <h3 className="text-lg font-semibold mb-2">{t('portfolio.no_positions')}</h3>
-        <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-          {t('portfolio.no_positions_desc')}
-        </p>
-        <Link href="/markets">
-          <Button>
-            <TrendingUp className="h-4 w-4 mr-2" />
-            {t('portfolio.browse_markets')}
-          </Button>
-        </Link>
-      </CardContent>
-    </Card>
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {[...Array(3)].map((_, i) => (
+          <Card key={i} className="animate-pulse h-40" />
+        ))}
+      </div>
+      <Card className="animate-pulse h-96" />
+    </div>
   );
 }
 
 export default function PortfolioPage() {
-  const { isAuthenticated, positions, fetchPositions } = useStore();
-  const { t } = useTranslation();
+  const { user } = useUser();
+  const [activeTab, setActiveTab] = useState('overview');
+  const [currentQuote, setCurrentQuote] = useState(0);
+  const [unlockedAchievements, setUnlockedAchievements] = useState<string[]>(['first_trade']);
+  const [showWelcome, setShowWelcome] = useState(true);
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
-    if (isAuthenticated) {
-      fetchPositions();
-    }
-  }, [isAuthenticated, fetchPositions]);
+    setIsMounted(true);
+  }, []);
 
-  if (!isAuthenticated) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20">
-        <AlertCircle className="h-16 w-16 text-muted-foreground mb-4" />
-        <h2 className="text-2xl font-bold mb-2">{t('common.login_required')}</h2>
-        <p className="text-muted-foreground mb-6">{t('portfolio.login_to_view')}</p>
-        <div className="flex gap-4">
-          <Link href="/login">
-            <Button variant="outline">{t('common.login')}</Button>
-          </Link>
-          <Link href="/register">
-            <Button>{t('common.get_started')}</Button>
-          </Link>
-        </div>
-      </div>
-    );
+  // Rotate quotes
+  useEffect(() => {
+    if (!isMounted) return;
+    const interval = setInterval(() => {
+      setCurrentQuote((prev) => (prev + 1) % motivationalQuotes.length);
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [isMounted]);
+
+  // Simulate achievement unlocks
+  useEffect(() => {
+    if (!isMounted) return;
+    const mockUnlocks = ['first_trade', 'profit_streak'];
+    setUnlockedAchievements(mockUnlocks);
+  }, [isMounted]);
+
+  if (!isMounted) {
+    return <LoadingFallback />;
   }
 
-  // Calculate portfolio stats
-  const totalPositions = positions.length;
-  const yesPositions = positions.filter((p) => p.outcome === 'YES');
-  const noPositions = positions.filter((p) => p.outcome === 'NO');
+  return (
+    <PortfolioErrorBoundary>
+      <motion.div
+        variants={pageVariants}
+        initial="initial"
+        animate="animate"
+        exit="exit"
+        className="min-h-screen bg-gradient-to-b from-background via-background to-muted/20"
+      >
+        {/* Welcome Banner */}
+        <AnimatePresence>
+          {showWelcome && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="bg-gradient-to-r from-emerald-600 via-teal-600 to-blue-600 text-white"
+            >
+              <div className="container mx-auto px-4 py-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 bg-white/20 rounded-full">
+                      <Sparkles className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-lg">🎉 স্বাগতম, {user?.name || 'ট্রেডার'}!</h3>
+                      <p className="text-white/80 text-sm">আপনার ট্রেডিং যাত্রা শুরু হোক। প্রতিদিন নতুন সুযোগ!</p>
+                    </div>
+                  </div>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="text-white hover:bg-white/20"
+                    onClick={() => setShowWelcome(false)}
+                  >
+                    বন্ধ করুন
+                  </Button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-  // Hardcoded wallet for demo/simplification (should come from store)
-  const metrics = calculatePortfolioMetrics(positions, [], 5000);
+        {/* Main Content */}
+        <div className="container mx-auto px-4 py-6">
+          <motion.div 
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
+            className="space-y-6"
+          >
+            {/* Header Section */}
+            <motion.div variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+              {/* User Profile Card */}
+              <motion.div variants={itemVariants}>
+                <Card className="h-full bg-gradient-to-br from-card to-muted/50 border-primary/10">
+                  <CardContent className="p-6">
+                    <div className="flex items-start gap-4">
+                      <div className="relative">
+                        <Avatar className="w-16 h-16 ring-4 ring-primary/20">
+                          <AvatarFallback className="bg-primary text-primary-foreground text-xl">
+                            {user?.name?.charAt(0) || 'T'}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="absolute -bottom-1 -right-1 bg-emerald-500 text-white text-xs px-2 py-0.5 rounded-full font-medium">
+                          Lvl 3
+                        </div>
+                      </div>
+                      <div className="flex-1">
+                        <h2 className="text-xl font-bold">{user?.name || 'ট্রেডার'}</h2>
+                        <p className="text-muted-foreground text-sm">{user?.email || 'trader@example.com'}</p>
+                        <div className="flex items-center gap-2 mt-2">
+                          <Badge variant="secondary" className="bg-emerald-100 text-emerald-700">
+                            <TrendingUp className="w-3 h-3 mr-1" />
+                            প্রো ট্রেডার
+                          </Badge>
+                        </div>
+                      </div>
+                    </div>
 
-  const ACHIEVEMENTS_DEMO = [
-    { id: '1', name: 'Rookie Trader', description: 'Placed first trade', rarity: 'COMMON' as const },
-    { id: '2', name: 'Unstoppable', description: '10 consecutive wins', rarity: 'LEGENDARY' as const, isLocked: true },
-    { id: '3', name: 'Whale', description: 'Traded $1M volume', rarity: 'EPIC' as const, isLocked: true },
-  ];
+                    {/* XP Progress */}
+                    <div className="mt-4">
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="text-muted-foreground">XP Progress</span>
+                        <span className="font-medium">750 / 1000</span>
+                      </div>
+                      <Progress value={75} className="h-2" />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        লেভেল 4-এ আপগ্রেড করতে আরও ২৫০ XP লাগবে
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+
+              {/* Quick Stats */}
+              <motion.div variants={itemVariants} className="lg:col-span-2">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 h-full">
+                  <QuickStatCard
+                    label="পোর্টফোলিও ভ্যালু"
+                    value="৳1,25,000"
+                    change="+12.5%"
+                    icon={Wallet}
+                    color="emerald"
+                  />
+                  <QuickStatCard
+                    label="আজকের P&L"
+                    value="৳5,200"
+                    change="+4.3%"
+                    icon={TrendingUp}
+                    color="blue"
+                  />
+                  <QuickStatCard
+                    label="অ্যাক্টিভ পজিশন"
+                    value="8"
+                    change="3 winning"
+                    icon={PieChart}
+                    color="purple"
+                  />
+                  <QuickStatCard
+                    label="উইন রেট"
+                    value="68%"
+                    change="+2.1%"
+                    icon={Target}
+                    color="amber"
+                  />
+                </div>
+              </motion.div>
+            </motion.div>
+
+            {/* Motivational Quote */}
+            <motion.div variants={itemVariants} className="mb-8">
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={currentQuote}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.5 }}
+                  className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-rose-500/10 border border-amber-200/50 p-6"
+                >
+                  <div className="absolute top-0 right-0 p-4 opacity-20">
+                    <Sparkles className="w-24 h-24" />
+                  </div>
+                  <blockquote className="relative">
+                    <p className="text-xl font-medium text-foreground mb-2">
+                      &ldquo;{motivationalQuotes[currentQuote].text}&rdquo;
+                    </p>
+                    <footer className="text-sm text-muted-foreground">
+                      — {motivationalQuotes[currentQuote].author}
+                    </footer>
+                  </blockquote>
+                </motion.div>
+              </AnimatePresence>
+            </motion.div>
+
+            {/* Achievement Showcase */}
+            <motion.div variants={itemVariants} className="mb-8">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Trophy className="w-5 h-5 text-amber-500" />
+                    আপনার অ্যাচিভমেন্টস
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-3">
+                    {achievements.map((achievement) => {
+                      const isUnlocked = unlockedAchievements.includes(achievement.id);
+                      const Icon = achievement.icon;
+                      
+                      return (
+                        <motion.div
+                          key={achievement.id}
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          className={cn(
+                            "relative group cursor-pointer",
+                            !isUnlocked && "opacity-50 grayscale"
+                          )}
+                        >
+                          <div className={cn(
+                            "p-4 rounded-xl border-2 transition-all",
+                            isUnlocked 
+                              ? "bg-emerald-100 border-emerald-300 dark:bg-emerald-900/30"
+                              : "bg-muted border-muted"
+                          )}>
+                            <Icon className={cn(
+                              "w-8 h-8",
+                              isUnlocked && "text-emerald-600"
+                            )} />
+                          </div>
+                          <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                            <div className="bg-popover text-popover-foreground text-xs rounded-lg px-3 py-2 shadow-lg border">
+                              <p className="font-medium">{achievement.name}</p>
+                              <p className="text-muted-foreground">{achievement.requirement}</p>
+                            </div>
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+
+            {/* Main Content Tabs */}
+            <motion.div variants={itemVariants}>
+              <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <TabsList className="bg-muted/50 p-1">
+                    <TabsTrigger value="overview" className="gap-2">
+                      <BarChart3 className="w-4 h-4" />
+                      <span className="hidden sm:inline">ওভারভিউ</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="positions" className="gap-2">
+                      <History className="w-4 h-4" />
+                      <span className="hidden sm:inline">পজিশন হিস্টরি</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="charts" className="gap-2">
+                      <PieChart className="w-4 h-4" />
+                      <span className="hidden sm:inline">পারফরম্যান্স</span>
+                    </TabsTrigger>
+                  </TabsList>
+                </div>
+
+                <AnimatePresence mode="wait">
+                  <TabsContent value="overview" className="mt-0">
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                    >
+                      <PortfolioErrorBoundary>
+                        <PnLDashboard userId={user?.id} />
+                      </PortfolioErrorBoundary>
+                    </motion.div>
+                  </TabsContent>
+
+                  <TabsContent value="positions" className="mt-0">
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                    >
+                      <PortfolioErrorBoundary>
+                        <PositionHistory userId={user?.id} />
+                      </PortfolioErrorBoundary>
+                    </motion.div>
+                  </TabsContent>
+
+                  <TabsContent value="charts" className="mt-0">
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                    >
+                      <PortfolioErrorBoundary>
+                        <PerformanceCharts userId={user?.id} />
+                      </PortfolioErrorBoundary>
+                    </motion.div>
+                  </TabsContent>
+                </AnimatePresence>
+              </Tabs>
+            </motion.div>
+
+            {/* Call to Action */}
+            <motion.div
+              variants={itemVariants}
+              className="mt-12"
+            >
+              <Card className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white overflow-hidden relative">
+                <div className="absolute inset-0 opacity-20">
+                  <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                    <pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse">
+                      <circle cx="1" cy="1" r="1" fill="white" />
+                    </pattern>
+                    <rect width="100" height="100" fill="url(#grid)" />
+                  </svg>
+                </div>
+                <CardContent className="p-8 relative">
+                  <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+                    <div className="text-center md:text-left">
+                      <h3 className="text-2xl font-bold mb-2">🚀 নতুন মার্কেটে ট্রেড করুন!</h3>
+                      <p className="text-white/80">
+                        বাংলাদেশ ক্রিকেট, রাজনীতি, এবং আরও অনেক কিছুতে সুযোগ রয়েছে।
+                      </p>
+                    </div>
+                    <Button 
+                      size="lg" 
+                      variant="secondary" 
+                      className="gap-2 bg-white text-emerald-600 hover:bg-white/90"
+                    >
+                      মার্কেট দেখুন
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          </motion.div>
+        </div>
+      </motion.div>
+    </PortfolioErrorBoundary>
+  );
+}
+
+function QuickStatCard({ 
+  label, 
+  value, 
+  change, 
+  icon: Icon, 
+  color 
+}: { 
+  label: string; 
+  value: string; 
+  change: string; 
+  icon: React.ElementType; 
+  color: string;
+}) {
+  const colorClasses: Record<string, string> = {
+    emerald: 'from-emerald-500/20 to-emerald-600/5 border-emerald-200',
+    blue: 'from-blue-500/20 to-blue-600/5 border-blue-200',
+    purple: 'from-purple-500/20 to-purple-600/5 border-purple-200',
+    amber: 'from-amber-500/20 to-amber-600/5 border-amber-200'
+  };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold">{t('portfolio.title')}</h1>
-        <p className="text-muted-foreground">{t('portfolio.subtitle')}</p>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { label: 'Total Value', value: metrics.totalValue, icon: Wallet, color: 'text-primary' },
-          { label: 'Sharpe Ratio', value: metrics.sharpeRatio.toFixed(2), icon: Activity, color: 'text-blue-500' },
-          { label: 'Max Drawdown', value: `-${(metrics.maxDrawdown * 100).toFixed(1)}%`, icon: TrendingDown, color: 'text-red-500' },
-          { label: 'Total Return', value: `${(metrics.totalReturn * 100).toFixed(1)}%`, icon: Percent, color: 'text-green-500' },
-        ].map((stat, i) => (
-          <motion.div
-            key={stat.label}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.1 }}
-          >
-            <Card className="bg-slate-900/40 border-slate-800 backdrop-blur-md">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-muted-foreground uppercase tracking-wider">{stat.label}</p>
-                    <p className="text-2xl font-bold">
-                      {typeof stat.value === 'number' ? `৳${stat.value.toLocaleString()}` : stat.value}
-                    </p>
-                  </div>
-                  <div className={cn("h-10 w-10 rounded-xl bg-slate-800 flex items-center justify-center", stat.color)}>
-                    <stat.icon className="h-5 w-5" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        <div className="lg:col-span-3">
-          <PerformanceChart />
+    <motion.div
+      whileHover={{ scale: 1.02, y: -2 }}
+      className={cn(
+        "p-4 rounded-xl border bg-gradient-to-br transition-all",
+        colorClasses[color]
+      )}
+    >
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-xs text-muted-foreground mb-1">{label}</p>
+          <p className="text-xl font-bold">{value}</p>
+          <p className="text-xs text-emerald-600 mt-1">{change}</p>
         </div>
-        <div className="space-y-4">
-          <h3 className="text-lg font-bold flex items-center gap-2">
-            <Award className="h-5 w-5 text-amber-500" />
-            Achievements
-          </h3>
-          {ACHIEVEMENTS_DEMO.map(a => (
-            <AchievementCard key={a.id} {...a} />
-          ))}
-          <div className="pt-4">
-            <CopyTradingSettings />
-          </div>
+        <div className="p-2 bg-background/50 rounded-lg">
+          <Icon className="w-5 h-5" />
         </div>
       </div>
-
-      {/* Positions Tabs */}
-      <Tabs defaultValue="all">
-        <TabsList>
-          <TabsTrigger value="all">
-            {t('portfolio.all_positions')} ({positions.length})
-          </TabsTrigger>
-          <TabsTrigger value="yes">
-            <TrendingUp className="h-4 w-4 mr-1" />
-            {t('common.yes')} ({yesPositions.length})
-          </TabsTrigger>
-          <TabsTrigger value="no">
-            <TrendingDown className="h-4 w-4 mr-1" />
-            {t('common.no')} ({noPositions.length})
-          </TabsTrigger>
-          <TabsTrigger value="wallet" className="ml-auto bg-indigo-500/10 text-indigo-400 data-[state=active]:bg-indigo-500 data-[state=active]:text-white">
-            <Wallet className="h-4 w-4 mr-1" />
-            Advanced Wallet
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="all" className="space-y-4">
-          {positions.length > 0 ? (
-            positions.map((position) => <PositionCard key={position.id} position={position} />)
-          ) : (
-            <EmptyPositionsState />
-          )}
-        </TabsContent>
-
-        <TabsContent value="yes" className="space-y-4">
-          {yesPositions.length > 0 ? (
-            yesPositions.map((position) => <PositionCard key={position.id} position={position} />)
-          ) : (
-            <EmptyPositionsState />
-          )}
-        </TabsContent>
-
-        <TabsContent value="no" className="space-y-4">
-          {noPositions.length > 0 ? (
-            noPositions.map((position) => <PositionCard key={position.id} position={position} />)
-          ) : (
-            <EmptyPositionsState />
-          )}
-        </TabsContent>
-
-        <TabsContent value="wallet">
-          <WalletDashboard />
-        </TabsContent>
-      </Tabs>
-    </div>
+    </motion.div>
   );
+}
+
+function cn(...classes: (string | undefined | false)[]) {
+  return classes.filter(Boolean).join(' ');
 }
