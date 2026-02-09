@@ -71,6 +71,18 @@ export async function DELETE(request: NextRequest) {
                         p_order_id: id,
                         p_user_id: batchUserId,
                     });
+                    
+                    // Stop tracking for maker rebates
+                    if (!error && data?.[0]?.success) {
+                        try {
+                            await supabase.rpc('stop_resting_order_tracking', {
+                                p_order_id: id
+                            });
+                        } catch (trackError) {
+                            console.error('Error stopping order tracking:', trackError);
+                        }
+                    }
+                    
                     return {
                         orderId: id,
                         success: !error && data?.[0]?.success,
@@ -149,6 +161,17 @@ export async function DELETE(request: NextRequest) {
                     });
                 
                 if (inflightError) throw inflightError;
+                
+                // Stop tracking for maker rebates if cancelled successfully
+                if (inflightData?.[0]?.success) {
+                    try {
+                        await supabase.rpc('stop_resting_order_tracking', {
+                            p_order_id: orderId
+                        });
+                    } catch (trackError) {
+                        console.error('Error stopping order tracking:', trackError);
+                    }
+                }
                 
                 result = {
                     type: 'INFLIGHT',

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { TrendingUp, Wallet, LayoutDashboard, LogOut, User, Menu, X, Shield, Languages } from 'lucide-react';
+import { TrendingUp, Wallet, LayoutDashboard, LogOut, User, Menu, X, Shield, Languages, PiggyBank } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useStore } from '@/store/useStore';
 import { useState } from 'react';
@@ -29,7 +29,8 @@ export function Navbar() {
   const navItems = [
     { label: t('common.markets'), href: '/markets', icon: TrendingUp },
     { label: t('common.portfolio'), href: '/portfolio', icon: LayoutDashboard, authOnly: true },
-    { label: t('common.leaderboard'), href: '/leaderboard', icon: TrendingUp }, // Added leaderboard for parity
+    { label: t('common.leaderboard'), href: '/leaderboard', icon: TrendingUp },
+    { label: 'Rebates', href: '/rebates', icon: PiggyBank, authOnly: true },
   ];
 
   const isActive = (path: string) => pathname?.startsWith(path) || false;

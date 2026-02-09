@@ -158,7 +158,9 @@ export async function placeAtomicOrder(order: {
   order_type?: 'limit' | 'market';
 }) {
   if (!supabase) throw new Error('Supabase client not initialized');
-  const { data, error } = await supabase.rpc('place_atomic_order', {
+  
+  // Place the order
+  const { data: orderId, error } = await supabase.rpc('place_atomic_order', {
     p_market_id: order.market_id,
     p_side: order.side,
     p_outcome: order.outcome,
@@ -171,7 +173,26 @@ export async function placeAtomicOrder(order: {
     console.error('Atomic order error:', error);
     throw error;
   }
-  return data; // Returns the order UUID
+  
+  // If it's a limit order (maker), start tracking for rebates
+  // Market orders are taker orders, not eligible for maker rebates
+  if (orderId && order.order_type !== 'market') {
+    try {
+      await supabase.rpc('start_resting_order_tracking', {
+        p_order_id: orderId,
+        p_user_id: (await supabase.auth.getUser()).data.user?.id,
+        p_market_id: order.market_id,
+        p_side: order.side,
+        p_price: order.price,
+        p_quantity: order.quantity
+      });
+    } catch (trackError) {
+      // Don't fail the order if tracking fails
+      console.error('Error starting order tracking:', trackError);
+    }
+  }
+  
+  return orderId; // Returns the order UUID
 }
 
 export async function cancelOrder(orderId: string) {
