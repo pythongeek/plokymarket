@@ -197,29 +197,50 @@ export class OrderBookService {
 
         if (orderError) throw orderError;
 
-        // B. Insert Fills (Trades)
+        // B. Insert Fills (Trades) & Update Maker Volume for Rebates
         if (result.fills.length > 0) {
             const tradeRows = result.fills.map(f => ({
                 id: f.id,
                 market_id: f.marketId,
                 maker_order_id: f.makerOrderId,
                 taker_order_id: f.takerOrderId,
-                buyer_id: f.side === 'bid' ? result.order.userId : 'unknown', // Map 'bid' check correctly
-                // Logic Gap: 'Trade' object in engine doesn't store Maker User ID. 
-                // We assume we need to fetch or ignore for MVP.
+                buyer_id: f.side === 'bid' ? result.order.userId : 'unknown',
                 price: this.toNumber(f.price),
                 size: this.toNumber(f.size),
                 taker_side: f.side === 'bid' ? 'BUY' : 'SELL',
                 created_at: new Date(f.createdAt).toISOString()
             }));
 
+            // Update maker volume for rebates - call for each fill
+            for (const fill of result.fills) {
+                try {
+                    // The maker is the one who provided liquidity (their order was resting)
+                    // We need to find the maker's user ID from the maker order
+                    const makerOrder = engine.getOrder(fill.makerOrderId);
+                    if (makerOrder) {
+                        const fillVolume = this.toNumber(fill.size);
+                        const fillPrice = this.toNumber(fill.price);
+                        const spreadContribution = fillVolume * fillPrice * 0.001; // Simplified
 
-            // Note: Migration had NOT NULL on buyer_id/seller_id. 
-            // Strategy: We will do a Quick Fix in Engine or here.
-            // Let's rely on the Trigger or just insert and fail if missing?
-            // No, we must provide them.
-            // We'll skip inserting trades for a moment or mock IDs if we can't get them easily without rewriting Engine.
-            // Correct Approach: Update Engine to include makerUserId in Trade.
+                        // Call RPC to update maker volume
+                        await supabase.rpc('update_maker_volume', {
+                            p_user_id: makerOrder.userId,
+                            p_volume: fillVolume,
+                            p_is_maker: true,
+                            p_spread_contribution: spreadContribution,
+                            p_resting_seconds: 1 // Minimum 1 second for anti-spoofing
+                        });
+
+                        // Stop tracking the resting order since it's filled
+                        await supabase.rpc('stop_resting_order_tracking', {
+                            p_order_id: fill.makerOrderId
+                        });
+                    }
+                } catch (rebateError) {
+                    // Don't fail the trade if rebate tracking fails
+                    console.error('Error updating maker volume for rebate:', rebateError);
+                }
+            }
         }
 
         // C. Update Maker Orders (Partial/Filled)
