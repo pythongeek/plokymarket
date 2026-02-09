@@ -7,7 +7,7 @@ import { OrderBook } from '@/components/clob/OrderBook';
 import { DepthChart } from '@/components/clob/DepthChart';
 import { LiquidityHeatMap } from '@/components/clob/LiquidityHeatMap';
 import { MarketStatusDisplay } from '@/components/market/MarketStatusDisplay';
-import { CommentSection } from '@/components/comments/CommentSection';
+import { CommentThread } from '@/components/social/CommentThread';
 import { TradingPanel } from '@/components/trading/TradingPanel';
 import { PriceChart } from '@/components/trading/PriceChart';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -302,8 +302,16 @@ export default function MarketDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Comments Section */}
-          <CommentSection marketId={market.id} marketQuestion={market.question} />
+          {/* Comments Section - Enhanced with Threading & Social Features */}
+          <div className="mt-10 pt-10 border-t border-primary/10">
+            <CommentThread 
+              marketId={market.id} 
+              marketQuestion={market.question}
+              maxDepth={10}
+              defaultCollapsedDepth={3}
+              enableRealtime={true}
+            />
+          </div>
         </div>
 
         {/* Right Column - Trading Panel */}

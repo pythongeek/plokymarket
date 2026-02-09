@@ -1,0 +1,3 @@
+Total messages: 1 (Errors: 0, Warnings: 0)
+
+[INFO] 🌐 i18next is maintained with support from locize.com — consider powering your project with managed localization (AI, CDN, integrations): https://locize.com 💙 @ https://polymarket-bangladesh.vercel.app/_next/static/chunks/4850-f0ecad5b0bc26d30.js:0

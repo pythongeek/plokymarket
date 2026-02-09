@@ -85,6 +85,220 @@ export interface UserRank {
     gap: number;
     userName: string;
   };
+  rewardTier?: RewardTier;
+}
+
+// ============================================
+// REWARD TIER SYSTEM
+// ============================================
+
+export type RewardTierId = 'elite' | 'diamond' | 'platinum' | 'gold' | 'silver';
+
+export interface RewardTier {
+  id: RewardTierId;
+  name: string;
+  nameBn: string;
+  percentileThreshold: number; // Top X% (e.g., 0.1 for top 0.1%)
+  reward: string;
+  rewardBn: string;
+  monthlyPrize: number; // in BDT
+  benefits: string[];
+  benefitsBn: string[];
+  color: string;
+  gradient: string;
+  icon: string;
+}
+
+export const REWARD_TIERS: RewardTier[] = [
+  {
+    id: 'elite',
+    name: 'Elite Trader',
+    nameBn: 'এলিট ট্রেডার',
+    percentileThreshold: 0.1, // Top 0.1%
+    reward: '100% Fee Rebate + $5,000 Monthly',
+    rewardBn: '১০০% ফি রিবেট + ৫,০০০ ডলার মাসিক',
+    monthlyPrize: 5000 * 110, // Convert to BDT
+    benefits: [
+      'Exclusive alpha access',
+      'Direct analyst contact',
+      'VIP customer support',
+      'Priority withdrawals'
+    ],
+    benefitsBn: [
+      'এক্সক্লুসিভ আলফা অ্যাক্সেস',
+      'সরাসরি অ্যানালিস্ট যোগাযোগ',
+      'ভিআইপি কাস্টমার সাপোর্ট',
+      'প্রায়োরিটি উইথড্রয়াল'
+    ],
+    color: '#8b5cf6',
+    gradient: 'from-violet-500 via-purple-500 to-fuchsia-500',
+    icon: 'Crown'
+  },
+  {
+    id: 'diamond',
+    name: 'Diamond Trader',
+    nameBn: 'ডায়ামন্ড ট্রেডার',
+    percentileThreshold: 1, // Top 1%
+    reward: '75% Fee Rebate + $1,000 Monthly',
+    rewardBn: '৭৫% ফি রিবেট + ১,০০০ ডলার মাসিক',
+    monthlyPrize: 1000 * 110,
+    benefits: [
+      'Early market access',
+      'Exclusive merchandise',
+      'Priority support',
+      'Monthly strategy calls'
+    ],
+    benefitsBn: [
+      'তাড়াতাড়ি মার্কেট অ্যাক্সেস',
+      'এক্সক্লুসিভ মার্চান্ডাইজ',
+      'প্রায়োরিটি সাপোর্ট',
+      'মাসিক স্ট্র্যাটেজি কল'
+    ],
+    color: '#06b6d4',
+    gradient: 'from-cyan-400 via-blue-500 to-indigo-500',
+    icon: 'Diamond'
+  },
+  {
+    id: 'platinum',
+    name: 'Platinum Trader',
+    nameBn: 'প্লাটিনাম ট্রেডার',
+    percentileThreshold: 5, // Top 5%
+    reward: '50% Fee Rebate',
+    rewardBn: '৫০% ফি রিবেট',
+    monthlyPrize: 0,
+    benefits: [
+      'Reduced withdrawal fees',
+      'Priority support',
+      'Advanced analytics',
+      'Trading signals'
+    ],
+    benefitsBn: [
+      'কম উইথড্রয়াল ফি',
+      'প্রায়োরিটি সাপোর্ট',
+      'এডভান্সড অ্যানালিটিক্স',
+      'ট্রেডিং সিগন্যাল'
+    ],
+    color: '#64748b',
+    gradient: 'from-slate-400 via-gray-500 to-zinc-500',
+    icon: 'Medal'
+  },
+  {
+    id: 'gold',
+    name: 'Gold Trader',
+    nameBn: 'গোল্ড ট্রেডার',
+    percentileThreshold: 10, // Top 10%
+    reward: '25% Fee Rebate',
+    rewardBn: '২৫% ফি রিবেট',
+    monthlyPrize: 0,
+    benefits: [
+      'Monthly tournament entry',
+      'Community recognition',
+      'Standard support',
+      'Newsletter access'
+    ],
+    benefitsBn: [
+      'মাসিক টুর্নামেন্ট এন্ট্রি',
+      'কমিউনিটি রিকগনিশন',
+      'স্ট্যান্ডার্ড সাপোর্ট',
+      'নিউজলেটার অ্যাক্সেস'
+    ],
+    color: '#f59e0b',
+    gradient: 'from-amber-400 via-yellow-500 to-orange-500',
+    icon: 'Trophy'
+  },
+  {
+    id: 'silver',
+    name: 'Silver Trader',
+    nameBn: 'সিলভার ট্রেডার',
+    percentileThreshold: 25, // Top 25%
+    reward: '10% Fee Rebate',
+    rewardBn: '১০% ফি রিবেট',
+    monthlyPrize: 0,
+    benefits: [
+      'Community recognition badge',
+      'Basic analytics',
+      'Email support',
+      'Educational content'
+    ],
+    benefitsBn: [
+      'কমিউনিটি রিকগনিশন ব্যাজ',
+      'বেসিক অ্যানালিটিক্স',
+      'ইমেইল সাপোর্ট',
+      'এডুকেশনাল কন্টেন্ট'
+    ],
+    color: '#94a3b8',
+    gradient: 'from-gray-300 via-slate-400 to-gray-500',
+    icon: 'Award'
+  }
+];
+
+// Tournament configuration
+export interface Tournament {
+  id: string;
+  name: string;
+  nameBn: string;
+  description: string;
+  descriptionBn: string;
+  prizePool: number; // in BDT
+  entryFee: number;
+  duration: number; // days
+  category: LeaderboardCategory;
+  icon: string;
+  color: string;
+}
+
+export const MONTHLY_TOURNAMENTS: Tournament[] = [
+  {
+    id: 'highest-return',
+    name: 'Return Masters',
+    nameBn: 'রিটার্ন মাস্টার্স',
+    description: 'Highest percentage return competition',
+    descriptionBn: 'সর্বোচ্চ শতাংশ রিটার্ন প্রতিযোগিতা',
+    prizePool: 500000, // 5 lakh BDT
+    entryFee: 0,
+    duration: 30,
+    category: 'returnPercentage',
+    icon: 'TrendingUp',
+    color: '#10b981'
+  },
+  {
+    id: 'sharpe-challenge',
+    name: 'Sharpe Challenge',
+    nameBn: 'শার্প চ্যালেঞ্জ',
+    description: 'Best risk-adjusted returns',
+    descriptionBn: 'সেরা রিস্ক-অ্যাডজাস্টেড রিটার্ন',
+    prizePool: 300000, // 3 lakh BDT
+    entryFee: 0,
+    duration: 30,
+    category: 'riskAdjusted',
+    icon: 'Shield',
+    color: '#8b5cf6'
+  },
+  {
+    id: 'accuracy-cup',
+    name: 'Accuracy Cup',
+    nameBn: 'অ্যাকুরেসি কাপ',
+    description: 'Highest prediction accuracy',
+    descriptionBn: 'সর্বোচ্চ পূর্বাভাস সঠিকতা',
+    prizePool: 200000, // 2 lakh BDT
+    entryFee: 0,
+    duration: 30,
+    category: 'accuracy',
+    icon: 'Target',
+    color: '#f59e0b'
+  }
+];
+
+// Get reward tier based on percentile
+export function getRewardTier(percentile: number): RewardTier | null {
+  // Percentile is 0-100, where 100 is rank 1 (top)
+  // Lower percentile threshold = higher rank
+  for (const tier of REWARD_TIERS) {
+    if (percentile >= (100 - tier.percentileThreshold)) {
+      return tier;
+    }
+  }
+  return null;
 }
 
 // ============================================
@@ -267,11 +481,13 @@ export function useLeaderboard(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Destructure filters to use individual values in dependency arrays
+  const { category, period, kycOnly } = filters;
+
   const fetchLeaderboard = useCallback(async () => {
     setLoading(true);
     try {
       const supabase = createClient();
-      const { category, period, kycOnly } = filters;
       
       // Calculate date range
       const endDate = new Date();
@@ -486,11 +702,13 @@ export function useLeaderboard(
           const nextEntry = leaderboardData[userEntry.rank - 2];
           const prevEntry = leaderboardData[userEntry.rank];
           
+          const percentile = ((leaderboardData.length - userEntry.rank) / leaderboardData.length) * 100;
+          
           setUserRank({
             currentRank: userEntry.rank,
             previousRank: userEntry.rank - userEntry.rankChange,
             totalParticipants: leaderboardData.length,
-            percentile: ((leaderboardData.length - userEntry.rank) / leaderboardData.length) * 100,
+            percentile,
             category,
             period,
             metrics: {
@@ -511,6 +729,7 @@ export function useLeaderboard(
               gap: userEntry.weightedScore - prevEntry.weightedScore,
               userName: prevEntry.userName,
             } : undefined,
+            rewardTier: getRewardTier(percentile),
           });
         }
       }
@@ -522,13 +741,15 @@ export function useLeaderboard(
     } finally {
       setLoading(false);
     }
-  }, [filters, currentUserId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [category, period, kycOnly, currentUserId]);
 
   useEffect(() => {
     fetchLeaderboard();
     const interval = setInterval(fetchLeaderboard, 60000); // Refresh every minute
     return () => clearInterval(interval);
-  }, [fetchLeaderboard]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [category, period, kycOnly, currentUserId]);
 
   return {
     entries,

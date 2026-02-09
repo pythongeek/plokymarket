@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
 import {
@@ -33,7 +33,14 @@ import {
   CheckCircle2,
   AlertCircle,
   RotateCcw,
-  Search
+  Search,
+  Diamond,
+  Gem,
+  Gift,
+  Wallet,
+  Ticket,
+  Crown as CrownIcon,
+  CircleDollarSign
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -70,9 +77,13 @@ import {
   LEADERBOARD_CATEGORIES,
   TIME_PERIODS,
   LEADERBOARD_ACHIEVEMENTS,
+  REWARD_TIERS,
+  MONTHLY_TOURNAMENTS,
+  getRewardTier,
   type LeaderboardCategory,
   type TimePeriod,
   type LeaderboardEntry,
+  type RewardTier,
 } from '@/hooks/useLeaderboard';
 import { useUser } from '@/hooks/useUser';
 
@@ -374,6 +385,171 @@ function UserRankCard({ userRank }: { userRank: any }) {
 }
 
 // ============================================
+// REWARD TIER CARD COMPONENT
+// ============================================
+
+function RewardTierCard({ tier, percentile }: { tier: RewardTier; percentile: number }) {
+  const getTierIcon = () => {
+    switch (tier.id) {
+      case 'elite': return <CrownIcon className="w-8 h-8" />;
+      case 'diamond': return <Diamond className="w-8 h-8" />;
+      case 'platinum': return <Medal className="w-8 h-8" />;
+      case 'gold': return <Trophy className="w-8 h-8" />;
+      case 'silver': return <Award className="w-8 h-8" />;
+      default: return <Star className="w-8 h-8" />;
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ type: 'spring', stiffness: 200 }}
+      className={cn(
+        "relative overflow-hidden rounded-2xl p-6 bg-gradient-to-br",
+        tier.gradient
+      )}
+    >
+      {/* Background Pattern */}
+      <div className="absolute inset-0 opacity-20">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white rounded-full -translate-y-1/2 translate-x-1/2" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white rounded-full translate-y-1/2 -translate-x-1/2" />
+      </div>
+
+      <div className="relative">
+        {/* Header */}
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center text-white">
+              {getTierIcon()}
+            </div>
+            <div>
+              <h3 className="text-2xl font-bold text-white">{tier.nameBn}</h3>
+              <p className="text-white/80 text-sm">{tier.name}</p>
+            </div>
+          </div>
+          <Badge className="bg-white/20 text-white border-0 backdrop-blur">
+            Top {tier.percentileThreshold}%
+          </Badge>
+        </div>
+
+        {/* Reward Amount */}
+        <div className="bg-white/10 backdrop-blur rounded-xl p-4 mb-4">
+          <div className="flex items-center gap-2 text-white/80 text-sm mb-1">
+            <Gift className="w-4 h-4" />
+            <span>মাসিক পুরস্কার</span>
+          </div>
+          <p className="text-2xl font-bold text-white">{tier.rewardBn}</p>
+          <p className="text-white/60 text-sm">{tier.reward}</p>
+        </div>
+
+        {/* Benefits */}
+        <div className="space-y-2">
+          <p className="text-white/80 text-sm font-medium">বিশেষ সুবিধাসমূহ:</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {tier.benefitsBn.map((benefit, index) => (
+              <div key={index} className="flex items-center gap-2 text-white/90 text-sm">
+                <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+                <span>{benefit}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Percentile Progress */}
+        <div className="mt-4 pt-4 border-t border-white/20">
+          <div className="flex items-center justify-between text-white/80 text-sm mb-2">
+            <span>আপনার অবস্থান</span>
+            <span>Top {percentile.toFixed(1)}%</span>
+          </div>
+          <div className="h-2 bg-white/20 rounded-full overflow-hidden">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${percentile}%` }}
+              transition={{ duration: 1, delay: 0.5 }}
+              className="h-full bg-white rounded-full"
+            />
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+// ============================================
+// TOURNAMENT CARD COMPONENT
+// ============================================
+
+function TournamentCard() {
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader className="bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 text-white">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center">
+            <Ticket className="w-6 h-6" />
+          </div>
+          <div>
+            <CardTitle className="text-white">মাসিক টুর্নামেন্ট</CardTitle>
+            <p className="text-white/80 text-sm">প্রতি মাসে ১০ লাখ+ টাকা পুরস্কার</p>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="p-6">
+        <div className="grid gap-4">
+          {MONTHLY_TOURNAMENTS.map((tournament, index) => (
+            <motion.div
+              key={tournament.id}
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: index * 0.1 }}
+              className="flex items-center gap-4 p-4 rounded-xl border hover:bg-muted/50 transition-colors"
+            >
+              <div
+                className="w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0"
+                style={{ backgroundColor: `${tournament.color}20` }}
+              >
+                {tournament.category === 'returnPercentage' && <TrendingUp className="w-7 h-7" style={{ color: tournament.color }} />}
+                {tournament.category === 'riskAdjusted' && <Shield className="w-7 h-7" style={{ color: tournament.color }} />}
+                {tournament.category === 'accuracy' && <Target className="w-7 h-7" style={{ color: tournament.color }} />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className="font-bold text-lg">{tournament.nameBn}</h4>
+                <p className="text-muted-foreground text-sm">{tournament.descriptionBn}</p>
+                <div className="flex items-center gap-4 mt-2">
+                  <Badge variant="secondary" className="text-xs">
+                    <Wallet className="w-3 h-3 mr-1" />
+                    {formatCurrency(tournament.prizePool, 'BDT', 0)}
+                  </Badge>
+                  <Badge variant="outline" className="text-xs">
+                    <Clock className="w-3 h-3 mr-1" />
+                    {tournament.duration} দিন
+                  </Badge>
+                </div>
+              </div>
+              <Button size="sm" className="flex-shrink-0" style={{ backgroundColor: tournament.color }}>
+                জয়েন
+              </Button>
+            </motion.div>
+          ))}
+        </div>
+
+        {/* Prize Pool Info */}
+        <div className="mt-6 p-4 bg-amber-50 dark:bg-amber-950/30 rounded-xl border border-amber-200 dark:border-amber-800">
+          <div className="flex items-center gap-2 text-amber-800 dark:text-amber-200 mb-2">
+            <Info className="w-4 h-4" />
+            <span className="font-medium">পুরস্কার তহবিল সম্পর্কে</span>
+          </div>
+          <p className="text-amber-700 dark:text-amber-300 text-sm">
+            টুর্নামেন্টের পুরস্কার তহবিল প্ল্যাটফর্মের মোট রাজস্বের ১% থেকে আসে। 
+            প্রতি মাসে প্রায় ১০ লাখ টাকার পুরস্কার বিতরণ করা হয়।
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ============================================
 // ACHIEVEMENT BADGES COMPONENT
 // ============================================
 
@@ -549,8 +725,11 @@ export default function LeaderboardPage() {
   const [kycOnly, setKycOnly] = useState(false);
   const [currentQuote, setCurrentQuote] = useState(0);
 
+  // Memoize filters to prevent infinite re-renders
+  const filters = useMemo(() => ({ category, period, kycOnly }), [category, period, kycOnly]);
+
   const { entries, userRank, loading, error } = useLeaderboard(
-    { category, period, kycOnly },
+    filters,
     user?.id
   );
 
@@ -663,6 +842,16 @@ export default function LeaderboardPage() {
         {userRank && (
           <motion.div variants={itemVariants}>
             <UserRankCard userRank={userRank} />
+          </motion.div>
+        )}
+
+        {/* Reward Tier Card */}
+        {userRank?.rewardTier && (
+          <motion.div variants={itemVariants}>
+            <RewardTierCard 
+              tier={userRank.rewardTier} 
+              percentile={userRank.percentile}
+            />
           </motion.div>
         )}
 
@@ -823,6 +1012,64 @@ export default function LeaderboardPage() {
             </Card>
           </motion.div>
         )}
+
+        {/* Reward Tiers Showcase */}
+        <motion.div variants={itemVariants}>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Gem className="w-5 h-5 text-violet-500" />
+                রিওয়ার্ড টিয়ার
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4">
+                {REWARD_TIERS.map((tier, index) => (
+                  <motion.div
+                    key={tier.id}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.1 }}
+                    className="flex items-center gap-4 p-4 rounded-xl border hover:bg-muted/50 transition-colors"
+                  >
+                    <div
+                      className="w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0"
+                      style={{ background: `linear-gradient(135deg, ${tier.color}20, ${tier.color}40)` }}
+                    >
+                      {tier.id === 'elite' && <CrownIcon className="w-7 h-7" style={{ color: tier.color }} />}
+                      {tier.id === 'diamond' && <Diamond className="w-7 h-7" style={{ color: tier.color }} />}
+                      {tier.id === 'platinum' && <Medal className="w-7 h-7" style={{ color: tier.color }} />}
+                      {tier.id === 'gold' && <Trophy className="w-7 h-7" style={{ color: tier.color }} />}
+                      {tier.id === 'silver' && <Award className="w-7 h-7" style={{ color: tier.color }} />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-bold">{tier.nameBn}</h4>
+                        <Badge variant="secondary" style={{ backgroundColor: `${tier.color}20`, color: tier.color }}>
+                          Top {tier.percentileThreshold}%
+                        </Badge>
+                      </div>
+                      <p className="text-muted-foreground text-sm">{tier.rewardBn}</p>
+                    </div>
+                    {tier.monthlyPrize > 0 && (
+                      <div className="text-right hidden sm:block">
+                        <p className="text-sm text-muted-foreground">মাসিক পুরস্কার</p>
+                        <p className="font-bold" style={{ color: tier.color }}>
+                          {formatCurrency(tier.monthlyPrize, 'BDT', 0)}
+                        </p>
+                      </div>
+                    )}
+                  </motion.div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        {/* Monthly Tournament Section */}
+        <motion.div variants={itemVariants}>
+          <TournamentCard />
+        </motion.div>
 
         {/* Achievement Showcase */}
         <motion.div variants={itemVariants}>
