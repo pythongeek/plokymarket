@@ -36,6 +36,7 @@ import { toast } from '@/components/ui/use-toast';
 import { useStore } from '@/store/useStore';
 import { Comment, VoteType, UserReputation, UserBadge } from '@/types/social';
 import { commentsService } from '@/lib/social/comments-service';
+import { FollowButton } from './FollowButton';
 import { cn } from '@/lib/utils';
 
 // ===================================
@@ -472,6 +473,16 @@ function CommentItem({
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-semibold text-sm">{comment.user?.full_name}</span>
+              
+              {/* Follow Button */}
+              {comment.user_id !== currentUserId && comment.user?.id && (
+                <FollowButton
+                  targetUserId={comment.user_id}
+                  targetUserName={comment.user?.full_name}
+                  size="sm"
+                  variant="ghost"
+                />
+              )}
               
               {comment.user?.is_expert && (
                 <TooltipProvider>

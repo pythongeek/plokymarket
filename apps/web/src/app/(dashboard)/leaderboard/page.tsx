@@ -72,6 +72,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatPercentage, formatNumber } from '@/lib/format';
+import { FollowButton } from '@/components/social/FollowButton';
 import {
   useLeaderboard,
   LEADERBOARD_CATEGORIES,
@@ -678,14 +679,23 @@ function LeaderboardRow({
               {entry.userName.charAt(0)}
             </AvatarFallback>
           </Avatar>
-          <div>
-            <p className="font-medium flex items-center gap-2">
+          <div className="flex-1 min-w-0">
+            <p className="font-medium flex items-center gap-2 flex-wrap">
               {entry.userName}
               {entry.isKycVerified && (
                 <BadgeCheck className="w-4 h-4 text-blue-500" />
               )}
               {isCurrentUser && (
                 <Badge variant="secondary" className="text-xs">আপনি</Badge>
+              )}
+              {/* Follow Button */}
+              {!isCurrentUser && entry.userId && (
+                <FollowButton
+                  targetUserId={entry.userId}
+                  targetUserName={entry.userName}
+                  size="sm"
+                  variant="ghost"
+                />
               )}
             </p>
             <p className="text-xs text-muted-foreground">
