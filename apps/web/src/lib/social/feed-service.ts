@@ -334,9 +334,8 @@ export class FeedService {
       .select(`
         *,
         users (
-          full_name,
-          username,
-          avatar_url
+          id,
+          full_name
         )
       `)
       .order('created_at', { ascending: false });
@@ -413,9 +412,8 @@ export class FeedService {
       .select(`
         *,
         users (
-          full_name,
-          username,
-          avatar_url
+          id,
+          full_name
         )
       `)
       .order('priority_score', { ascending: false })

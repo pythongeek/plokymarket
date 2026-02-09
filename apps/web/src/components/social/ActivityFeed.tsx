@@ -37,6 +37,14 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import {
   Sheet,
   SheetContent,
   SheetHeader,
@@ -317,6 +325,90 @@ function ActivityAggregationCard({ aggregation, onExpand }: ActivityAggregationC
 }
 
 // ===================================
+// MUTE KEYWORDS DIALOG
+// ===================================
+
+function MuteKeywordsDialog({ 
+  keywords, 
+  onUpdate 
+}: { 
+  keywords: string[]; 
+  onUpdate: (keywords: string[]) => Promise<void>;
+}) {
+  const [newKeyword, setNewKeyword] = useState('');
+  const [localKeywords, setLocalKeywords] = useState(keywords);
+
+  const handleAdd = () => {
+    if (newKeyword.trim() && !localKeywords.includes(newKeyword.trim().toLowerCase())) {
+      setLocalKeywords([...localKeywords, newKeyword.trim().toLowerCase()]);
+      setNewKeyword('');
+    }
+  };
+
+  const handleRemove = (keyword: string) => {
+    setLocalKeywords(localKeywords.filter(k => k !== keyword));
+  };
+
+  const handleSave = async () => {
+    await onUpdate(localKeywords);
+    toast({ title: 'Mute list updated' });
+  };
+
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm">
+          Manage Muted Keywords
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Muted Keywords</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          <div className="flex gap-2">
+            <Input
+              placeholder="Enter keyword to mute..."
+              value={newKeyword}
+              onChange={(e) => setNewKeyword(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+            />
+            <Button onClick={handleAdd} disabled={!newKeyword.trim()}>
+              Add
+            </Button>
+          </div>
+          
+          <div className="space-y-2 max-h-[300px] overflow-auto">
+            {localKeywords.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                No muted keywords. Add keywords to filter out unwanted content.
+              </p>
+            ) : (
+              localKeywords.map(keyword => (
+                <div key={keyword} className="flex items-center justify-between p-2 bg-muted rounded">
+                  <span className="text-sm">{keyword}</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleRemove(keyword)}
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              ))
+            )}
+          </div>
+          
+          <Button onClick={handleSave} className="w-full">
+            Save Changes
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ===================================
 // FEED CONTROLS
 // ===================================
 
@@ -346,7 +438,8 @@ function FeedControls({
       social_interactions_weight: localPrefs.social_interactions_weight,
       trending_markets_weight: localPrefs.trending_markets_weight,
       compact_mode: localPrefs.compact_mode,
-      auto_expand_threads: localPrefs.auto_expand_threads
+      auto_expand_threads: localPrefs.auto_expand_threads,
+      muted_keywords: localPrefs.muted_keywords
     });
     setIsOpen(false);
     toast({ title: 'Preferences saved' });
@@ -457,23 +550,30 @@ function FeedControls({
 
             {/* Muted Items */}
             <div className="space-y-4">
-              <h4 className="font-medium text-sm">Muted</h4>
+              <h4 className="font-medium text-sm">Muted Items</h4>
               
-              <div className="text-sm text-muted-foreground">
-                {localPrefs.muted_keywords.length > 0 && (
-                  <p>Keywords: {localPrefs.muted_keywords.join(', ')}</p>
-                )}
-                {localPrefs.muted_users.length > 0 && (
-                  <p>Users: {localPrefs.muted_users.length}</p>
-                )}
-                {localPrefs.muted_markets.length > 0 && (
-                  <p>Markets: {localPrefs.muted_markets.length}</p>
-                )}
-                {localPrefs.muted_keywords.length === 0 && 
-                 localPrefs.muted_users.length === 0 && 
-                 localPrefs.muted_markets.length === 0 && (
-                  <p>No muted items</p>
-                )}
+              <div className="space-y-3">
+                <MuteKeywordsDialog
+                  keywords={localPrefs.muted_keywords}
+                  onUpdate={(keywords) => setLocalPrefs(p => ({ ...p, muted_keywords: keywords }))}
+                />
+                
+                <div className="text-sm text-muted-foreground space-y-1">
+                  {localPrefs.muted_keywords.length > 0 && (
+                    <p>• {localPrefs.muted_keywords.length} keywords muted</p>
+                  )}
+                  {localPrefs.muted_users.length > 0 && (
+                    <p>• {localPrefs.muted_users.length} users muted</p>
+                  )}
+                  {localPrefs.muted_markets.length > 0 && (
+                    <p>• {localPrefs.muted_markets.length} markets muted</p>
+                  )}
+                  {localPrefs.muted_keywords.length === 0 && 
+                   localPrefs.muted_users.length === 0 && 
+                   localPrefs.muted_markets.length === 0 && (
+                    <p>No muted items</p>
+                  )}
+                </div>
               </div>
             </div>
 

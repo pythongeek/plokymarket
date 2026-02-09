@@ -5,6 +5,7 @@
 // Components
 export { CommentThread } from './CommentThread';
 export { ActivityFeed } from './ActivityFeed';
+export { FollowButton, FollowStats } from './FollowButton';
 
 // Types (re-export from types/social for convenience)
 export type {
