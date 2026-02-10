@@ -13,7 +13,7 @@ import {
   AlertCircle,
   Loader2,
 } from 'lucide-react';
-import { useTranslation } from '@/lib/i18n';
+import { useTranslation } from 'react-i18next';
 import { userManagementService } from '@/lib/user-management/service';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';

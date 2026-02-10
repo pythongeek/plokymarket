@@ -17,7 +17,7 @@ import {
   Save,
   X
 } from 'lucide-react';
-import { useTranslation } from '@/lib/i18n';
+import { useTranslation } from 'react-i18next';
 import { marketCreationService, type MarketDraft, type MarketTemplate } from '@/lib/market-creation/service';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';

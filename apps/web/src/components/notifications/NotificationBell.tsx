@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Bell, Check, Clock, X, Settings, Filter, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNotifications } from '@/hooks/useNotifications';
-import { useTranslation } from '@/lib/i18n';
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 
 interface NotificationBellProps {

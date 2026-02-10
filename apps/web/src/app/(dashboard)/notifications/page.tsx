@@ -16,7 +16,7 @@ import {
   AlertTriangle,
   Moon
 } from 'lucide-react';
-import { useTranslation } from '@/lib/i18n';
+import { useTranslation } from 'react-i18next';
 import { useNotifications } from '@/hooks/useNotifications';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
