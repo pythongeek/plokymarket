@@ -72,7 +72,7 @@ export async function updateSession(request: NextRequest) {
   if (isAdminRoute && user) {
     // Fetch user profile to check admin status
     const { data: profile } = await supabase
-      .from('users')
+      .from('user_profiles')
       .select('is_admin')
       .eq('id', user.id)
       .single();
