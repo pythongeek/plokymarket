@@ -87,7 +87,7 @@ export default function SecureAuthPortal() {
       // Verify admin status
       const { data: profile, error: profileError } = await supabase
         .from('user_profiles')
-        .select('is_admin, is_super_admin, status')
+        .select('is_admin, is_super_admin')
         .eq('id', user.id)
         .single();
 
@@ -102,11 +102,6 @@ export default function SecureAuthPortal() {
 
         await supabase.auth.signOut();
         throw new Error('Access denied. Admin privileges required.');
-      }
-
-      if (profile.status === 'suspended') {
-        await supabase.auth.signOut();
-        throw new Error('Account suspended. Contact super admin.');
       }
 
       // Log successful login
