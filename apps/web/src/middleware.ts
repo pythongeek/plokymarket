@@ -43,42 +43,36 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // Check if accessing secure admin paths
-  const isSecurePath = Object.values(SECURE_PATHS).some(path =>
+  // Check if this is the auth portal (login page) — it must NOT require auth
+  const isAuthPortal = pathname.startsWith(SECURE_PATHS.auth);
+
+  // Check if accessing secure admin paths (excluding auth portal)
+  const isSecurePath = !isAuthPortal && Object.values(SECURE_PATHS).some(path =>
     pathname.startsWith(path)
   );
 
   const isApiAdminPath = pathname.startsWith('/api/admin');
 
+  // Auth portal only needs rate limiting and security headers, NOT auth checks
+  if (isAuthPortal) {
+    // Add security headers
+    response.headers.set('X-Frame-Options', 'DENY');
+    response.headers.set('X-Content-Type-Options', 'nosniff');
+    response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+    response.headers.set('X-Robots-Tag', 'noindex, nofollow');
+    return response;
+  }
+
   if (isSecurePath || isApiAdminPath) {
     // IP whitelist check (if configured)
     if (ALLOWED_ADMIN_IPS.length > 0) {
-      const clientIp = request.ip ||
+      const clientIp =
         request.headers.get('x-forwarded-for')?.split(',')[0] ||
         'unknown';
 
       if (!ALLOWED_ADMIN_IPS.includes(clientIp)) {
         console.warn(`Admin access denied from IP: ${clientIp}`);
         return new NextResponse('Access Denied', { status: 403 });
-      }
-    }
-
-    // Rate limiting for auth portal
-    if (pathname.startsWith(SECURE_PATHS.auth)) {
-      const clientIp = request.ip || 'unknown';
-      const now = Date.now();
-      const attempts = authAttempts.get(clientIp);
-
-      if (attempts) {
-        if (now > attempts.resetTime) {
-          authAttempts.set(clientIp, { count: 1, resetTime: now + RATE_LIMIT_WINDOW });
-        } else if (attempts.count >= MAX_AUTH_ATTEMPTS) {
-          return new NextResponse('Too Many Requests', { status: 429 });
-        } else {
-          attempts.count++;
-        }
-      } else {
-        authAttempts.set(clientIp, { count: 1, resetTime: now + RATE_LIMIT_WINDOW });
       }
     }
 
@@ -92,33 +86,21 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(authUrl);
     }
 
-    // Check admin status for admin paths
-    if (isSecurePath || isApiAdminPath) {
-      const { data: profile, error: profileError } = await supabase
-        .from('user_profiles')
-        .select('is_admin, is_super_admin')
-        .eq('id', user.id)
-        .single();
+    // Check admin status
+    const { data: profile, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('is_admin, is_super_admin')
+      .eq('id', user.id)
+      .single();
 
-      if (profileError || (!profile?.is_admin && !profile?.is_super_admin)) {
-        console.warn(`Non-admin user ${user.id} attempted admin access`);
-
-        // Log unauthorized access attempt
-        await supabase.from('admin_audit_log').insert({
-          action: 'unauthorized_access_attempt',
-          user_id: user.id,
-          resource: pathname,
-          ip_address: request.ip || request.headers.get('x-forwarded-for')?.split(',')[0],
-          user_agent: request.headers.get('user-agent'),
-        });
-
-        return new NextResponse('Forbidden', { status: 403 });
-      }
-
-      // Add admin info to headers for downstream use
-      response.headers.set('x-admin-id', user.id);
-      response.headers.set('x-admin-level', profile.is_super_admin ? 'super' : 'admin');
+    if (profileError || (!profile?.is_admin && !profile?.is_super_admin)) {
+      console.warn(`Non-admin user ${user.id} attempted admin access`);
+      return new NextResponse('Forbidden', { status: 403 });
     }
+
+    // Add admin info to headers for downstream use
+    response.headers.set('x-admin-id', user.id);
+    response.headers.set('x-admin-level', profile.is_super_admin ? 'super' : 'admin');
 
     // Add security headers
     response.headers.set('X-Frame-Options', 'DENY');
