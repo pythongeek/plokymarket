@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { notificationService, type Notification, type NotificationPreferences } from '@/lib/notifications/service';
-import { useUser } from '@/lib/auth/hooks';
+import { useUser } from '@/hooks/useUser';
 
 export interface UseNotificationsReturn {
   notifications: Notification[];
