@@ -96,19 +96,28 @@ export function SecureAdminLayout({ children }: { children: React.ReactNode }) {
 
   const fetchSystemStatus = async () => {
     try {
-      // Fetch pending market reviews
-      const { count: pendingMarkets } = await supabase
-        .from('market_creation_drafts')
-        .select('*', { count: 'exact' })
-        .eq('status', 'legal_review');
+      let pendingMarkets = 0;
+      let supportTickets = 0;
 
-      // Fetch user support tickets
-      const { count: supportTickets } = await supabase
-        .from('support_tickets')
-        .select('*', { count: 'exact' })
-        .eq('status', 'open');
+      // Graceful: market_creation_drafts may not exist
+      try {
+        const { count, error } = await supabase
+          .from('market_creation_drafts')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'legal_review');
+        if (!error) pendingMarkets = count || 0;
+      } catch { /* table may not exist */ }
 
-      const totalAlerts = (pendingMarkets || 0) + (supportTickets || 0);
+      // Graceful: support_tickets may not exist
+      try {
+        const { count, error } = await supabase
+          .from('support_tickets')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'open');
+        if (!error) supportTickets = count || 0;
+      } catch { /* table may not exist */ }
+
+      const totalAlerts = pendingMarkets + supportTickets;
       setPendingAlerts(totalAlerts);
 
       if (totalAlerts > 10) {
@@ -197,8 +206,13 @@ export function SecureAdminLayout({ children }: { children: React.ReactNode }) {
               <span className="text-lg font-bold text-white tracking-tight">
                 SYS-CMD
               </span>
-              <Badge variant="outline" className="text-xs border-slate-700 text-slate-400">
-                {admin.is_super_admin ? 'SUPER ADMIN' : 'ADMIN'}
+              <Badge variant="outline" className={cn(
+                "text-xs font-semibold",
+                admin.is_super_admin
+                  ? "border-amber-500/40 text-amber-300 bg-amber-500/10"
+                  : "border-primary/40 text-primary bg-primary/10"
+              )}>
+                {admin.is_super_admin ? '⭐ SUPER ADMIN' : '🛡️ ADMIN'}
               </Badge>
             </div>
           </div>
@@ -224,7 +238,7 @@ export function SecureAdminLayout({ children }: { children: React.ReactNode }) {
               )}
             </div>
 
-            <div className="text-sm text-slate-400">
+            <div className="text-sm text-slate-200 font-medium">
               {admin.email}
             </div>
 
@@ -256,16 +270,16 @@ export function SecureAdminLayout({ children }: { children: React.ReactNode }) {
                   key={item.path}
                   onClick={() => router.push(item.path)}
                   className={cn(
-                    'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+                    'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
                     isActive
-                      ? 'bg-primary/10 text-primary border border-primary/20'
-                      : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                      ? 'bg-primary/15 text-white border border-primary/30 shadow-sm shadow-primary/10'
+                      : 'text-slate-200 hover:bg-slate-800/80 hover:text-white'
                   )}
                 >
-                  <Icon className="w-4 h-4" />
+                  <Icon className={cn("w-5 h-5", isActive ? "text-primary" : "text-slate-400")} />
                   <div className="flex flex-col items-start">
-                    <span>{item.label}</span>
-                    <span className="text-[10px] opacity-60">{item.labelEn}</span>
+                    <span className="font-semibold">{item.label}</span>
+                    <span className={cn("text-[10px]", isActive ? "text-slate-300" : "text-slate-400")}>{item.labelEn}</span>
                   </div>
                 </button>
               );
@@ -273,13 +287,13 @@ export function SecureAdminLayout({ children }: { children: React.ReactNode }) {
           </nav>
 
           {/* Security Notice */}
-          <div className="mt-8 p-4 rounded-lg bg-slate-900 border border-slate-800">
+          <div className="mt-8 p-4 rounded-lg bg-slate-900/60 border border-primary/20">
             <div className="flex items-start gap-2">
               <Shield className="w-4 h-4 text-primary mt-0.5" />
-              <div className="text-xs text-slate-400">
-                <p className="font-medium text-slate-300 mb-1">Secure Session</p>
-                <p>All actions are logged and monitored.</p>
-                <p className="mt-1 text-slate-500">
+              <div className="text-xs">
+                <p className="font-semibold text-slate-200 mb-1">🔒 নিরাপদ সেশন</p>
+                <p className="text-slate-300">All actions are logged and monitored.</p>
+                <p className="mt-1 text-slate-400">
                   Session: {new Date().toLocaleTimeString()}
                 </p>
               </div>
