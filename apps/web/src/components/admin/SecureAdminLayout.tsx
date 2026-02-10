@@ -24,7 +24,7 @@ const SECURE_PATHS = {
   dashboard: '/sys-cmd-7x9k2',
   users: '/sys-cmd-7x9k2/users',
   markets: '/sys-cmd-7x9k2/markets',
-  analytics: '/analytics-9x3y5',
+  analytics: '/sys-cmd-7x9k2/analytics',
 };
 
 interface AdminUser {
