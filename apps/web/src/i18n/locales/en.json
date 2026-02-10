@@ -10,7 +10,12 @@
         "activity": "Activity",
         "leaderboard": "Leaderboard",
         "language": "Language",
-        "waiting_for_data": "Waiting for live data..."
+        "waiting_for_data": "Waiting for live data...",
+        "current": "Current",
+        "rebate": "Rebate",
+        "support": "Support",
+        "custom_terms": "Custom Terms",
+        "tier": "Tier"
     },
     "hero": {
         "title": "Predict the Future.",

@@ -111,6 +111,11 @@ export interface AuditLogEntry {
   requires_dual_auth: boolean;
   dual_auth_admin_id?: string;
   created_at: string;
+  ip_address?: string;
+  description?: string;
+  details?: string;
+  metadata?: Record<string, any>;
+  performed_by?: string;
 }
 
 class UserManagementService {
@@ -231,18 +236,20 @@ class UserManagementService {
   // INTERNAL NOTES
   // ============================================
 
-  async addInternalNote(params: {
-    user_id: string;
-    note: string;
-    note_type?: string;
+  async addInternalNote(userId: string, params: {
+    content: string;
     is_escalation?: boolean;
-    escalated_to?: string;
-    escalation_reason?: string;
+    category?: string;
   }): Promise<InternalNote> {
     const res = await fetch('/api/admin/users/detail', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params)
+      body: JSON.stringify({
+        user_id: userId,
+        note: params.content,
+        note_type: params.category,
+        is_escalation: params.is_escalation,
+      })
     });
 
     if (!res.ok) {
@@ -275,6 +282,17 @@ class UserManagementService {
     const res = await fetch(`/api/admin/users/audit-log?${searchParams}`);
     if (!res.ok) throw new Error('Failed to fetch audit log');
     return res.json();
+  }
+
+  async getAuditLogs(userId: string, filter?: string): Promise<AuditLogEntry[]> {
+    const params = new URLSearchParams();
+    params.set('user_id', userId);
+    if (filter) params.set('action', filter);
+
+    const res = await fetch(`/api/admin/users/audit-log?${params}`);
+    if (!res.ok) throw new Error('Failed to fetch audit logs');
+    const { data } = await res.json();
+    return data || [];
   }
 
   async approveDualAuth(logId: string, action: 'approve' | 'reject'): Promise<{ success: boolean; action: string }> {
@@ -328,6 +346,10 @@ class UserManagementService {
 
     const { data } = await res.json();
     return data;
+  }
+
+  async escalateTicket(ticketId: string): Promise<SupportTicket> {
+    return this.updateTicket(ticketId, { status: 'escalated' } as any);
   }
 
   async getTicketMessages(ticketId: string): Promise<any[]> {
