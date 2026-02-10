@@ -1,15 +1,10 @@
 'use client';
 
-import { supabase } from '@/lib/supabase';
-
 import { useState } from 'react';
 import Link from 'next/link';
 import { useStore } from '@/store/useStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -22,17 +17,15 @@ import {
   Wallet,
   AlertCircle,
   ArrowRight,
+  Sparkles,
+  FileText,
+  Clock,
+  Gavel
 } from 'lucide-react';
 import { format } from 'date-fns';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 import { useTranslation } from 'react-i18next';
+import { MarketCreationWizard } from '@/components/admin/MarketCreationWizard';
 
 function AdminMarketCard({ market }: { market: any }) {
   const { resolveMarket } = useStore();
@@ -309,8 +302,8 @@ export default function AdminPage() {
           <p className="text-muted-foreground">{t('admin.page_subtitle')}</p>
         </div>
         <Button onClick={() => setShowCreateForm(!showCreateForm)}>
-          <Plus className="h-4 w-4 mr-2" />
-          {t('admin.create_market')}
+          <Sparkles className="h-4 w-4 mr-2" />
+          {showCreateForm ? 'Close Wizard' : t('admin.create_market')}
         </Button>
       </div>
 
@@ -375,235 +368,14 @@ export default function AdminPage() {
 
       {/* Create Market Form */}
       {showCreateForm && (
-        <Card>
-          <CardHeader>
-            <CardTitle>{t('admin.form.title')}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleCreateMarket} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="question">{t('admin.form.question')}</Label>
-                <Textarea
-                  id="question"
-                  placeholder="Will Bangladesh win the T20 World Cup 2024?"
-                  value={formData.question}
-                  onChange={(e) => setFormData({ ...formData, question: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="description">{t('admin.form.description')}</Label>
-                <Textarea
-                  id="description"
-                  placeholder="Detailed description of the market..."
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="category">{t('admin.form.category')}</Label>
-                  <Input
-                    id="category"
-                    placeholder="Sports, Politics, Finance..."
-                    value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="resolution_source">{t('admin.form.resolution_source')}</Label>
-                  <Input
-                    id="resolution_source"
-                    placeholder="ESPN Cricinfo, Prothom Alo..."
-                    value={formData.resolution_source}
-                    onChange={(e) => setFormData({ ...formData, resolution_source: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="source_url">{t('admin.form.source_url')}</Label>
-                  <Input
-                    id="source_url"
-                    type="url"
-                    placeholder="https://..."
-                    value={formData.source_url}
-                    onChange={(e) => setFormData({ ...formData, source_url: e.target.value })}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="image">{t('admin.form.image')}</Label>
-                  <div className="flex gap-2 items-center">
-                    <Input
-                      id="image"
-                      type="file"
-                      accept="image/*"
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-
-                        // Upload logic
-                        const fileExt = file.name.split('.').pop();
-                        const fileName = `${Math.random()}.${fileExt}`;
-                        const filePath = `${fileName}`;
-
-                        const { error: uploadError } = await supabase.storage
-                          .from('market-images')
-                          .upload(filePath, file);
-
-                        if (uploadError) {
-                          alert('Error uploading image: ' + uploadError.message);
-                          return;
-                        }
-
-                        const { data: { publicUrl } } = supabase.storage
-                          .from('market-images')
-                          .getPublicUrl(filePath);
-
-                        setFormData({ ...formData, image_url: publicUrl });
-                      }}
-                    />
-                    {formData.image_url && (
-                      <div className="h-10 w-10 relative rounded overflow-hidden border">
-                        <img src={formData.image_url} alt="Preview" className="object-cover w-full h-full" />
-                      </div>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground">{t('admin.form.upload_hint')}</p>
-                  <Input
-                    type="url"
-                    placeholder="Or paste image URL..."
-                    value={formData.image_url}
-                    onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
-                    className="mt-2"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="trading_closes_at">{t('admin.form.trading_closes')}</Label>
-                  <Input
-                    id="trading_closes_at"
-                    type="datetime-local"
-                    value={formData.trading_closes_at}
-                    onChange={(e) => setFormData({ ...formData, trading_closes_at: e.target.value })}
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="event_date">{t('admin.form.event_date')}</Label>
-                  <Input
-                    id="event_date"
-                    type="datetime-local"
-                    value={formData.event_date}
-                    onChange={(e) => setFormData({ ...formData, event_date: e.target.value })}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-primary/5 rounded-xl border border-primary/10">
-                <div className="space-y-2">
-                  <Label htmlFor="initial_liquidity">Initial Liquidity (৳)</Label>
-                  <Input
-                    id="initial_liquidity"
-                    type="number"
-                    value={formData.initial_liquidity}
-                    onChange={(e) => setFormData({ ...formData, initial_liquidity: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="fee_percent">Platform Fee (%)</Label>
-                  <Input
-                    id="fee_percent"
-                    type="number"
-                    step="0.01"
-                    value={formData.fee_percent}
-                    onChange={(e) => setFormData({ ...formData, fee_percent: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="maker_rebate_percent">Maker Rebate (%)</Label>
-                  <Input
-                    id="maker_rebate_percent"
-                    type="number"
-                    step="0.01"
-                    value={formData.maker_rebate_percent}
-                    onChange={(e) => setFormData({ ...formData, maker_rebate_percent: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              {/* Resolution Strategy Optimization */}
-              <div className="space-y-4 pt-4 border-t">
-                <div className="space-y-2">
-                  <Label>{t('admin.form.resolution_strategy')}</Label>
-                  <Select
-                    value={formData.resolution_source_type}
-                    onValueChange={(value) => setFormData({ ...formData, resolution_source_type: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={t('admin.form.select_strategy')} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="MANUAL">{t('admin.strategies.manual')}</SelectItem>
-                      <SelectItem value="AI">{t('admin.strategies.ai')}</SelectItem>
-                      <SelectItem value="UMA">{t('admin.strategies.uma')}</SelectItem>
-                      <SelectItem value="CENTRALIZED">{t('admin.strategies.centralized')}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {formData.resolution_source_type === 'UMA' && (
-                  <div className="space-y-2">
-                    <Label htmlFor="uma_bond">{t('admin.form.uma_bond')}</Label>
-                    <Input
-                      id="uma_bond"
-                      type="number"
-                      value={formData.uma_bond}
-                      onChange={(e) => setFormData({ ...formData, uma_bond: e.target.value })}
-                    />
-                  </div>
-                )}
-
-                {formData.resolution_source_type === 'AI' && (
-                  <div className="space-y-2">
-                    <Label htmlFor="ai_context">{t('admin.form.ai_context')}</Label>
-                    <Textarea
-                      id="ai_context"
-                      placeholder={t('admin.form.ai_context_placeholder')}
-                      value={formData.ai_context}
-                      onChange={(e) => setFormData({ ...formData, ai_context: e.target.value })}
-                    />
-                  </div>
-                )}
-
-                {formData.resolution_source_type === 'CENTRALIZED' && (
-                  <p className="text-xs text-muted-foreground italic">
-                    {t('admin.form.multisig_hint')}
-                  </p>
-                )}
-              </div>
-
-              <div className="flex gap-2">
-                <Button type="submit" disabled={isCreating}>
-                  {isCreating ? t('admin.form.creating') : t('admin.form.create')}
-                </Button>
-                <Button type="button" variant="outline" onClick={() => setShowCreateForm(false)}>
-                  {t('admin.form.cancel')}
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
+        <MarketCreationWizard
+          onComplete={(marketId) => {
+            setShowCreateForm(false);
+            // Refresh markets list
+            window.location.reload();
+          }}
+          onCancel={() => setShowCreateForm(false)}
+        />
       )}
 
       {/* Markets List */}

@@ -79,5 +79,61 @@
         "progress_to_next": "???? ???? ?? ??????",
         "more_needed": "?? ?????",
         "benefits": "???"
+    },
+    "notifications": {
+        "title": "सूचनाएं",
+        "settingsTitle": "सूचना सेटिंग्स",
+        "settingsDescription": "अनुकूलित करें कि आप सूचनाएं कैसे और कब प्राप्त करें",
+        "noNotifications": "अभी तक कोई सूचना नहीं",
+        "loadMore": "और लोड करें",
+        "markAllRead": "सभी पढ़े हुए चिह्नित करें",
+        "markRead": "पढ़ा हुआ",
+        "dismiss": "खारिज",
+        "snooze": "स्नूज",
+        "snoozed": "स्नूज किया गया",
+        "saved": "सहेजा गया",
+        "categories": {
+            "all": "सभी",
+            "trade": "ट्रेड",
+            "market": "मार्केट",
+            "risk": "जोखिम",
+            "social": "सामाजिक",
+            "system": "सिस्टम"
+        },
+        "channels": {
+            "websocket": "वेबसोकेट",
+            "push": "पुश",
+            "email": "ईमेल",
+            "webhook": "वेबहुक",
+            "in_app": "इन-ऐप"
+        },
+        "deliveryChannels": "डिलीवरी चैनल",
+        "globalNotifications": "सूचनाएं सक्षम करें",
+        "globalDescription": "Plokymarket से सभी सूचनाएं प्राप्त करें",
+        "doNotDisturb": "परेशान न करें",
+        "doNotDisturbDesc": "सभी गैर-जरूरी सूचनाएं रोकें",
+        "orderFillsTitle": "ऑर्डर भरना",
+        "orderFillsDescription": "जब आपके ऑर्डर भरे जाएं तो सूचना प्राप्त करें",
+        "minAmount": "न्यूनतम सूचना राशि",
+        "marketResolutionTitle": "मार्केट रेजोल्यूशन",
+        "marketResolutionDescription": "जब मार्केट सुलझ जाए तो सूचना प्राप्त करें",
+        "priceAlertsTitle": "मूल्य अलर्ट",
+        "priceAlertsDescription": "महत्वपूर्ण मूल्य परिवर्तनों की सूचना प्राप्त करें",
+        "thresholdLabel": "मूल्य परिवर्तन थ्रेशोल्ड (%)",
+        "positionRiskTitle": "पोजीशन जोखिम",
+        "positionRiskDescription": "जोखिम भरी पोजीशन के बारे में सूचना प्राप्त करें",
+        "socialTitle": "सामाजिक सूचनाएं",
+        "socialDescription": "फॉलोअर्स, उल्लेख और टिप्पणियां",
+        "digestFrequency": "डाइजेस्ट फ्रीक्वेंसी",
+        "digest": {
+            "immediate": "तुरंत",
+            "hourly": "प्रति घंटा",
+            "daily": "दैनिक"
+        },
+        "systemTitle": "सिस्टम रखरखाव",
+        "systemDescription": "निर्धारित रखरखाव के बारे में सूचना प्राप्त करें",
+        "pushNotifications": "पुश सूचनाएं",
+        "pushDescription": "साइट पर न होने पर भी सूचनाएं प्राप्त करें",
+        "enablePush": "पुश सक्षम करें"
     }
 }

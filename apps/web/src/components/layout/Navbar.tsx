@@ -8,7 +8,7 @@ import { useStore } from '@/store/useStore';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ModeToggle } from '../mode-toggle';
-import { NotificationCenter } from '../notifications/NotificationCenter';
+import { NotificationBell } from '../notifications/NotificationBell';
 
 export function Navbar() {
   const { currentUser, isAuthenticated, logout, wallet } = useStore();
@@ -97,7 +97,7 @@ export function Navbar() {
                 </div>
               )}
               <div className="flex items-center gap-2">
-                <NotificationCenter />
+                <NotificationBell onSettingsClick={() => window.location.href = '/notifications'} />
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
                   <User className="h-4 w-4 text-primary" />
                 </div>
@@ -111,7 +111,7 @@ export function Navbar() {
             </>
           ) : (
             <div className="flex items-center gap-2">
-              <NotificationCenter />
+              <NotificationBell onSettingsClick={() => window.location.href = '/notifications'} />
               <Link href="/login">
                 <Button variant="ghost">{t('common.login')}</Button>
               </Link>

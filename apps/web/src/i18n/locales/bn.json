@@ -355,5 +355,61 @@
         "progress_to_next": "??????? ??????? ???????",
         "more_needed": "??? ????????",
         "benefits": "??????????"
+    },
+    "notifications": {
+        "title": "বিজ্ঞপ্তি",
+        "settingsTitle": "বিজ্ঞপ্তি সেটিংস",
+        "settingsDescription": "কখন এবং কিভাবে বিজ্ঞপ্তি পাবেন তা কাস্টমাইজ করুন",
+        "noNotifications": "এখনও কোন বিজ্ঞপ্তি নেই",
+        "loadMore": "আরো লোড করুন",
+        "markAllRead": "সব পড়া হয়েছে চিহ্নিত করুন",
+        "markRead": "পড়া হয়েছে",
+        "dismiss": "বাতিল",
+        "snooze": "স্নুজ",
+        "snoozed": "স্নুজ করা হয়েছে",
+        "saved": "সেভ করা হয়েছে",
+        "categories": {
+            "all": "সব",
+            "trade": "ট্রেড",
+            "market": "মার্কেট",
+            "risk": "ঝুঁকি",
+            "social": "সামাজিক",
+            "system": "সিস্টেম"
+        },
+        "channels": {
+            "websocket": "ওয়েবসকেট",
+            "push": "পুশ",
+            "email": "ইমেইল",
+            "webhook": "ওয়েবহুক",
+            "in_app": "ইন-অ্যাপ"
+        },
+        "deliveryChannels": "ডেলিভারি চ্যানেল",
+        "globalNotifications": "বিজ্ঞপ্তি সক্রিয় করুন",
+        "globalDescription": "Plokymarket থেকে সমস্ত বিজ্ঞপ্তি পান",
+        "doNotDisturb": "বিরক্ত করবেন না",
+        "doNotDisturbDesc": "সব অ-জরুরি বিজ্ঞপ্তি বন্ধ করুন",
+        "orderFillsTitle": "অর্ডার ফিল",
+        "orderFillsDescription": "আপনার অর্ডার ফিল হলে বিজ্ঞপ্তি পান",
+        "minAmount": "ন্যূনতম বিজ্ঞপ্তির পরিমাণ",
+        "marketResolutionTitle": "মার্কেট রেজোলিউশন",
+        "marketResolutionDescription": "মার্কেট সমাধান হলে বিজ্ঞপ্তি পান",
+        "priceAlertsTitle": "দাম সতর্কতা",
+        "priceAlertsDescription": "দামের উল্লেখযোগ্য পরিবর্তনের বিজ্ঞপ্তি পান",
+        "thresholdLabel": "দাম পরিবর্তন থ্রেশহোল্ড (%)",
+        "positionRiskTitle": "পজিশন ঝুঁকি",
+        "positionRiskDescription": "ঝুঁকিপূর্ণ পজিশন সম্পর্কে বিজ্ঞপ্তি পান",
+        "socialTitle": "সামাজিক বিজ্ঞপ্তি",
+        "socialDescription": "ফলোয়ার, উল্লেখ এবং কমেন্ট",
+        "digestFrequency": "ডাইজেস্ট ফ্রিকোয়েন্সি",
+        "digest": {
+            "immediate": "তাত্ক্ষণিক",
+            "hourly": "ঘণ্টায়",
+            "daily": "দৈনিক"
+        },
+        "systemTitle": "সিস্টেম রক্ষণাবেক্ষণ",
+        "systemDescription": "নির্ধারিত রক্ষণাবেক্ষণ সম্পর্কে বিজ্ঞপ্তি পান",
+        "pushNotifications": "পুশ বিজ্ঞপ্তি",
+        "pushDescription": "সাইটে না থাকলেও বিজ্ঞপ্তি পান",
+        "enablePush": "পুশ সক্রিয় করুন"
     }
 }
