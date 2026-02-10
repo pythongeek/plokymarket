@@ -70,15 +70,21 @@ export async function updateSession(request: NextRequest) {
 
   // If accessing admin route, verify user is admin
   if (isAdminRoute && user) {
-    // Fetch user profile to check admin status
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('is_admin')
-      .eq('id', user.id)
-      .single();
+    try {
+      // Fetch user profile to check admin status
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('is_admin')
+        .eq('id', user.id)
+        .single();
 
-    if (!profile?.is_admin) {
-      // Non-admin trying to access admin route
+      if (!profile?.is_admin) {
+        // Non-admin trying to access admin route
+        return NextResponse.redirect(new URL('/markets', request.url));
+      }
+    } catch (error) {
+      // If table doesn't exist or other error, redirect non-admins away
+      console.error('Admin check error:', error);
       return NextResponse.redirect(new URL('/markets', request.url));
     }
   }
