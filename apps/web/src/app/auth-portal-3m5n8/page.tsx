@@ -58,7 +58,7 @@ export default function SecureAuthPortal() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (lockedUntil && lockedUntil > new Date()) {
       setError(`Account locked. Try again in ${Math.ceil((lockedUntil.getTime() - Date.now()) / 60000)} minutes.`);
       return;
@@ -99,7 +99,7 @@ export default function SecureAuthPortal() {
           resource: 'auth-portal',
           details: { reason: 'not_admin' },
         });
-        
+
         await supabase.auth.signOut();
         throw new Error('Access denied. Admin privileges required.');
       }
@@ -114,7 +114,7 @@ export default function SecureAuthPortal() {
         action: 'admin_login_success',
         user_id: user.id,
         resource: 'auth-portal',
-        details: { 
+        details: {
           admin_level: profile.is_super_admin ? 'super' : 'admin',
           redirect_to: redirectTo,
         },
@@ -125,7 +125,7 @@ export default function SecureAuthPortal() {
 
     } catch (err: any) {
       console.error('Login error:', err);
-      
+
       const newAttempts = attempts + 1;
       setAttempts(newAttempts);
 

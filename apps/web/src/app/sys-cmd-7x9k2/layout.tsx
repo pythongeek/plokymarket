@@ -1,6 +1,8 @@
 import { Metadata } from 'next';
 import { SecureAdminLayout } from '@/components/admin/SecureAdminLayout';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: 'System Control Panel',
   description: 'Administrative Control Interface',
