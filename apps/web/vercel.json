@@ -3,11 +3,5 @@
   "devCommand": "npm run dev",
   "installCommand": "npm install",
   "framework": "nextjs",
-  "regions": ["iad1"],
-  "crons": [
-    {
-      "path": "/api/cron/master?secret=${MASTER_CRON_SECRET}",
-      "schedule": "0 0 * * *"
-    }
-  ]
+  "regions": ["iad1"]
 }
