@@ -4,22 +4,22 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   Play,
+  BarChart2,
   TrendingUp,
   Users,
-  DollarSign,
+  Clock,
   ArrowRight,
   ArrowLeft,
   RefreshCw,
-  AlertCircle,
-  Check,
-  BarChart3,
-  Activity
+  CheckCircle,
+  ShieldOff,
+  DollarSign,
+  Activity,
+  Zap
 } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import type { MarketDraft } from '@/lib/market-creation/service';
 
@@ -29,334 +29,241 @@ interface PreviewSimulationStageProps {
   onBack?: () => void;
   isSaving: boolean;
   errors: string[];
+  adminBypass?: { liquidity: boolean; legal_review: boolean; simulation: boolean };
 }
 
-// Mock simulation data
-const generateSimulationData = () => ({
-  estimatedVolume: Math.floor(Math.random() * 50000) + 10000,
-  estimatedTraders: Math.floor(Math.random() * 500) + 50,
-  priceDiscovery: {
-    initialPrice: 0.5,
-    projectedRange: [0.3, 0.7],
-    volatility: Math.random() * 0.2 + 0.1
-  },
-  liquidityDepth: {
-    yes: Array.from({ length: 10 }, (_, i) => ({
-      price: 0.5 + i * 0.05,
-      size: Math.floor(Math.random() * 1000) + 100
-    })),
-    no: Array.from({ length: 10 }, (_, i) => ({
-      price: 0.5 - i * 0.05,
-      size: Math.floor(Math.random() * 1000) + 100
-    }))
-  },
-  fees: {
-    platform: 2,
-    estimatedDaily: Math.floor(Math.random() * 500) + 100
-  }
-});
+interface SimulationResult {
+  totalTrades: number;
+  totalVolume: number;
+  avgPrice: number;
+  priceRange: [number, number];
+  uniqueTraders: number;
+  liquidityDepth: number;
+  expectedFees: number;
+  spreadPercent: number;
+}
 
 export function PreviewSimulationStage({
   draft,
   onSave,
   onBack,
   isSaving,
-  errors
+  errors,
+  adminBypass
 }: PreviewSimulationStageProps) {
-  const { t } = useTranslation();
-  const [simulationData, setSimulationData] = useState<any>(null);
-  const [isSimulating, setIsSimulating] = useState(false);
+  const isBypassed = adminBypass?.simulation || false;
+  const [isRunning, setIsRunning] = useState(false);
+  const [completed, setCompleted] = useState(!!draft?.simulation_results || isBypassed);
+  const [results, setResults] = useState<SimulationResult | null>(
+    draft?.simulation_results as SimulationResult | null
+  );
 
   const runSimulation = async () => {
-    setIsSimulating(true);
-    // Simulate API delay
+    setIsRunning(true);
+
+    // Simulate delay
     await new Promise(resolve => setTimeout(resolve, 2000));
-    setSimulationData(generateSimulationData());
-    setIsSimulating(false);
+
+    const liquidity = draft?.liquidity_amount || draft?.liquidity_commitment || 1000;
+    const fee = draft?.trading_fee_percent || 2;
+
+    const simResults: SimulationResult = {
+      totalTrades: Math.floor(Math.random() * 500) + 100,
+      totalVolume: Math.floor(liquidity * (2 + Math.random() * 8)),
+      avgPrice: Math.round((40 + Math.random() * 20) * 100) / 100,
+      priceRange: [
+        Math.round((10 + Math.random() * 20) * 100) / 100,
+        Math.round((60 + Math.random() * 30) * 100) / 100
+      ],
+      uniqueTraders: Math.floor(Math.random() * 200) + 20,
+      liquidityDepth: Math.round(liquidity * (1.5 + Math.random())),
+      expectedFees: Math.round(liquidity * (fee / 100) * (2 + Math.random() * 5)),
+      spreadPercent: Math.round((0.5 + Math.random() * 2) * 100) / 100
+    };
+
+    setResults(simResults);
+    setIsRunning(false);
+    setCompleted(true);
   };
 
   const handleSubmit = async () => {
     await onSave({
-      simulation_results: simulationData
+      simulation_config: {
+        ran_at: new Date().toISOString(),
+        bypassed: isBypassed
+      },
+      simulation_results: results || (isBypassed ? { bypassed: true } : null),
+      admin_bypass_simulation: isBypassed
     });
   };
 
-  if (!simulationData) {
-    return (
-      <div className="space-y-6">
-        <div className="text-center py-12">
-          <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6">
-            <Play className="w-10 h-10 text-primary" />
-          </div>
-          <h3 className="text-xl font-bold mb-2">
-            Virtual Market Simulation
-          </h3>
-          <p className="text-muted-foreground max-w-md mx-auto mb-6">
-            Run a simulation to estimate trading volume, price discovery, and liquidity depth 
-            before deploying your market.
-          </p>
-          <Button 
-            onClick={runSimulation} 
-            disabled={isSimulating}
-            size="lg"
-          >
-            {isSimulating ? (
-              <>
-                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                Running Simulation...
-              </>
-            ) : (
-              <>
-                <Play className="w-4 h-4 mr-2" />
-                Run Simulation
-              </>
-            )}
-          </Button>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card className="p-4 text-center">
-            <TrendingUp className="w-8 h-8 text-primary mx-auto mb-2" />
-            <p className="font-medium">Price Discovery</p>
-            <p className="text-xs text-muted-foreground">
-              Estimate fair price based on category and question type
-            </p>
-          </Card>
-          <Card className="p-4 text-center">
-            <Users className="w-8 h-8 text-primary mx-auto mb-2" />
-            <p className="font-medium">Trader Estimates</p>
-            <p className="text-xs text-muted-foreground">
-              Projected number of unique traders
-            </p>
-          </Card>
-          <Card className="p-4 text-center">
-            <DollarSign className="w-8 h-8 text-primary mx-auto mb-2" />
-            <p className="font-medium">Volume Forecast</p>
-            <p className="text-xs text-muted-foreground">
-              Expected trading volume over market lifetime
-            </p>
-          </Card>
-        </div>
-
-        <div className="flex justify-between pt-6 border-t">
-          <Button variant="outline" onClick={onBack} disabled={isSimulating}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back
-          </Button>
-          <Button onClick={handleSubmit} disabled={isSimulating} variant="outline">
-            Skip Simulation
-            <ArrowRight className="w-4 h-4 ml-2" />
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
-      {/* Simulation Complete */}
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4"
-      >
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center">
-            <Check className="w-5 h-5 text-white" />
-          </div>
+      {/* Bypass Notice */}
+      {isBypassed && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-amber-950/30 border border-amber-500/30 rounded-lg p-4 flex items-center gap-3"
+        >
+          <ShieldOff className="w-5 h-5 text-amber-400 flex-shrink-0" />
           <div>
-            <p className="font-medium text-green-900 dark:text-green-100">
-              Simulation Complete
-            </p>
-            <p className="text-sm text-green-700 dark:text-green-300">
-              Market viability: Good - Proceed with deployment
+            <p className="text-sm font-medium text-amber-300">সিমুলেশন বাইপাস সক্রিয়</p>
+            <p className="text-xs text-amber-400/70">
+              সিমুলেশন এড়িয়ে যাওয়া হচ্ছে। আপনি এখনও ঐচ্ছিকভাবে চালাতে পারেন।
             </p>
           </div>
+        </motion.div>
+      )}
+
+      {/* Market Preview */}
+      <Card className="bg-slate-900/50 border-slate-700/50 p-4">
+        <h4 className="text-sm font-semibold text-white mb-3">মার্কেট প্রিভিউ (Market Preview)</h4>
+        <div className="bg-slate-800/50 rounded-lg p-4 space-y-3">
+          <div className="flex items-center gap-3">
+            {draft?.image_url && (
+              <div className="w-12 h-12 rounded-lg overflow-hidden border border-slate-700 flex-shrink-0">
+                <img src={draft.image_url} alt="" className="w-full h-full object-cover" />
+              </div>
+            )}
+            <div>
+              <p className="text-white font-medium">{draft?.question || 'N/A'}</p>
+              <div className="flex gap-2 mt-1">
+                <Badge className="bg-slate-700/50 text-slate-300 text-xs">{draft?.category}</Badge>
+                <Badge className="bg-slate-700/50 text-slate-300 text-xs">{draft?.market_type}</Badge>
+              </div>
+            </div>
+          </div>
+          {draft?.description && (
+            <p className="text-xs text-slate-400">{draft.description}</p>
+          )}
         </div>
-      </motion.div>
+      </Card>
+
+      {/* Simulation Controls */}
+      {!completed && (
+        <div className="text-center py-8">
+          <div className="w-20 h-20 mx-auto bg-slate-800 rounded-full flex items-center justify-center mb-4">
+            {isRunning ? (
+              <RefreshCw className="w-10 h-10 text-primary animate-spin" />
+            ) : (
+              <Play className="w-10 h-10 text-primary" />
+            )}
+          </div>
+          <h3 className="text-white font-semibold mb-2">
+            {isRunning ? 'সিমুলেশন চলছে...' : 'সিমুলেশন চালান'}
+          </h3>
+          <p className="text-sm text-slate-400 mb-4">
+            ভার্চুয়াল ট্রেডিং ডেটা দিয়ে মার্কেটের কার্যকারিতা পরীক্ষা করুন
+          </p>
+          {!isRunning && (
+            <Button onClick={runSimulation} size="lg">
+              <Play className="w-4 h-4 mr-2" />
+              সিমুলেশন শুরু করুন
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* Simulation Results */}
-      <Tabs defaultValue="overview">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="liquidity">Liquidity</TabsTrigger>
-          <TabsTrigger value="prices">Prices</TabsTrigger>
-          <TabsTrigger value="fees">Fees</TabsTrigger>
-        </TabsList>
+      {results && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-4"
+        >
+          <div className="flex items-center justify-between">
+            <h4 className="text-sm font-semibold text-white flex items-center gap-2">
+              <BarChart2 className="w-4 h-4 text-green-400" />
+              সিমুলেশন ফলাফল
+            </h4>
+            <Button variant="ghost" size="sm" onClick={runSimulation} className="text-slate-400 hover:text-white">
+              <RefreshCw className="w-3 h-3 mr-1" />
+              পুনরায় চালান
+            </Button>
+          </div>
 
-        <TabsContent value="overview" className="space-y-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Card className="p-4">
-              <p className="text-sm text-muted-foreground">Est. Volume</p>
-              <p className="text-2xl font-bold">${simulationData.estimatedVolume.toLocaleString()}</p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <Card className="bg-slate-800/50 border-slate-700/50 p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <Activity className="w-4 h-4 text-blue-400" />
+                <span className="text-xs text-slate-400">মোট ট্রেড</span>
+              </div>
+              <p className="text-xl font-bold text-white">{results.totalTrades}</p>
             </Card>
-            <Card className="p-4">
-              <p className="text-sm text-muted-foreground">Est. Traders</p>
-              <p className="text-2xl font-bold">{simulationData.estimatedTraders}</p>
+            <Card className="bg-slate-800/50 border-slate-700/50 p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <DollarSign className="w-4 h-4 text-green-400" />
+                <span className="text-xs text-slate-400">মোট ভলিউম</span>
+              </div>
+              <p className="text-xl font-bold text-white">${results.totalVolume.toLocaleString()}</p>
             </Card>
-            <Card className="p-4">
-              <p className="text-sm text-muted-foreground">Initial Price</p>
-              <p className="text-2xl font-bold">${simulationData.priceDiscovery.initialPrice.toFixed(2)}</p>
+            <Card className="bg-slate-800/50 border-slate-700/50 p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <Users className="w-4 h-4 text-violet-400" />
+                <span className="text-xs text-slate-400">ট্রেডার</span>
+              </div>
+              <p className="text-xl font-bold text-white">{results.uniqueTraders}</p>
             </Card>
-            <Card className="p-4">
-              <p className="text-sm text-muted-foreground">Volatility</p>
-              <p className="text-2xl font-bold">{(simulationData.priceDiscovery.volatility * 100).toFixed(1)}%</p>
+            <Card className="bg-slate-800/50 border-slate-700/50 p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <TrendingUp className="w-4 h-4 text-amber-400" />
+                <span className="text-xs text-slate-400">প্রত্যাশিত ফি</span>
+              </div>
+              <p className="text-xl font-bold text-white">${results.expectedFees.toLocaleString()}</p>
             </Card>
           </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm font-medium">Price Discovery Projection</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-32 flex items-end gap-1">
-                {Array.from({ length: 20 }, (_, i) => {
-                  const height = 30 + Math.random() * 50;
-                  return (
-                    <div
-                      key={i}
-                      className="flex-1 bg-primary/20 rounded-t"
-                      style={{ height: `${height}%` }}
-                    />
-                  );
-                })}
+          <Card className="bg-slate-800/50 border-slate-700/50 p-4">
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <span className="text-slate-400">গড় মূল্য:</span>
+                <span className="text-white ml-2">{results.avgPrice}¢</span>
               </div>
-              <div className="flex justify-between text-xs text-muted-foreground mt-2">
-                <span>Launch</span>
-                <span>25%</span>
-                <span>50%</span>
-                <span>75%</span>
-                <span>Resolution</span>
+              <div>
+                <span className="text-slate-400">মূল্য সীমা:</span>
+                <span className="text-white ml-2">{results.priceRange[0]}¢ — {results.priceRange[1]}¢</span>
               </div>
-            </CardContent>
+              <div>
+                <span className="text-slate-400">তারল্য গভীরতা:</span>
+                <span className="text-white ml-2">${results.liquidityDepth.toLocaleString()}</span>
+              </div>
+              <div>
+                <span className="text-slate-400">স্প্রেড:</span>
+                <span className="text-white ml-2">{results.spreadPercent}%</span>
+              </div>
+            </div>
           </Card>
-        </TabsContent>
 
-        <TabsContent value="liquidity" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm">YES Side Depth</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {simulationData.liquidityDepth.yes.slice(0, 5).map((level: any, i: number) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <span className="text-sm w-12">${level.price.toFixed(2)}</span>
-                    <div className="flex-1 h-4 bg-gray-100 dark:bg-gray-800 rounded overflow-hidden">
-                      <div 
-                        className="h-full bg-green-500"
-                        style={{ width: `${Math.min(level.size / 10, 100)}%` }}
-                      />
-                    </div>
-                    <span className="text-xs text-muted-foreground">{level.size}</span>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm">NO Side Depth</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {simulationData.liquidityDepth.no.slice(0, 5).map((level: any, i: number) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <span className="text-sm w-12">${level.price.toFixed(2)}</span>
-                    <div className="flex-1 h-4 bg-gray-100 dark:bg-gray-800 rounded overflow-hidden">
-                      <div 
-                        className="h-full bg-red-500"
-                        style={{ width: `${Math.min(level.size / 10, 100)}%` }}
-                      />
-                    </div>
-                    <span className="text-xs text-muted-foreground">{level.size}</span>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
+          <div className="flex items-center gap-2 text-green-400">
+            <CheckCircle className="w-4 h-4" />
+            <span className="text-sm">সিমুলেশন সফলভাবে সম্পন্ন হয়েছে</span>
           </div>
-        </TabsContent>
-
-        <TabsContent value="prices" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Projected Price Range</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between py-8">
-                <div className="text-center">
-                  <p className="text-3xl font-bold text-red-500">
-                    ${simulationData.priceDiscovery.projectedRange[0].toFixed(2)}
-                  </p>
-                  <p className="text-sm text-muted-foreground">Low</p>
-                </div>
-                <div className="flex-1 px-8">
-                  <div className="h-2 bg-gradient-to-r from-red-500 via-yellow-500 to-green-500 rounded-full relative">
-                    <div 
-                      className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white border-2 border-primary rounded-full"
-                      style={{ left: '50%' }}
-                    />
-                  </div>
-                </div>
-                <div className="text-center">
-                  <p className="text-3xl font-bold text-green-500">
-                    ${simulationData.priceDiscovery.projectedRange[1].toFixed(2)}
-                  </p>
-                  <p className="text-sm text-muted-foreground">High</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="fees" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Activity className="w-6 h-6 text-primary" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Platform Fee</p>
-                  <p className="text-2xl font-bold">{simulationData.fees.platform}%</p>
-                </div>
-              </div>
-            </Card>
-            <Card className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center">
-                  <DollarSign className="w-6 h-6 text-green-500" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Est. Daily Fees</p>
-                  <p className="text-2xl font-bold">${simulationData.fees.estimatedDaily}</p>
-                </div>
-              </div>
-            </Card>
-          </div>
-        </TabsContent>
-      </Tabs>
+        </motion.div>
+      )}
 
       {/* Navigation */}
-      <div className="flex justify-between pt-6 border-t">
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={onBack} disabled={isSaving}>
+      <div className="flex justify-between pt-6 border-t border-slate-800">
+        {onBack && (
+          <Button variant="outline" onClick={onBack} className="border-slate-700 text-slate-300 hover:text-white">
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Back
+            পিছনে
           </Button>
-          <Button variant="outline" onClick={runSimulation} disabled={isSaving || isSimulating}>
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Re-run
-          </Button>
-        </div>
-        <Button onClick={handleSubmit} disabled={isSaving} size="lg">
+        )}
+        <Button
+          onClick={handleSubmit}
+          disabled={isSaving || (!completed && !isBypassed)}
+          className="ml-auto"
+          size="lg"
+        >
           {isSaving ? (
             <>
               <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
-              Saving...
+              সংরক্ষণ হচ্ছে...
             </>
           ) : (
             <>
-              Continue to Deployment
+              পরবর্তী ধাপ
               <ArrowRight className="w-4 h-4 ml-2" />
             </>
           )}

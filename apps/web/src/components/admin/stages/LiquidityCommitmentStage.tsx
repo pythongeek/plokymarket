@@ -12,9 +12,10 @@ import {
   Lock,
   Unlock,
   Clock,
-  TrendingUp
+  TrendingUp,
+  Zap,
+  ShieldOff
 } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -30,6 +31,7 @@ interface LiquidityCommitmentStageProps {
   onBack?: () => void;
   isSaving: boolean;
   errors: string[];
+  adminBypass?: { liquidity: boolean; legal_review: boolean; simulation: boolean };
 }
 
 const MIN_LIQUIDITY = 1000;
@@ -40,260 +42,215 @@ export function LiquidityCommitmentStage({
   onSave,
   onBack,
   isSaving,
-  errors
+  errors,
+  adminBypass
 }: LiquidityCommitmentStageProps) {
-  const { t } = useTranslation();
-  const [amount, setAmount] = useState(draft.liquidity_commitment || MIN_LIQUIDITY);
-  const [isDeposited, setIsDeposited] = useState(draft.liquidity_deposited || false);
-  const [txHash, setTxHash] = useState('');
-  const [showDepositForm, setShowDepositForm] = useState(false);
+  const isBypassed = adminBypass?.liquidity || false;
+  const [amount, setAmount] = useState(draft?.liquidity_amount || draft?.liquidity_commitment || (isBypassed ? 0 : MIN_LIQUIDITY));
+  const [isDeposited, setIsDeposited] = useState(draft?.liquidity_deposited || isBypassed);
+  const [txHash, setTxHash] = useState(draft?.liquidity_tx_hash || '');
 
   const handleSubmit = async () => {
-    if (!isDeposited) {
-      setShowDepositForm(true);
-      return;
-    }
-
-    await onSave({
+    const data: Record<string, any> = {
+      liquidity_amount: amount,
       liquidity_commitment: amount,
-      liquidity_deposited: true,
-      liquidity_tx_hash: txHash
-    });
+      liquidity_deposited: isDeposited || isBypassed,
+      liquidity_tx_hash: txHash || (isBypassed ? 'ADMIN_BYPASS' : undefined),
+      admin_bypass_liquidity: isBypassed
+    };
+    await onSave(data);
   };
 
   const handleSimulateDeposit = () => {
-    // Simulate deposit for demo purposes
-    setTxHash('0x' + Array(64).fill(0).map(() => Math.floor(Math.random() * 16).toString(16)).join(''));
     setIsDeposited(true);
-    setShowDepositForm(false);
+    setTxHash(`0x${Date.now().toString(16)}${'a'.repeat(40)}`);
   };
 
   const getLiquidityTier = (value: number) => {
-    if (value >= 10000) return { name: 'Platinum', color: 'text-purple-500', benefits: ['Priority listing', 'Featured badge', 'Reduced fees'] };
-    if (value >= 5000) return { name: 'Gold', color: 'text-yellow-500', benefits: ['Featured badge', 'Reduced fees'] };
-    if (value >= 2000) return { name: 'Silver', color: 'text-gray-400', benefits: ['Reduced fees'] };
-    return { name: 'Bronze', color: 'text-amber-600', benefits: ['Standard listing'] };
+    if (value >= 50000) return { label: 'প্রিমিয়াম (Premium)', color: 'text-amber-400', bg: 'bg-amber-500/10' };
+    if (value >= 10000) return { label: 'উচ্চ (High)', color: 'text-emerald-400', bg: 'bg-emerald-500/10' };
+    if (value >= 5000) return { label: 'স্ট্যান্ডার্ড (Standard)', color: 'text-blue-400', bg: 'bg-blue-500/10' };
+    return { label: 'বেসিক (Basic)', color: 'text-slate-400', bg: 'bg-slate-500/10' };
   };
 
   const tier = getLiquidityTier(amount);
+  const effectiveMin = isBypassed ? 0 : MIN_LIQUIDITY;
 
   return (
     <div className="space-y-6">
-      {/* Info Header */}
-      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-        <div className="flex gap-3">
-          <Info className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="font-medium text-blue-900 dark:text-blue-100">
-              Liquidity Commitment Required
-            </p>
-            <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
-              Creators must commit a minimum of ${MIN_LIQUIDITY.toLocaleString()} in liquidity 
-              to ensure sufficient market depth. This liquidity will be returned when the market resolves.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Amount Selection */}
-      <div className="space-y-6">
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <Label className="text-lg font-medium">
-              Liquidity Amount
-            </Label>
-            <div className="text-right">
-              <span className="text-3xl font-bold">${amount.toLocaleString()}</span>
-              <span className="text-sm text-muted-foreground ml-1">USDC</span>
-            </div>
-          </div>
-
-          <Slider
-            value={[amount]}
-            onValueChange={([v]) => setAmount(v)}
-            min={MIN_LIQUIDITY}
-            max={50000}
-            step={100}
-            className="py-4"
-          />
-
-          <div className="flex justify-between text-xs text-muted-foreground">
-            <span>Min: ${MIN_LIQUIDITY.toLocaleString()}</span>
-            <span>Recommended: ${RECOMMENDED_LIQUIDITY.toLocaleString()}</span>
-            <span>Max: $50,000</span>
-          </div>
-        </div>
-
-        {/* Quick Select */}
-        <div className="flex gap-2">
-          {[1000, 2500, 5000, 10000, 25000].map((value) => (
-            <button
-              key={value}
-              onClick={() => setAmount(value)}
-              className={cn(
-                "px-4 py-2 rounded-lg text-sm font-medium transition-all",
-                amount === value
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-gray-100 dark:bg-gray-800 hover:bg-gray-200"
-              )}
-            >
-              ${(value / 1000)}K
-            </button>
-          ))}
-        </div>
-
-        {/* Tier Benefits */}
+      {/* Bypass Notice */}
+      {isBypassed && (
         <motion.div
-          key={tier.name}
-          initial={{ opacity: 0, y: 10 }}
+          initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className={cn(
-            "p-4 rounded-xl border-2",
-            tier.name === 'Platinum' ? 'border-purple-200 bg-purple-50 dark:bg-purple-900/20' :
-            tier.name === 'Gold' ? 'border-yellow-200 bg-yellow-50 dark:bg-yellow-900/20' :
-            tier.name === 'Silver' ? 'border-gray-200 bg-gray-50 dark:bg-gray-800/50' :
-            'border-amber-200 bg-amber-50 dark:bg-amber-900/20'
-          )}
+          className="bg-amber-950/30 border border-amber-500/30 rounded-lg p-4 flex items-center gap-3"
         >
-          <div className="flex items-center gap-3 mb-3">
-            <TrendingUp className={cn("w-6 h-6", tier.color)} />
-            <div>
-              <p className={cn("font-bold text-lg", tier.color)}>{tier.name} Tier</p>
-              <p className="text-sm text-muted-foreground">
-                With ${amount.toLocaleString()} commitment
-              </p>
-            </div>
-          </div>
-          <div className="space-y-1">
-            <p className="text-sm font-medium">Benefits:</p>
-            <ul className="text-sm text-muted-foreground space-y-1">
-              {tier.benefits.map((benefit, i) => (
-                <li key={i} className="flex items-center gap-2">
-                  <Check className="w-3 h-3 text-green-500" />
-                  {benefit}
-                </li>
-              ))}
-            </ul>
+          <ShieldOff className="w-5 h-5 text-amber-400 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-medium text-amber-300">অ্যাডমিন বাইপাস সক্রিয়</p>
+            <p className="text-xs text-amber-400/70">
+              তারল্য ন্যূনতম $১,০০০ প্রয়োজনীয়তা বাইপাস করা হয়েছে। আপনি যেকোনো পরিমাণে (০ সহ) এগিয়ে যেতে পারেন।
+            </p>
           </div>
         </motion.div>
+      )}
 
-        {/* Commitment Info */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card className="p-4">
-            <div className="flex items-center gap-3">
-              <Lock className="w-8 h-8 text-primary" />
-              <div>
-                <p className="font-medium">Locked Until Resolution</p>
-                <p className="text-xs text-muted-foreground">
-                  Funds locked until market resolves
-                </p>
-              </div>
-            </div>
-          </Card>
-          <Card className="p-4">
-            <div className="flex items-center gap-3">
-              <Unlock className="w-8 h-8 text-green-500" />
-              <div>
-                <p className="font-medium">Fully Refundable</p>
-                <p className="text-xs text-muted-foreground">
-                  Get liquidity back after resolution
-                </p>
-              </div>
-            </div>
-          </Card>
-          <Card className="p-4">
-            <div className="flex items-center gap-3">
-              <Clock className="w-8 h-8 text-blue-500" />
-              <div>
-                <p className="font-medium">24h Funding Window</p>
-                <p className="text-xs text-muted-foreground">
-                  Auto-cancel if unfunded
-                </p>
-              </div>
-            </div>
-          </Card>
+      {/* Amount Input */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <Label className="text-slate-300 text-lg font-semibold">
+            তারল্য পরিমাণ (Liquidity Amount)
+          </Label>
+          <Badge className={cn("border", tier.bg, tier.color, "border-current/20")}>
+            {tier.label}
+          </Badge>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <div className="text-3xl font-bold text-white">$</div>
+          <Input
+            type="number"
+            value={amount}
+            onChange={(e) => setAmount(Number(e.target.value))}
+            min={effectiveMin}
+            className="bg-slate-900 border-slate-700 text-white text-2xl font-bold h-14"
+          />
+        </div>
+
+        <Slider
+          value={[Math.min(amount, 100000)]}
+          onValueChange={([val]) => setAmount(val)}
+          min={effectiveMin}
+          max={100000}
+          step={isBypassed ? 100 : 500}
+          className="w-full"
+        />
+
+        <div className="flex justify-between text-xs text-slate-500">
+          <span>${effectiveMin.toLocaleString()}</span>
+          <span>${RECOMMENDED_LIQUIDITY.toLocaleString()} (প্রস্তাবিত)</span>
+          <span>$100,000</span>
         </div>
       </div>
 
-      {/* Deposit Status */}
-      {isDeposited ? (
+      {/* Quick Amount Buttons */}
+      <div className="flex flex-wrap gap-2">
+        {(isBypassed ? [0, 100, 500] : []).concat([1000, 5000, 10000, 25000, 50000]).map((val) => (
+          <Button
+            key={val}
+            variant="outline"
+            size="sm"
+            onClick={() => setAmount(val)}
+            className={cn(
+              "border-slate-700 text-slate-400 hover:text-white",
+              amount === val && "border-primary text-primary"
+            )}
+          >
+            ${val.toLocaleString()}
+          </Button>
+        ))}
+      </div>
+
+      {/* Tier Benefits */}
+      <Card className="bg-slate-900/50 border-slate-700/50 p-4">
+        <h4 className="text-sm font-semibold text-white mb-3">টায়ার সুবিধা (Tier Benefits)</h4>
+        <div className="grid grid-cols-2 gap-3">
+          <div className={cn("p-3 rounded-lg border", amount >= 1000 ? "border-green-500/30 bg-green-500/5" : "border-slate-700 bg-slate-900/30")}>
+            <div className="flex items-center gap-2 mb-1">
+              {amount >= 1000 ? <Check className="w-4 h-4 text-green-400" /> : <Lock className="w-4 h-4 text-slate-500" />}
+              <span className="text-xs font-medium text-slate-300">বেসিক লিস্টিং</span>
+            </div>
+            <p className="text-[10px] text-slate-500">$1,000+</p>
+          </div>
+          <div className={cn("p-3 rounded-lg border", amount >= 5000 ? "border-blue-500/30 bg-blue-500/5" : "border-slate-700 bg-slate-900/30")}>
+            <div className="flex items-center gap-2 mb-1">
+              {amount >= 5000 ? <Check className="w-4 h-4 text-blue-400" /> : <Lock className="w-4 h-4 text-slate-500" />}
+              <span className="text-xs font-medium text-slate-300">ফিচার্ড মার্কেট</span>
+            </div>
+            <p className="text-[10px] text-slate-500">$5,000+</p>
+          </div>
+          <div className={cn("p-3 rounded-lg border", amount >= 10000 ? "border-emerald-500/30 bg-emerald-500/5" : "border-slate-700 bg-slate-900/30")}>
+            <div className="flex items-center gap-2 mb-1">
+              {amount >= 10000 ? <Check className="w-4 h-4 text-emerald-400" /> : <Lock className="w-4 h-4 text-slate-500" />}
+              <span className="text-xs font-medium text-slate-300">ডীপ অর্ডারবুক</span>
+            </div>
+            <p className="text-[10px] text-slate-500">$10,000+</p>
+          </div>
+          <div className={cn("p-3 rounded-lg border", amount >= 50000 ? "border-amber-500/30 bg-amber-500/5" : "border-slate-700 bg-slate-900/30")}>
+            <div className="flex items-center gap-2 mb-1">
+              {amount >= 50000 ? <Check className="w-4 h-4 text-amber-400" /> : <Lock className="w-4 h-4 text-slate-500" />}
+              <span className="text-xs font-medium text-slate-300">প্রিমিয়াম প্রোমোশন</span>
+            </div>
+            <p className="text-[10px] text-slate-500">$50,000+</p>
+          </div>
+        </div>
+      </Card>
+
+      {/* Deposit Simulation */}
+      {!isDeposited && !isBypassed && (
+        <div className="bg-blue-900/20 border border-blue-800/50 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Info className="w-4 h-4 text-blue-400" />
+            <span className="text-sm font-medium text-blue-300">ডিপোজিট সিমুলেশন</span>
+          </div>
+          <p className="text-xs text-blue-400/70 mb-3">
+            প্রোডাকশনে এটি একটি প্রকৃত USDC ট্রানজাকশন হবে। এখন সিমুলেট করুন।
+          </p>
+          <Button
+            variant="outline"
+            onClick={handleSimulateDeposit}
+            className="border-blue-500/40 text-blue-300 hover:text-blue-200"
+          >
+            <Wallet className="w-4 h-4 mr-2" />
+            ডিপোজিট সিমুলেট করুন
+          </Button>
+        </div>
+      )}
+
+      {/* Deposit Confirmed */}
+      {(isDeposited || isBypassed) && (
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4"
+          className="bg-green-900/20 border border-green-800/50 rounded-lg p-4"
         >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center">
-              <Check className="w-5 h-5 text-white" />
-            </div>
-            <div className="flex-1">
-              <p className="font-medium text-green-900 dark:text-green-100">
-                Liquidity Deposited
-              </p>
-              <p className="text-sm text-green-700 dark:text-green-300 font-mono">
-                TX: {txHash.slice(0, 20)}...{txHash.slice(-8)}
-              </p>
-            </div>
-            <Badge variant="default" className="bg-green-500">Confirmed</Badge>
+          <div className="flex items-center gap-2">
+            <Check className="w-5 h-5 text-green-400" />
+            <span className="text-sm font-medium text-green-300">
+              {isBypassed ? 'অ্যাডমিন বাইপাস — ডিপোজিট অপ্রয়োজনীয়' : 'ডিপোজিট সিমুলেটেড'}
+            </span>
           </div>
+          {txHash && !isBypassed && (
+            <p className="text-xs text-green-400/60 font-mono mt-1">
+              TX: {txHash.slice(0, 20)}...
+            </p>
+          )}
         </motion.div>
-      ) : showDepositForm ? (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-6 space-y-4"
-        >
-          <h4 className="font-medium">Deposit Liquidity</h4>
-          <p className="text-sm text-muted-foreground">
-            Transfer ${amount.toLocaleString()} USDC to the market creation contract.
-          </p>
-          <div className="space-y-2">
-            <Label>Transaction Hash (after deposit)</Label>
-            <Input
-              placeholder="0x..."
-              value={txHash}
-              onChange={(e) => setTxHash(e.target.value)}
-            />
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setShowDepositForm(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSimulateDeposit} className="flex-1">
-              Confirm Deposit
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground text-center">
-            (Demo mode: Click "Confirm Deposit" to simulate)
-          </p>
-        </motion.div>
-      ) : null}
+      )}
 
       {/* Navigation */}
-      <div className="flex justify-between pt-6 border-t">
-        <Button variant="outline" onClick={onBack} disabled={isSaving}>
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back
-        </Button>
-        <Button 
-          onClick={handleSubmit} 
-          disabled={isSaving || (showDepositForm && !txHash)}
+      <div className="flex justify-between pt-6 border-t border-slate-800">
+        {onBack && (
+          <Button variant="outline" onClick={onBack} className="border-slate-700 text-slate-300 hover:text-white">
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            পিছনে
+          </Button>
+        )}
+        <Button
+          onClick={handleSubmit}
+          disabled={isSaving || (!isBypassed && amount < MIN_LIQUIDITY)}
+          className="ml-auto"
           size="lg"
         >
           {isSaving ? (
             <>
               <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
-              Processing...
-            </>
-          ) : isDeposited ? (
-            <>
-              Continue
-              <ArrowRight className="w-4 h-4 ml-2" />
+              সংরক্ষণ হচ্ছে...
             </>
           ) : (
             <>
-              <Wallet className="w-4 h-4 mr-2" />
-              Deposit Liquidity
+              পরবর্তী ধাপ
+              <ArrowRight className="w-4 h-4 ml-2" />
             </>
           )}
         </Button>

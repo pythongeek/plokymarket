@@ -8,6 +8,8 @@ export interface MarketTemplate {
   description: string;
   market_type: 'binary' | 'categorical' | 'scalar' | 'custom';
   category: string;
+  is_premium?: boolean;
+  is_active?: boolean;
   default_params?: Record<string, any>;
   validation_rules?: Record<string, any>;
   ui_config?: Record<string, any>;
@@ -19,11 +21,11 @@ export interface MarketDraft {
   current_stage: string;
   status: 'draft' | 'in_review' | 'approved' | 'rejected' | 'deployed';
   stages_completed: string[];
-  
+
   // Stage 1
   market_type?: string;
   template_id?: string;
-  
+
   // Stage 2
   question?: string;
   description?: string;
@@ -40,29 +42,48 @@ export interface MarketDraft {
   resolution_deadline?: string;
   oracle_type?: string;
   oracle_config?: Record<string, any>;
-  
+  image_url?: string;
+
   // Stage 3
   liquidity_commitment: number;
+  liquidity_amount?: number;
   liquidity_deposited: boolean;
   liquidity_tx_hash?: string;
-  
+
   // Stage 4
   sensitive_topics?: string[];
   regulatory_risk_level?: 'low' | 'medium' | 'high';
   legal_review_status?: 'pending' | 'approved' | 'rejected' | 'escalated';
   legal_review_notes?: string;
   requires_senior_counsel: boolean;
-  
+
   // Stage 5
   simulation_config?: Record<string, any>;
   simulation_results?: Record<string, any>;
-  
+
   // Stage 6
   deployment_config?: Record<string, any>;
   deployment_tx_hash?: string;
   deployed_market_id?: string;
   deployed_at?: string;
-  
+
+  // Verification & Oracle Config
+  verification_method?: {
+    type: string;
+    sources: string[];
+  };
+  required_confirmations?: number;
+  confidence_threshold?: number;
+
+  // Trading Config
+  trading_fee_percent?: number;
+  trading_end_type?: 'date' | 'manual' | 'event_triggered';
+
+  // Admin Bypass
+  admin_bypass_liquidity?: boolean;
+  admin_bypass_legal_review?: boolean;
+  admin_bypass_simulation?: boolean;
+
   created_at: string;
   updated_at: string;
 }
@@ -105,7 +126,7 @@ class MarketCreationService {
 
     const res = await fetch(`/api/admin/market-creation?${params}`);
     if (!res.ok) throw new Error('Failed to fetch drafts');
-    
+
     const { data } = await res.json();
     return data;
   }
@@ -113,14 +134,14 @@ class MarketCreationService {
   async getDraft(draftId: string): Promise<MarketDraft> {
     const res = await fetch(`/api/admin/market-creation?id=${draftId}`);
     if (!res.ok) throw new Error('Failed to fetch draft');
-    
+
     const { data } = await res.json();
     return data;
   }
 
   async updateStage(
-    draftId: string, 
-    stage: string, 
+    draftId: string,
+    stage: string,
     stageData: Record<string, any>
   ): Promise<boolean> {
     const res = await fetch('/api/admin/market-creation', {
@@ -158,7 +179,7 @@ class MarketCreationService {
   async getTemplates(): Promise<MarketTemplate[]> {
     const res = await fetch('/api/admin/market-creation/templates');
     if (!res.ok) throw new Error('Failed to fetch templates');
-    
+
     const { data } = await res.json();
     return data;
   }
@@ -170,7 +191,7 @@ class MarketCreationService {
   async getLegalReviewQueue(): Promise<LegalReviewItem[]> {
     const res = await fetch('/api/admin/market-creation/legal-review');
     if (!res.ok) throw new Error('Failed to fetch review queue');
-    
+
     const { data } = await res.json();
     return data;
   }
@@ -192,7 +213,7 @@ class MarketCreationService {
   }
 
   async completeLegalReview(
-    draftId: string, 
+    draftId: string,
     status: 'approved' | 'rejected' | 'escalated',
     notes?: string
   ): Promise<boolean> {
@@ -216,8 +237,8 @@ class MarketCreationService {
   // ============================================
 
   async recordLiquidityDeposit(
-    draftId: string, 
-    txHash: string, 
+    draftId: string,
+    txHash: string,
     amount: number
   ): Promise<boolean> {
     const res = await fetch('/api/admin/market-creation/liquidity', {
@@ -240,7 +261,7 @@ class MarketCreationService {
   // ============================================
 
   async deployMarket(
-    draftId: string, 
+    draftId: string,
     deploymentConfig?: Record<string, any>
   ): Promise<{ market_id: string; deployed_at: string }> {
     const res = await fetch('/api/admin/market-creation/deploy', {
@@ -263,6 +284,7 @@ class MarketCreationService {
 
   validateStage(stage: string, data: Record<string, any>): string[] {
     const errors: string[] = [];
+    const isBypassed = (flag: string) => data[flag] === true;
 
     switch (stage) {
       case 'template_selection':
@@ -271,18 +293,18 @@ class MarketCreationService {
 
       case 'parameter_configuration':
         if (!data.question?.trim()) errors.push('Question is required');
-        if (data.question?.length < 10) errors.push('Question must be at least 10 characters');
+        if (data.question && data.question.length < 10) errors.push('Question must be at least 10 characters');
         if (!data.category) errors.push('Category is required');
         if (!data.resolution_deadline) errors.push('Resolution deadline is required');
         if (!data.resolution_criteria?.trim()) errors.push('Resolution criteria is required');
-        
+
         // Scalar market validation
         if (data.market_type === 'scalar') {
           if (data.min_value === undefined) errors.push('Minimum value is required for scalar markets');
           if (data.max_value === undefined) errors.push('Maximum value is required for scalar markets');
           if (data.min_value >= data.max_value) errors.push('Minimum must be less than maximum');
         }
-        
+
         // Categorical market validation
         if (data.market_type === 'categorical') {
           if (!data.outcomes || data.outcomes.length < 2) {
@@ -292,10 +314,14 @@ class MarketCreationService {
         break;
 
       case 'liquidity_commitment':
-        if (!data.liquidity_commitment || data.liquidity_commitment < 1000) {
-          errors.push('Minimum liquidity commitment is $1,000');
+        if (!isBypassed('admin_bypass_liquidity')) {
+          if (!data.liquidity_amount || data.liquidity_amount < 1000) {
+            errors.push('Minimum liquidity commitment is $1,000 (or enable admin bypass)');
+          }
         }
         break;
+
+      // Legal review and simulation bypassed via admin flags — no hard validation
     }
 
     return errors;

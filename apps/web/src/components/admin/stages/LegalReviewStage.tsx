@@ -14,13 +14,15 @@ import {
   FileText,
   AlertCircle,
   Scale,
-  Gavel
+  Gavel,
+  ShieldOff,
+  Zap
 } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import type { MarketDraft } from '@/lib/market-creation/service';
 
@@ -30,27 +32,32 @@ interface LegalReviewStageProps {
   onBack?: () => void;
   isSaving: boolean;
   errors: string[];
+  adminBypass?: { liquidity: boolean; legal_review: boolean; simulation: boolean };
 }
 
 const RISK_INDICATORS = [
   {
-    category: 'Political Sensitivity',
-    keywords: ['election fraud', 'corruption', 'coup', 'assassination'],
+    category: 'রাজনৈতিক সংবেদনশীলতা',
+    categoryEn: 'Political Sensitivity',
+    keywords: ['election fraud', 'corruption', 'coup', 'assassination', 'নির্বাচন'],
     level: 'high'
   },
   {
-    category: 'Violence & Harm',
-    keywords: ['terrorism', 'war', 'death', 'violence'],
+    category: 'সহিংসতা ও ক্ষতি',
+    categoryEn: 'Violence & Harm',
+    keywords: ['terrorism', 'war', 'death', 'violence', 'যুদ্ধ'],
     level: 'high'
   },
   {
-    category: 'Regulated Activities',
-    keywords: ['gambling', 'insider trading', 'market manipulation'],
+    category: 'আর্থিক নিয়মকানুন',
+    categoryEn: 'Financial Regulation',
+    keywords: ['gambling', 'insider trading', 'market manipulation', 'জুয়া'],
     level: 'medium'
   },
   {
-    category: 'Health & Safety',
-    keywords: ['pandemic', 'disease outbreak', 'public health emergency'],
+    category: 'স্বাস্থ্য ও নিরাপত্তা',
+    categoryEn: 'Health & Safety',
+    keywords: ['pandemic', 'disease outbreak', 'public health emergency', 'মহামারী'],
     level: 'medium'
   }
 ];
@@ -60,336 +67,217 @@ export function LegalReviewStage({
   onSave,
   onBack,
   isSaving,
-  errors
+  errors,
+  adminBypass
 }: LegalReviewStageProps) {
-  const { t } = useTranslation();
-  const [isSubmitted, setIsSubmitted] = useState(draft.legal_review_status === 'pending');
-  const [isApproved, setIsApproved] = useState(draft.legal_review_status === 'approved');
-  const [notes, setNotes] = useState('');
-  const [detectedIssues, setDetectedIssues] = useState<string[]>([]);
+  const isBypassed = adminBypass?.legal_review || false;
+  const [reviewNotes, setReviewNotes] = useState(draft?.legal_review_notes || '');
+  const [detectedRisks, setDetectedRisks] = useState<Array<{ category: string; categoryEn: string; level: string; keywords: string[] }>>([]);
+  const [selfApproved, setSelfApproved] = useState(
+    draft?.legal_review_status === 'approved' || isBypassed
+  );
 
-  // Auto-scan for sensitive topics
+  // Detect risk indicators in question/description
   useEffect(() => {
-    const text = `${draft.question || ''} ${draft.description || ''}`.toLowerCase();
-    const issues: string[] = [];
-
-    RISK_INDICATORS.forEach(indicator => {
-      const found = indicator.keywords.filter(k => text.includes(k));
-      if (found.length > 0) {
-        issues.push(`${indicator.category}: "${found.join(', ')}" detected`);
-      }
-    });
-
-    setDetectedIssues(issues);
-  }, [draft]);
+    const text = `${draft?.question || ''} ${draft?.description || ''}`.toLowerCase();
+    const risks = RISK_INDICATORS.filter(indicator =>
+      indicator.keywords.some(keyword => text.includes(keyword.toLowerCase()))
+    );
+    setDetectedRisks(risks);
+  }, [draft?.question, draft?.description]);
 
   const handleSubmit = async () => {
-    await onSave({});
+    await onSave({
+      legal_review_status: 'approved',
+      legal_review_notes: reviewNotes || (isBypassed ? 'Admin bypass - self-approved' : 'Self-approved by admin'),
+      admin_bypass_legal_review: isBypassed
+    });
   };
 
-  const handleSubmitForReview = async () => {
-    // In a real implementation, this would call the API
-    setIsSubmitted(true);
+  const handleSelfApprove = () => {
+    setSelfApproved(true);
+    setReviewNotes(prev => prev || 'অ্যাডমিন দ্বারা স্ব-অনুমোদিত');
   };
 
-  const riskLevel = detectedIssues.length === 0 ? 'low' : 
-    detectedIssues.some(i => i.includes('Political') || i.includes('Violence')) ? 'high' : 'medium';
-
-  if (isApproved) {
-    return (
-      <div className="space-y-6">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-8 text-center"
-        >
-          <div className="w-16 h-16 rounded-full bg-green-500 flex items-center justify-center mx-auto mb-4">
-            <Check className="w-8 h-8 text-white" />
-          </div>
-          <h3 className="text-xl font-bold text-green-900 dark:text-green-100 mb-2">
-            Legal Review Approved
-          </h3>
-          <p className="text-green-700 dark:text-green-300">
-            This market has passed legal review and is ready for deployment.
-          </p>
-          {draft.legal_review_notes && (
-            <div className="mt-4 p-4 bg-white dark:bg-gray-800 rounded-lg text-left">
-              <p className="text-sm font-medium mb-1">Reviewer Notes:</p>
-              <p className="text-sm text-muted-foreground">{draft.legal_review_notes}</p>
-            </div>
-          )}
-        </motion.div>
-
-        <div className="flex justify-between pt-6 border-t">
-          <Button variant="outline" onClick={onBack} disabled={isSaving}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back
-          </Button>
-          <Button onClick={handleSubmit} disabled={isSaving}>
-            Continue
-            <ArrowRight className="w-4 h-4 ml-2" />
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  if (isSubmitted) {
-    return (
-      <div className="space-y-6">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-8"
-        >
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-full bg-amber-500 flex items-center justify-center flex-shrink-0">
-              <Clock className="w-8 h-8 text-white" />
-            </div>
-            <div>
-              <h3 className="text-xl font-bold text-amber-900 dark:text-amber-100 mb-1">
-                Pending Legal Review
-              </h3>
-              <p className="text-amber-700 dark:text-amber-300">
-                Your market is being reviewed by our legal team. This typically takes 24 hours.
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-6 space-y-3">
-            <div className="flex items-center gap-3 text-sm">
-              <Check className="w-4 h-4 text-green-500" />
-              <span>Submitted for review</span>
-            </div>
-            <div className="flex items-center gap-3 text-sm">
-              <Clock className="w-4 h-4 text-amber-500" />
-              <span>Under legal review</span>
-            </div>
-            <div className="flex items-center gap-3 text-sm text-muted-foreground">
-              <div className="w-4 h-4 rounded-full border-2 border-gray-300" />
-              <span>Approval decision</span>
-            </div>
-          </div>
-        </motion.div>
-
-        <Card className="p-4">
-          <h4 className="font-medium flex items-center gap-2 mb-3">
-            <FileText className="w-4 h-4" />
-            Market Summary
-          </h4>
-          <div className="space-y-2 text-sm">
-            <p><span className="text-muted-foreground">Question:</span> {draft.question}</p>
-            <p><span className="text-muted-foreground">Category:</span> {draft.category}</p>
-            <p><span className="text-muted-foreground">Liquidity:</span> ${draft.liquidity_commitment?.toLocaleString()}</p>
-          </div>
-        </Card>
-
-        <div className="flex justify-between pt-6 border-t">
-          <Button variant="outline" onClick={onBack} disabled={isSaving}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back
-          </Button>
-          <Button disabled>
-            <Clock className="w-4 h-4 mr-2" />
-            Awaiting Review
-          </Button>
-        </div>
-      </div>
-    );
-  }
+  const overallRisk = detectedRisks.some(r => r.level === 'high') ? 'high' :
+    detectedRisks.some(r => r.level === 'medium') ? 'medium' : 'low';
 
   return (
     <div className="space-y-6">
-      {/* Risk Assessment */}
-      <div className={cn(
-        "rounded-lg p-4 border",
-        riskLevel === 'low' ? 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800' :
-        riskLevel === 'medium' ? 'bg-amber-50 border-amber-200 dark:bg-amber-900/20 dark:border-amber-800' :
-        'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800'
-      )}>
-        <div className="flex items-center gap-3">
-          {riskLevel === 'low' ? (
-            <Check className="w-6 h-6 text-green-600 dark:text-green-400" />
-          ) : riskLevel === 'medium' ? (
-            <AlertTriangle className="w-6 h-6 text-amber-600 dark:text-amber-400" />
-          ) : (
-            <AlertCircle className="w-6 h-6 text-red-600 dark:text-red-400" />
-          )}
-          <div>
-            <p className={cn(
-              "font-medium",
-              riskLevel === 'low' ? 'text-green-900 dark:text-green-100' :
-              riskLevel === 'medium' ? 'text-amber-900 dark:text-amber-100' :
-              'text-red-900 dark:text-red-100'
-            )}>
-              Risk Assessment: {riskLevel.charAt(0).toUpperCase() + riskLevel.slice(1)}
-            </p>
-            <p className={cn(
-              "text-sm",
-              riskLevel === 'low' ? 'text-green-700 dark:text-green-300' :
-              riskLevel === 'medium' ? 'text-amber-700 dark:text-amber-300' :
-              'text-red-700 dark:text-red-300'
-            )}>
-              {detectedIssues.length === 0 
-                ? 'No sensitive topics detected. This market can proceed.'
-                : `${detectedIssues.length} potential issue(s) detected. Legal review required.`}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Detected Issues */}
-      {detectedIssues.length > 0 && (
+      {/* Bypass Notice */}
+      {isBypassed && (
         <motion.div
-          initial={{ opacity: 0, y: 10 }}
+          initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="space-y-3"
+          className="bg-amber-950/30 border border-amber-500/30 rounded-lg p-4 flex items-center gap-3"
         >
-          <h4 className="font-medium flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-amber-500" />
-            Detected Issues
-          </h4>
-          <div className="space-y-2">
-            {detectedIssues.map((issue, i) => (
-              <div key={i} className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
-                <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5" />
-                <p className="text-sm text-amber-800 dark:text-amber-200">{issue}</p>
-              </div>
-            ))}
+          <ShieldOff className="w-5 h-5 text-amber-400 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-medium text-amber-300">আইনি পর্যালোচনা বাইপাস সক্রিয়</p>
+            <p className="text-xs text-amber-400/70">
+              আইনি পর্যালোচনা প্রক্রিয়া বাইপাস করা হয়েছে। আপনি সরাসরি অনুমোদন করে এগিয়ে যেতে পারেন।
+            </p>
           </div>
         </motion.div>
       )}
 
-      {/* Review Requirements */}
-      <div className="space-y-3">
-        <h4 className="font-medium flex items-center gap-2">
-          <Scale className="w-4 h-4" />
-          Review Requirements
+      {/* Market Summary */}
+      <Card className="bg-slate-900/50 border-slate-700/50 p-4">
+        <h4 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+          <FileText className="w-4 h-4 text-blue-400" />
+          মার্কেট সারসংক্ষেপ (Market Summary)
         </h4>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <Card className={cn(
-            "p-4",
-            draft.liquidity_commitment >= 10000 && "border-green-500 bg-green-50/50"
-          )}>
-            <div className="flex items-center gap-3">
-              {draft.liquidity_commitment >= 10000 ? (
-                <Check className="w-5 h-5 text-green-500" />
-              ) : (
-                <Info className="w-5 h-5 text-muted-foreground" />
-              )}
-              <div>
-                <p className="font-medium">High-Value Markets</p>
-                <p className="text-xs text-muted-foreground">
-                  {draft.liquidity_commitment >= 10000 
-                    ? 'Liquidity ≥$10K requires review'
-                    : 'No additional review needed'}
-                </p>
-              </div>
-            </div>
-          </Card>
-
-          <Card className={cn(
-            "p-4",
-            detectedIssues.length > 0 && "border-amber-500 bg-amber-50/50"
-          )}>
-            <div className="flex items-center gap-3">
-              {detectedIssues.length > 0 ? (
-                <AlertTriangle className="w-5 h-5 text-amber-500" />
-              ) : (
-                <Check className="w-5 h-5 text-green-500" />
-              )}
-              <div>
-                <p className="font-medium">Sensitive Topics</p>
-                <p className="text-xs text-muted-foreground">
-                  {detectedIssues.length > 0
-                    ? `${detectedIssues.length} topic(s) flagged`
-                    : 'No sensitive topics detected'}
-                </p>
-              </div>
-            </div>
-          </Card>
-
-          <Card className="p-4">
-            <div className="flex items-center gap-3">
-              <Gavel className="w-5 h-5 text-muted-foreground" />
-              <div>
-                <p className="font-medium">Regulatory Compliance</p>
-                <p className="text-xs text-muted-foreground">
-                  Checked against local regulations
-                </p>
-              </div>
-            </div>
-          </Card>
-
-          <Card className="p-4">
-            <div className="flex items-center gap-3">
-              <Shield className="w-5 h-5 text-muted-foreground" />
-              <div>
-                <p className="font-medium">Platform Policies</p>
-                <p className="text-xs text-muted-foreground">
-                  Terms of service compliance
-                </p>
-              </div>
-            </div>
-          </Card>
-        </div>
-      </div>
-
-      {/* Review Notes */}
-      {detectedIssues.length > 0 && (
         <div className="space-y-2">
-          <Label htmlFor="notes">Additional Notes for Reviewer</Label>
-          <Textarea
-            id="notes"
-            placeholder="Provide any context or clarification for the legal review team..."
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            className="min-h-[100px]"
-          />
-        </div>
-      )}
-
-      {/* SLA Info */}
-      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-        <div className="flex gap-3">
-          <Clock className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
           <div>
-            <p className="font-medium text-blue-900 dark:text-blue-100">
-              Review Timeline
+            <p className="text-xs text-slate-500">প্রশ্ন</p>
+            <p className="text-sm text-white">{draft?.question || 'N/A'}</p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500">বিবরণ</p>
+            <p className="text-sm text-slate-300">{draft?.description || 'N/A'}</p>
+          </div>
+          <div className="flex gap-4">
+            <div>
+              <p className="text-xs text-slate-500">ক্যাটাগরি</p>
+              <Badge className="bg-slate-800 text-slate-300 border-slate-700">{draft?.category || 'N/A'}</Badge>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500">ধরন</p>
+              <Badge className="bg-slate-800 text-slate-300 border-slate-700">{draft?.market_type || 'N/A'}</Badge>
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* Risk Assessment */}
+      <div className="space-y-3">
+        <h4 className="text-sm font-semibold text-white flex items-center gap-2">
+          <Scale className="w-4 h-4 text-cyan-400" />
+          ঝুঁকি মূল্যায়ন (Risk Assessment)
+        </h4>
+
+        <div className={cn(
+          "flex items-center gap-3 p-3 rounded-lg border",
+          overallRisk === 'high' ? "bg-red-900/20 border-red-800/50" :
+            overallRisk === 'medium' ? "bg-amber-900/20 border-amber-800/50" :
+              "bg-green-900/20 border-green-800/50"
+        )}>
+          <div className={cn(
+            "w-10 h-10 rounded-full flex items-center justify-center",
+            overallRisk === 'high' ? "bg-red-500/20 text-red-400" :
+              overallRisk === 'medium' ? "bg-amber-500/20 text-amber-400" :
+                "bg-green-500/20 text-green-400"
+          )}>
+            {overallRisk === 'low' ? <Check className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
+          </div>
+          <div>
+            <p className="text-sm font-medium text-white">
+              সামগ্রিক ঝুঁকি: {overallRisk === 'high' ? 'উচ্চ' : overallRisk === 'medium' ? 'মাঝারি' : 'কম'}
             </p>
-            <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
-              Standard review: 24 hours<br />
-              Senior counsel (high-risk): 48 hours<br />
-              Escalated cases: Up to 5 business days
+            <p className="text-xs text-slate-400">
+              {detectedRisks.length === 0
+                ? 'কোন সংবেদনশীল বিষয় সনাক্ত হয়নি'
+                : `${detectedRisks.length}টি ঝুঁকি সূচক সনাক্ত হয়েছে`}
             </p>
           </div>
         </div>
+
+        {/* Detected Risks */}
+        {detectedRisks.length > 0 && (
+          <div className="space-y-2">
+            {detectedRisks.map((risk, i) => (
+              <div key={i} className={cn(
+                "p-3 rounded-lg border flex items-center justify-between",
+                risk.level === 'high' ? "bg-red-900/10 border-red-800/30" : "bg-amber-900/10 border-amber-800/30"
+              )}>
+                <div>
+                  <p className="text-sm text-white">{risk.category}</p>
+                  <p className="text-xs text-slate-500">{risk.categoryEn}</p>
+                </div>
+                <Badge className={cn(
+                  "border",
+                  risk.level === 'high'
+                    ? "bg-red-500/20 text-red-300 border-red-500/30"
+                    : "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                )}>
+                  {risk.level === 'high' ? 'উচ্চ ঝুঁকি' : 'মাঝারি ঝুঁকি'}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Admin Self-Approval */}
+      <div className="space-y-3">
+        <h4 className="text-sm font-semibold text-white flex items-center gap-2">
+          <Gavel className="w-4 h-4 text-violet-400" />
+          অ্যাডমিন অনুমোদন (Admin Approval)
+        </h4>
+
+        <div className="space-y-2">
+          <Label className="text-slate-300">পর্যালোচনা নোট (Review Notes)</Label>
+          <Textarea
+            value={reviewNotes}
+            onChange={(e) => setReviewNotes(e.target.value)}
+            placeholder="পর্যালোচনা সম্পর্কে নোট যোগ করুন..."
+            rows={3}
+            className="bg-slate-900 border-slate-700 text-white placeholder:text-slate-600"
+          />
+        </div>
+
+        {!selfApproved ? (
+          <div className="flex gap-2">
+            <Button
+              onClick={handleSelfApprove}
+              className="bg-green-600 hover:bg-green-700 text-white"
+            >
+              <Check className="w-4 h-4 mr-2" />
+              স্ব-অনুমোদন করুন (Self-Approve)
+            </Button>
+            {detectedRisks.length > 0 && !isBypassed && (
+              <Button variant="outline" className="border-amber-500/40 text-amber-300">
+                <Send className="w-4 h-4 mr-2" />
+                সিনিয়র কাউন্সেলে পাঠান
+              </Button>
+            )}
+          </div>
+        ) : (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-green-900/20 border border-green-800/50 rounded-lg p-3 flex items-center gap-2"
+          >
+            <Check className="w-5 h-5 text-green-400" />
+            <span className="text-sm text-green-300">
+              {isBypassed ? 'অ্যাডমিন বাইপাস দ্বারা অনুমোদিত' : 'অ্যাডমিন দ্বারা স্ব-অনুমোদিত'}
+            </span>
+          </motion.div>
+        )}
       </div>
 
       {/* Navigation */}
-      <div className="flex justify-between pt-6 border-t">
-        <Button variant="outline" onClick={onBack} disabled={isSaving}>
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back
-        </Button>
-        <Button 
-          onClick={detectedIssues.length > 0 ? handleSubmitForReview : handleSubmit}
-          disabled={isSaving}
+      <div className="flex justify-between pt-6 border-t border-slate-800">
+        {onBack && (
+          <Button variant="outline" onClick={onBack} className="border-slate-700 text-slate-300 hover:text-white">
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            পিছনে
+          </Button>
+        )}
+        <Button
+          onClick={handleSubmit}
+          disabled={isSaving || (!selfApproved && !isBypassed)}
+          className="ml-auto"
           size="lg"
         >
           {isSaving ? (
             <>
               <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
-              Processing...
-            </>
-          ) : detectedIssues.length > 0 ? (
-            <>
-              <Send className="w-4 h-4 mr-2" />
-              Submit for Legal Review
+              সংরক্ষণ হচ্ছে...
             </>
           ) : (
             <>
-              Continue
+              পরবর্তী ধাপ
               <ArrowRight className="w-4 h-4 ml-2" />
             </>
           )}
@@ -398,6 +286,3 @@ export function LegalReviewStage({
     </div>
   );
 }
-
-// Import Label for the notes textarea
-import { Label } from '@/components/ui/label';

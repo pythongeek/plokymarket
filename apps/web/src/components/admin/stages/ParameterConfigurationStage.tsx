@@ -12,9 +12,16 @@ import {
   ArrowRight,
   ArrowLeft,
   Plus,
-  X
+  X,
+  Image,
+  Eye,
+  Cpu,
+  Users,
+  Layers,
+  Percent,
+  Clock,
+  SlidersHorizontal
 } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -27,6 +34,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
+import { Slider } from '@/components/ui/slider';
 import { cn } from '@/lib/utils';
 import type { MarketDraft, MarketTemplate } from '@/lib/market-creation/service';
 
@@ -40,22 +49,32 @@ interface ParameterConfigurationStageProps {
 }
 
 const CATEGORIES = [
-  'Sports',
-  'Politics',
-  'Crypto',
-  'Finance',
-  'Entertainment',
-  'Technology',
-  'Science',
-  'Weather',
-  'Other'
+  { id: 'Sports', bn: 'খেলাধুলা' },
+  { id: 'Politics', bn: 'রাজনীতি' },
+  { id: 'Crypto', bn: 'ক্রিপ্টো' },
+  { id: 'Finance', bn: 'অর্থনীতি' },
+  { id: 'Entertainment', bn: 'বিনোদন' },
+  { id: 'Technology', bn: 'প্রযুক্তি' },
+  { id: 'Science', bn: 'বিজ্ঞান' },
+  { id: 'Weather', bn: 'আবহাওয়া' },
+  { id: 'Other', bn: 'অন্যান্য' }
 ];
 
 const ORACLE_TYPES = [
-  { id: 'MANUAL', name: 'Manual (Admin)', description: 'Resolved by platform admin' },
-  { id: 'AI', name: 'AI Consensus', description: 'Automated via AI oracle' },
-  { id: 'UMA', name: 'UMA Optimistic', description: 'Decentralized optimistic oracle' },
-  { id: 'CHAINLINK', name: 'Chainlink', description: 'Decentralized data feeds' },
+  { id: 'MANUAL', name: 'ম্যানুয়াল (অ্যাডমিন)', nameEn: 'Manual (Admin)', description: 'প্ল্যাটফর্ম অ্যাডমিন দ্বারা সমাধান', icon: Users },
+  { id: 'AI', name: 'AI কনসেনসাস', nameEn: 'AI Consensus', description: 'AI ওরাকল দ্বারা স্বয়ংক্রিয়', icon: Cpu },
+  { id: 'UMA', name: 'UMA অপটিমিস্টিক', nameEn: 'UMA Optimistic', description: 'বিকেন্দ্রীভূত অপটিমিস্টিক ওরাকল', icon: Layers },
+  { id: 'CHAINLINK', name: 'Chainlink', nameEn: 'Chainlink', description: 'বিকেন্দ্রীভূত ডেটা ফিড', icon: Link },
+  { id: 'MULTI', name: 'মাল্টি-সোর্স', nameEn: 'Multi-Source', description: 'একাধিক উৎস থেকে যাচাইকরণ', icon: SlidersHorizontal },
+];
+
+const VERIFICATION_SOURCES = [
+  { id: 'admin_manual', label: 'অ্যাডমিন ম্যানুয়াল', labelEn: 'Admin Manual' },
+  { id: 'ai_oracle', label: 'AI ওরাকল', labelEn: 'AI Oracle' },
+  { id: 'chainlink_feed', label: 'Chainlink ফিড', labelEn: 'Chainlink Feed' },
+  { id: 'uma_oracle', label: 'UMA ওরাকল', labelEn: 'UMA Oracle' },
+  { id: 'news_scraper', label: 'নিউজ স্ক্র্যাপার', labelEn: 'News Scraper' },
+  { id: 'api_endpoint', label: 'কাস্টম API', labelEn: 'Custom API' },
 ];
 
 export function ParameterConfigurationStage({
@@ -66,360 +85,524 @@ export function ParameterConfigurationStage({
   isSaving,
   errors
 }: ParameterConfigurationStageProps) {
-  const { t } = useTranslation();
-  const template = templates.find(t => t.id === draft.template_id);
+  // Basic fields
+  const [question, setQuestion] = useState(draft?.question || '');
+  const [description, setDescription] = useState(draft?.description || '');
+  const [category, setCategory] = useState(draft?.category || '');
+  const [imageUrl, setImageUrl] = useState(draft?.image_url || '');
+  const [tags, setTags] = useState<string[]>(draft?.tags || []);
+  const [tagInput, setTagInput] = useState('');
 
-  const [formData, setFormData] = useState({
-    question: draft.question || '',
-    description: draft.description || '',
-    category: draft.category || template?.category || '',
-    subcategory: draft.subcategory || '',
-    tags: draft.tags || [],
-    resolution_source: draft.resolution_source || '',
-    resolution_source_url: draft.resolution_source_url || '',
-    resolution_criteria: draft.resolution_criteria || template?.default_params?.resolution_criteria || '',
-    resolution_deadline: draft.resolution_deadline 
-      ? new Date(draft.resolution_deadline).toISOString().slice(0, 16)
-      : '',
-    oracle_type: draft.oracle_type || 'MANUAL',
-    oracle_config: draft.oracle_config || {},
-    // Scalar specific
-    min_value: draft.min_value || 0,
-    max_value: draft.max_value || 100,
-    unit: draft.unit || 'USD',
-    // Categorical specific
-    outcomes: draft.outcomes || [{ id: '1', label: '' }, { id: '2', label: '' }],
-    ...template?.default_params
-  });
+  // Resolution
+  const [resolutionSource, setResolutionSource] = useState(draft?.resolution_source || '');
+  const [resolutionSourceUrl, setResolutionSourceUrl] = useState(draft?.resolution_source_url || '');
+  const [resolutionCriteria, setResolutionCriteria] = useState(draft?.resolution_criteria || '');
+  const [resolutionDeadline, setResolutionDeadline] = useState(draft?.resolution_deadline?.slice(0, 16) || '');
 
-  const [newTag, setNewTag] = useState('');
+  // Oracle & Verification
+  const [oracleType, setOracleType] = useState(draft?.oracle_type || 'MANUAL');
+  const [requiredConfirmations, setRequiredConfirmations] = useState(draft?.required_confirmations || 1);
+  const [confidenceThreshold, setConfidenceThreshold] = useState(draft?.confidence_threshold || 80);
+  const [verificationSources, setVerificationSources] = useState<string[]>(
+    draft?.verification_method?.sources || ['admin_manual']
+  );
+
+  // Trading config
+  const [tradingFeePercent, setTradingFeePercent] = useState(draft?.trading_fee_percent || 2.0);
+  const [tradingEndType, setTradingEndType] = useState(draft?.trading_end_type || 'date');
+
+  // Scalar market
+  const [minValue, setMinValue] = useState(draft?.min_value ?? 0);
+  const [maxValue, setMaxValue] = useState(draft?.max_value ?? 100);
+  const [unit, setUnit] = useState(draft?.unit || 'USD');
+
+  // Categorical market
+  const [outcomes, setOutcomes] = useState<Array<{ id: string; label: string }>>(
+    draft?.outcomes || [
+      { id: '1', label: '' },
+      { id: '2', label: '' }
+    ]
+  );
 
   const handleSubmit = async () => {
-    const dataToSave = {
-      ...formData,
-      market_type: draft.market_type,
-      resolution_deadline: formData.resolution_deadline 
-        ? new Date(formData.resolution_deadline).toISOString()
-        : undefined
+    const data: Record<string, any> = {
+      question,
+      description,
+      category,
+      image_url: imageUrl,
+      tags,
+      resolution_source: resolutionSource,
+      resolution_source_url: resolutionSourceUrl,
+      resolution_criteria: resolutionCriteria,
+      resolution_deadline: resolutionDeadline ? new Date(resolutionDeadline).toISOString() : undefined,
+      oracle_type: oracleType,
+      market_type: draft?.market_type,
+      // Verification config
+      verification_method: {
+        type: oracleType,
+        sources: verificationSources
+      },
+      required_confirmations: requiredConfirmations,
+      confidence_threshold: confidenceThreshold,
+      // Trading config
+      trading_fee_percent: tradingFeePercent,
+      trading_end_type: tradingEndType,
     };
-    await onSave(dataToSave);
+
+    if (draft?.market_type === 'scalar') {
+      data.min_value = minValue;
+      data.max_value = maxValue;
+      data.unit = unit;
+    }
+
+    if (draft?.market_type === 'categorical') {
+      data.outcomes = outcomes.filter(o => o.label.trim());
+    }
+
+    await onSave(data);
   };
 
   const addTag = () => {
-    if (newTag.trim() && !formData.tags.includes(newTag.trim())) {
-      setFormData(prev => ({
-        ...prev,
-        tags: [...prev.tags, newTag.trim()]
-      }));
-      setNewTag('');
+    if (tagInput.trim() && !tags.includes(tagInput.trim())) {
+      setTags([...tags, tagInput.trim()]);
+      setTagInput('');
     }
   };
 
   const removeTag = (tag: string) => {
-    setFormData(prev => ({
-      ...prev,
-      tags: prev.tags.filter(t => t !== tag)
-    }));
+    setTags(tags.filter(t => t !== tag));
   };
 
   const addOutcome = () => {
-    setFormData(prev => ({
-      ...prev,
-      outcomes: [...prev.outcomes, { id: String(prev.outcomes.length + 1), label: '' }]
-    }));
+    setOutcomes([...outcomes, { id: String(outcomes.length + 1), label: '' }]);
   };
 
   const removeOutcome = (index: number) => {
-    if (formData.outcomes.length <= 2) return;
-    setFormData(prev => ({
-      ...prev,
-      outcomes: prev.outcomes.filter((_, i) => i !== index)
-    }));
+    if (outcomes.length > 2) {
+      setOutcomes(outcomes.filter((_, i) => i !== index));
+    }
   };
 
   const updateOutcome = (index: number, label: string) => {
-    setFormData(prev => ({
-      ...prev,
-      outcomes: prev.outcomes.map((o, i) => 
-        i === index ? { ...o, label } : o
-      )
-    }));
+    const updated = [...outcomes];
+    updated[index] = { ...updated[index], label };
+    setOutcomes(updated);
+  };
+
+  const toggleVerificationSource = (sourceId: string) => {
+    setVerificationSources(prev =>
+      prev.includes(sourceId)
+        ? prev.filter(s => s !== sourceId)
+        : [...prev, sourceId]
+    );
   };
 
   return (
-    <div className="space-y-6">
-      {/* Basic Info */}
+    <div className="space-y-8">
+      {/* ===== BASIC INFORMATION ===== */}
       <div className="space-y-4">
+        <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+          <FileText className="w-5 h-5 text-blue-400" />
+          মৌলিক তথ্য (Basic Information)
+        </h3>
+
+        {/* Question */}
         <div className="space-y-2">
-          <Label htmlFor="question">
-            Market Question *
-            <span className="text-xs text-muted-foreground ml-2">
-              (Be specific and objective)
-            </span>
-          </Label>
-          <Textarea
-            id="question"
-            placeholder="Will [specific event] happen by [specific date]?"
-            value={formData.question}
-            onChange={(e) => setFormData(prev => ({ ...prev, question: e.target.value }))}
-            className="min-h-[80px]"
+          <Label className="text-slate-300">মার্কেট প্রশ্ন (Market Question) *</Label>
+          <Input
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            placeholder="যেমন: ২০২৬ সালের ফেব্রুয়ারিতে BTC কি $১০০K পৌঁছাবে?"
+            className="bg-slate-900 border-slate-700 text-white placeholder:text-slate-600"
           />
-          <p className="text-xs text-muted-foreground">
-            {formData.question.length} characters (min 10 recommended)
-          </p>
+          <p className="text-xs text-slate-500">{question.length}/500 অক্ষর</p>
         </div>
 
+        {/* Description */}
         <div className="space-y-2">
-          <Label htmlFor="description">
-            Description
-            <span className="text-xs text-muted-foreground ml-2">
-              (Provide context and clarifications)
-            </span>
-          </Label>
+          <Label className="text-slate-300">বিবরণ (Description)</Label>
           <Textarea
-            id="description"
-            placeholder="Detailed description of the market, including any edge cases or clarifications..."
-            value={formData.description}
-            onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-            className="min-h-[100px]"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="মার্কেটের বিস্তারিত বিবরণ লিখুন..."
+            rows={3}
+            className="bg-slate-900 border-slate-700 text-white placeholder:text-slate-600"
           />
         </div>
 
-        {/* Category & Tags */}
+        {/* Category + Image URL */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label htmlFor="category">Category *</Label>
-            <Select
-              value={formData.category}
-              onValueChange={(value) => setFormData(prev => ({ ...prev, category: value }))}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select category" />
+            <Label className="text-slate-300">ক্যাটাগরি (Category) *</Label>
+            <Select value={category} onValueChange={setCategory}>
+              <SelectTrigger className="bg-slate-900 border-slate-700 text-white">
+                <SelectValue placeholder="ক্যাটাগরি নির্বাচন করুন" />
               </SelectTrigger>
-              <SelectContent>
-                {CATEGORIES.map(cat => (
-                  <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+              <SelectContent className="bg-slate-900 border-slate-700">
+                {CATEGORIES.map((cat) => (
+                  <SelectItem key={cat.id} value={cat.id} className="text-white hover:bg-slate-800">
+                    {cat.bn} ({cat.id})
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
-
           <div className="space-y-2">
-            <Label htmlFor="subcategory">Subcategory</Label>
-            <Input
-              id="subcategory"
-              placeholder="e.g., Cricket, Presidential Election"
-              value={formData.subcategory}
-              onChange={(e) => setFormData(prev => ({ ...prev, subcategory: e.target.value }))}
-            />
+            <Label className="text-slate-300">ইমেজ URL (Image URL)</Label>
+            <div className="flex gap-2">
+              <Input
+                value={imageUrl}
+                onChange={(e) => setImageUrl(e.target.value)}
+                placeholder="https://example.com/image.jpg"
+                className="bg-slate-900 border-slate-700 text-white placeholder:text-slate-600"
+              />
+              {imageUrl && (
+                <div className="w-10 h-10 rounded border border-slate-700 overflow-hidden flex-shrink-0">
+                  <img src={imageUrl} alt="" className="w-full h-full object-cover" onError={(e) => (e.currentTarget.style.display = 'none')} />
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
         {/* Tags */}
         <div className="space-y-2">
-          <Label>Tags</Label>
+          <Label className="text-slate-300">ট্যাগ (Tags)</Label>
           <div className="flex gap-2">
             <Input
-              placeholder="Add a tag..."
-              value={newTag}
-              onChange={(e) => setNewTag(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
+              placeholder="ট্যাগ যোগ করুন..."
+              className="bg-slate-900 border-slate-700 text-white placeholder:text-slate-600"
             />
-            <Button type="button" variant="outline" onClick={addTag}>
+            <Button type="button" variant="outline" onClick={addTag} className="border-slate-700 text-slate-300">
               <Plus className="w-4 h-4" />
             </Button>
           </div>
-          <div className="flex flex-wrap gap-2 mt-2">
-            {formData.tags.map((tag) => (
-              <Badge key={tag} variant="secondary" className="gap-1">
-                {tag}
-                <button onClick={() => removeTag(tag)} className="hover:text-red-500">
-                  <X className="w-3 h-3" />
-                </button>
-              </Badge>
-            ))}
-          </div>
+          {tags.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-2">
+              {tags.map((tag) => (
+                <Badge key={tag} className="bg-slate-800 text-slate-300 border-slate-700 gap-1">
+                  {tag}
+                  <button onClick={() => removeTag(tag)} className="hover:text-red-400">
+                    <X className="w-3 h-3" />
+                  </button>
+                </Badge>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Market Type Specific */}
-      {draft.market_type === 'scalar' && (
-        <motion.div
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: 'auto' }}
-          className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg space-y-4"
-        >
-          <h4 className="font-medium flex items-center gap-2">
-            <DollarSign className="w-4 h-4" />
-            Scalar Market Parameters
-          </h4>
+      {/* ===== SCALAR MARKET CONFIG ===== */}
+      {draft?.market_type === 'scalar' && (
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+            <DollarSign className="w-5 h-5 text-green-400" />
+            স্কেলার কনফিগারেশন (Scalar Configuration)
+          </h3>
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
-              <Label>Minimum Value</Label>
+              <Label className="text-slate-300">সর্বনিম্ন মান (Min) *</Label>
               <Input
                 type="number"
-                value={formData.min_value}
-                onChange={(e) => setFormData(prev => ({ 
-                  ...prev, 
-                  min_value: parseFloat(e.target.value) 
-                }))}
+                value={minValue}
+                onChange={(e) => setMinValue(Number(e.target.value))}
+                className="bg-slate-900 border-slate-700 text-white"
               />
             </div>
             <div className="space-y-2">
-              <Label>Maximum Value</Label>
+              <Label className="text-slate-300">সর্বোচ্চ মান (Max) *</Label>
               <Input
                 type="number"
-                value={formData.max_value}
-                onChange={(e) => setFormData(prev => ({ 
-                  ...prev, 
-                  max_value: parseFloat(e.target.value) 
-                }))}
+                value={maxValue}
+                onChange={(e) => setMaxValue(Number(e.target.value))}
+                className="bg-slate-900 border-slate-700 text-white"
               />
             </div>
             <div className="space-y-2">
-              <Label>Unit</Label>
+              <Label className="text-slate-300">একক (Unit)</Label>
               <Input
-                placeholder="USD, points, etc."
-                value={formData.unit}
-                onChange={(e) => setFormData(prev => ({ ...prev, unit: e.target.value }))}
+                value={unit}
+                onChange={(e) => setUnit(e.target.value)}
+                placeholder="USD"
+                className="bg-slate-900 border-slate-700 text-white"
               />
             </div>
           </div>
-        </motion.div>
+        </div>
       )}
 
-      {draft.market_type === 'categorical' && (
-        <motion.div
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: 'auto' }}
-          className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg space-y-4"
-        >
-          <h4 className="font-medium flex items-center gap-2">
-            <Tag className="w-4 h-4" />
-            Outcomes
-          </h4>
+      {/* ===== CATEGORICAL MARKET CONFIG ===== */}
+      {draft?.market_type === 'categorical' && (
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+            <Layers className="w-5 h-5 text-purple-400" />
+            ফলাফল (Outcomes) — ন্যূনতম ২টি
+          </h3>
           <div className="space-y-2">
-            {formData.outcomes.map((outcome, index) => (
-              <div key={outcome.id} className="flex gap-2">
+            {outcomes.map((outcome, index) => (
+              <div key={index} className="flex gap-2">
                 <Input
-                  placeholder={`Outcome ${index + 1}`}
                   value={outcome.label}
                   onChange={(e) => updateOutcome(index, e.target.value)}
+                  placeholder={`ফলাফল ${index + 1}`}
+                  className="bg-slate-900 border-slate-700 text-white placeholder:text-slate-600"
                 />
-                {formData.outcomes.length > 2 && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => removeOutcome(index)}
-                  >
+                {outcomes.length > 2 && (
+                  <Button variant="ghost" size="sm" onClick={() => removeOutcome(index)} className="text-red-400 hover:text-red-300">
                     <X className="w-4 h-4" />
                   </Button>
                 )}
               </div>
             ))}
-            <Button type="button" variant="outline" onClick={addOutcome} className="w-full">
-              <Plus className="w-4 h-4 mr-2" />
-              Add Outcome
+            <Button variant="outline" size="sm" onClick={addOutcome} className="border-slate-700 text-slate-300 hover:text-white">
+              <Plus className="w-4 h-4 mr-1" /> ফলাফল যোগ করুন
             </Button>
           </div>
-        </motion.div>
+        </div>
       )}
 
-      {/* Resolution Criteria */}
-      <div className="space-y-4 pt-4 border-t">
-        <h4 className="font-medium flex items-center gap-2">
-          <FileText className="w-4 h-4" />
-          Resolution Criteria
-        </h4>
+      {/* ===== RESOLUTION CRITERIA ===== */}
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+          <Eye className="w-5 h-5 text-cyan-400" />
+          সমাধানের মানদণ্ড (Resolution Criteria)
+        </h3>
 
-        <div className="space-y-2">
-          <Label htmlFor="resolution_criteria">Resolution Criteria *</Label>
-          <Textarea
-            id="resolution_criteria"
-            placeholder="Describe exactly how this market will be resolved. Be specific about sources and edge cases."
-            value={formData.resolution_criteria}
-            onChange={(e) => setFormData(prev => ({ ...prev, resolution_criteria: e.target.value }))}
-            className="min-h-[100px]"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="resolution_source">Resolution Source</Label>
-          <Input
-            id="resolution_source"
-            placeholder="e.g., ESPN, Bloomberg, Official Government Source"
-            value={formData.resolution_source}
-            onChange={(e) => setFormData(prev => ({ ...prev, resolution_source: e.target.value }))}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="resolution_source_url">Source URL</Label>
-          <div className="relative">
-            <Link className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label className="text-slate-300">সমাধানের উৎস (Resolution Source)</Label>
             <Input
-              id="resolution_source_url"
-              type="url"
+              value={resolutionSource}
+              onChange={(e) => setResolutionSource(e.target.value)}
+              placeholder="যেমন: CoinGecko, ESPN, Reuters"
+              className="bg-slate-900 border-slate-700 text-white placeholder:text-slate-600"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-slate-300">উৎস URL</Label>
+            <Input
+              value={resolutionSourceUrl}
+              onChange={(e) => setResolutionSourceUrl(e.target.value)}
               placeholder="https://..."
-              value={formData.resolution_source_url}
-              onChange={(e) => setFormData(prev => ({ ...prev, resolution_source_url: e.target.value }))}
-              className="pl-10"
+              className="bg-slate-900 border-slate-700 text-white placeholder:text-slate-600"
             />
           </div>
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="resolution_deadline">Resolution Deadline *</Label>
-          <div className="relative">
-            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Label className="text-slate-300">সমাধানের মানদণ্ড (Resolution Criteria) *</Label>
+          <Textarea
+            value={resolutionCriteria}
+            onChange={(e) => setResolutionCriteria(e.target.value)}
+            placeholder="এই মার্কেটটি কিভাবে সমাধান করা হবে তার বিস্তারিত বিবরণ দিন..."
+            rows={3}
+            className="bg-slate-900 border-slate-700 text-white placeholder:text-slate-600"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label className="text-slate-300">সমাধানের সময়সীমা (Resolution Deadline) *</Label>
             <Input
-              id="resolution_deadline"
               type="datetime-local"
-              value={formData.resolution_deadline}
-              onChange={(e) => setFormData(prev => ({ ...prev, resolution_deadline: e.target.value }))}
-              className="pl-10"
+              value={resolutionDeadline}
+              onChange={(e) => setResolutionDeadline(e.target.value)}
+              className="bg-slate-900 border-slate-700 text-white"
             />
           </div>
-        </div>
-
-        <div className="space-y-2">
-          <Label>Oracle Type</Label>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {ORACLE_TYPES.map((oracle) => (
-              <button
-                key={oracle.id}
-                onClick={() => setFormData(prev => ({ ...prev, oracle_type: oracle.id }))}
-                className={cn(
-                  "p-3 rounded-lg border-2 text-left transition-all",
-                  formData.oracle_type === oracle.id
-                    ? "border-primary bg-primary/5"
-                    : "border-gray-200 hover:border-gray-300"
-                )}
-              >
-                <p className="font-medium">{oracle.name}</p>
-                <p className="text-xs text-muted-foreground">{oracle.description}</p>
-              </button>
-            ))}
+          <div className="space-y-2">
+            <Label className="text-slate-300">ট্রেডিং শেষ ধরন (Trading End Type)</Label>
+            <Select value={tradingEndType} onValueChange={setTradingEndType}>
+              <SelectTrigger className="bg-slate-900 border-slate-700 text-white">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-slate-900 border-slate-700">
+                <SelectItem value="date" className="text-white hover:bg-slate-800">
+                  <span className="flex items-center gap-2"><Calendar className="w-3 h-3" /> তারিখ অনুযায়ী (By Date)</span>
+                </SelectItem>
+                <SelectItem value="manual" className="text-white hover:bg-slate-800">
+                  <span className="flex items-center gap-2"><Users className="w-3 h-3" /> ম্যানুয়াল বন্ধ (Manual Close)</span>
+                </SelectItem>
+                <SelectItem value="event_triggered" className="text-white hover:bg-slate-800">
+                  <span className="flex items-center gap-2"><Clock className="w-3 h-3" /> ইভেন্ট ট্রিগার (Event Triggered)</span>
+                </SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
       </div>
 
+      {/* ===== VERIFICATION & ORACLE CONFIGURATION ===== */}
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+          <Cpu className="w-5 h-5 text-violet-400" />
+          যাচাইকরণ কনফিগারেশন (Verification Configuration)
+        </h3>
+
+        {/* Oracle Type */}
+        <div className="space-y-2">
+          <Label className="text-slate-300">প্রাথমিক ওরাকল পদ্ধতি (Primary Oracle Method)</Label>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {ORACLE_TYPES.map((oracle) => {
+              const OIcon = oracle.icon;
+              const isSelected = oracleType === oracle.id;
+              return (
+                <button
+                  key={oracle.id}
+                  onClick={() => setOracleType(oracle.id)}
+                  className={cn(
+                    "flex items-center gap-3 p-3 rounded-lg border transition-all text-left",
+                    isSelected
+                      ? "border-violet-500 bg-violet-500/10 text-violet-300"
+                      : "border-slate-700 bg-slate-900/50 text-slate-400 hover:border-slate-500"
+                  )}
+                >
+                  <OIcon className={cn("w-5 h-5", isSelected ? "text-violet-400" : "text-slate-500")} />
+                  <div>
+                    <p className="text-sm font-medium">{oracle.name}</p>
+                    <p className="text-[10px] opacity-70">{oracle.description}</p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Required Confirmations */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <Label className="text-slate-300">প্রয়োজনীয় নিশ্চিতকরণ (Required Confirmations)</Label>
+            <Badge className="bg-violet-500/20 text-violet-300 border-violet-500/30">
+              {requiredConfirmations} / 5
+            </Badge>
+          </div>
+          <Slider
+            value={[requiredConfirmations]}
+            onValueChange={([val]) => setRequiredConfirmations(val)}
+            min={1}
+            max={5}
+            step={1}
+            className="w-full"
+          />
+          <div className="flex justify-between text-xs text-slate-500">
+            <span>১টি (দ্রুত)</span>
+            <span>৩টি (স্ট্যান্ডার্ড)</span>
+            <span>৫টি (সর্বাধিক নিরাপদ)</span>
+          </div>
+          <p className="text-xs text-slate-500">
+            সমাধান নিশ্চিত করতে কতটি স্বতন্ত্র যাচাইকরণ প্রয়োজন তা নির্ধারণ করুন।
+          </p>
+        </div>
+
+        {/* Confidence Threshold (for AI oracle) */}
+        {(oracleType === 'AI' || oracleType === 'MULTI') && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label className="text-slate-300">AI কনফিডেন্স থ্রেশহোল্ড (Confidence Threshold)</Label>
+              <Badge className={cn(
+                "border",
+                confidenceThreshold >= 90 ? "bg-green-500/20 text-green-300 border-green-500/30" :
+                  confidenceThreshold >= 70 ? "bg-amber-500/20 text-amber-300 border-amber-500/30" :
+                    "bg-red-500/20 text-red-300 border-red-500/30"
+              )}>
+                {confidenceThreshold}%
+              </Badge>
+            </div>
+            <Slider
+              value={[confidenceThreshold]}
+              onValueChange={([val]) => setConfidenceThreshold(val)}
+              min={50}
+              max={99}
+              step={1}
+              className="w-full"
+            />
+            <div className="flex justify-between text-xs text-slate-500">
+              <span>৫০% (নমনীয়)</span>
+              <span>৮০% (স্ট্যান্ডার্ড)</span>
+              <span>৯৯% (কঠোর)</span>
+            </div>
+          </div>
+        )}
+
+        {/* Verification Sources */}
+        <div className="space-y-3">
+          <Label className="text-slate-300">যাচাইকরণ উৎস (Verification Sources)</Label>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+            {VERIFICATION_SOURCES.map((source) => {
+              const isSelected = verificationSources.includes(source.id);
+              return (
+                <button
+                  key={source.id}
+                  onClick={() => toggleVerificationSource(source.id)}
+                  className={cn(
+                    "p-2 rounded-lg border text-left transition-all text-sm",
+                    isSelected
+                      ? "border-violet-500 bg-violet-500/10 text-violet-300"
+                      : "border-slate-700 bg-slate-900/50 text-slate-500 hover:border-slate-500"
+                  )}
+                >
+                  <p className="font-medium text-xs">{source.label}</p>
+                  <p className="text-[10px] opacity-60">{source.labelEn}</p>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* ===== TRADING FEE ===== */}
+      <div className="space-y-3">
+        <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+          <Percent className="w-5 h-5 text-emerald-400" />
+          ট্রেডিং ফি (Trading Fee)
+        </h3>
+        <div className="flex items-center gap-4">
+          <div className="flex-1 space-y-2">
+            <Slider
+              value={[tradingFeePercent]}
+              onValueChange={([val]) => setTradingFeePercent(val)}
+              min={0}
+              max={10}
+              step={0.1}
+              className="w-full"
+            />
+            <div className="flex justify-between text-xs text-slate-500">
+              <span>০%</span>
+              <span>২% (স্ট্যান্ডার্ড)</span>
+              <span>১০%</span>
+            </div>
+          </div>
+          <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 text-lg px-3 py-1">
+            {tradingFeePercent.toFixed(1)}%
+          </Badge>
+        </div>
+      </div>
+
       {/* Navigation */}
-      <div className="flex justify-between pt-6 border-t">
-        <Button variant="outline" onClick={onBack} disabled={isSaving}>
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back
-        </Button>
-        <Button onClick={handleSubmit} disabled={isSaving}>
+      <div className="flex justify-between pt-6 border-t border-slate-800">
+        {onBack && (
+          <Button variant="outline" onClick={onBack} className="border-slate-700 text-slate-300 hover:text-white">
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            পিছনে
+          </Button>
+        )}
+        <Button
+          onClick={handleSubmit}
+          disabled={isSaving}
+          className="ml-auto"
+          size="lg"
+        >
           {isSaving ? (
             <>
               <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
-              Saving...
+              সংরক্ষণ হচ্ছে...
             </>
           ) : (
             <>
-              Continue
+              পরবর্তী ধাপ
               <ArrowRight className="w-4 h-4 ml-2" />
             </>
           )}

@@ -5,23 +5,28 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Rocket,
   Check,
-  Loader2,
   AlertCircle,
-  ExternalLink,
-  Copy,
   ArrowLeft,
+  Loader2,
   Shield,
-  FileText,
   Wallet,
-  TrendingUp
+  Play,
+  Zap,
+  Eye,
+  ShieldOff,
+  ExternalLink,
+  Cpu,
+  Clock,
+  DollarSign,
+  LinkIcon,
+  Globe,
+  CheckCircle2
 } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
-import type { MarketDraft } from '@/lib/market-creation/service';
+import { marketCreationService, type MarketDraft } from '@/lib/market-creation/service';
 
 interface DeploymentStageProps {
   draft: MarketDraft;
@@ -29,15 +34,17 @@ interface DeploymentStageProps {
   onBack?: () => void;
   isSaving: boolean;
   errors: string[];
+  adminBypass?: { liquidity: boolean; legal_review: boolean; simulation: boolean };
   onComplete?: (marketId: string) => void;
 }
 
-const DEPLOYMENT_STEPS = [
-  { id: 'validate', name: 'Validating', description: 'Checking all parameters' },
-  { id: 'contract', name: 'Creating Contract', description: 'Deploying smart contract' },
-  { id: 'liquidity', name: 'Adding Liquidity', description: 'Funding the market' },
-  { id: 'index', name: 'Indexing', description: 'Adding to platform' },
-  { id: 'complete', name: 'Complete', description: 'Market is live' },
+type DeployStatus = 'idle' | 'validating' | 'creating' | 'indexing' | 'complete' | 'error';
+
+const DEPLOY_STEPS = [
+  { id: 'validate', label: 'যাচাইকরণ', labelEn: 'Validating', icon: Shield },
+  { id: 'create', label: 'মার্কেট তৈরি', labelEn: 'Creating Market', icon: Globe },
+  { id: 'index', label: 'ইনডেক্সিং', labelEn: 'Indexing', icon: Eye },
+  { id: 'complete', label: 'সম্পন্ন', labelEn: 'Complete', icon: Check }
 ];
 
 export function DeploymentStage({
@@ -46,331 +53,313 @@ export function DeploymentStage({
   onBack,
   isSaving,
   errors,
+  adminBypass,
   onComplete
 }: DeploymentStageProps) {
-  const { t } = useTranslation();
-  const [isDeploying, setIsDeploying] = useState(false);
+  const [deployStatus, setDeployStatus] = useState<DeployStatus>('idle');
+  const [deployedMarketId, setDeployedMarketId] = useState<string | null>(
+    draft?.deployed_market_id || null
+  );
+  const [deployError, setDeployError] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState(0);
-  const [deploymentStatus, setDeploymentStatus] = useState<'idle' | 'deploying' | 'success' | 'error'>('idle');
-  const [deployedMarketId, setDeployedMarketId] = useState<string | null>(null);
-  const [txHash, setTxHash] = useState<string>('');
 
   const handleDeploy = async () => {
-    setIsDeploying(true);
-    setDeploymentStatus('deploying');
+    setDeployStatus('validating');
+    setDeployError(null);
+    setCurrentStep(0);
 
-    // Simulate deployment steps
-    for (let i = 0; i < DEPLOYMENT_STEPS.length - 1; i++) {
-      setCurrentStep(i);
-      await new Promise(resolve => setTimeout(resolve, 1500));
-    }
+    try {
+      // Step 1: Validate
+      await new Promise(resolve => setTimeout(resolve, 800));
+      setCurrentStep(1);
+      setDeployStatus('creating');
 
-    // Complete deployment
-    setCurrentStep(DEPLOYMENT_STEPS.length - 1);
-    const mockMarketId = 'market_' + Math.random().toString(36).substr(2, 9);
-    const mockTxHash = '0x' + Array(64).fill(0).map(() => Math.floor(Math.random() * 16).toString(16)).join('');
-    
-    setDeployedMarketId(mockMarketId);
-    setTxHash(mockTxHash);
-    setDeploymentStatus('success');
-    setIsDeploying(false);
+      // Step 2: Deploy via API
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const result = await marketCreationService.deployMarket(draft.id, {
+        verification_method: draft.verification_method,
+        required_confirmations: draft.required_confirmations,
+        admin_bypasses: adminBypass
+      });
 
-    // Call onComplete callback
-    if (onComplete) {
-      onComplete(mockMarketId);
+      setCurrentStep(2);
+      setDeployStatus('indexing');
+
+      // Step 3: Index
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      setCurrentStep(3);
+      setDeployStatus('complete');
+      setDeployedMarketId(result.market_id);
+
+    } catch (error: any) {
+      console.error('Deploy error:', error);
+      setDeployStatus('error');
+      setDeployError(error.message || 'ডিপ্লয়মেন্ট ব্যর্থ হয়েছে');
     }
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-  };
-
-  if (deploymentStatus === 'success' && deployedMarketId) {
-    return (
-      <div className="space-y-6">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="text-center py-8"
-        >
-          <div className="w-20 h-20 rounded-full bg-green-500 flex items-center justify-center mx-auto mb-4">
-            <Check className="w-10 h-10 text-white" />
-          </div>
-          <h3 className="text-2xl font-bold mb-2">Market Deployed!</h3>
-          <p className="text-muted-foreground">
-            Your market is now live and ready for trading.
-          </p>
-        </motion.div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Deployment Details</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-              <div>
-                <p className="text-sm text-muted-foreground">Market ID</p>
-                <p className="font-mono font-medium">{deployedMarketId}</p>
-              </div>
-              <Button variant="ghost" size="icon" onClick={() => copyToClipboard(deployedMarketId)}>
-                <Copy className="w-4 h-4" />
-              </Button>
-            </div>
-
-            <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-muted-foreground">Transaction Hash</p>
-                <p className="font-mono font-medium truncate">{txHash}</p>
-              </div>
-              <div className="flex gap-1">
-                <Button variant="ghost" size="icon" onClick={() => copyToClipboard(txHash)}>
-                  <Copy className="w-4 h-4" />
-                </Button>
-                <Button variant="ghost" size="icon" asChild>
-                  <a href={`https://etherscan.io/tx/${txHash}`} target="_blank" rel="noopener noreferrer">
-                    <ExternalLink className="w-4 h-4" />
-                  </a>
-                </Button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                <p className="text-sm text-muted-foreground">Question</p>
-                <p className="text-sm font-medium line-clamp-2">{draft.question}</p>
-              </div>
-              <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                <p className="text-sm text-muted-foreground">Category</p>
-                <p className="text-sm font-medium">{draft.category}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <div className="flex gap-3">
-          <Button variant="outline" className="flex-1" asChild>
-            <a href={`/markets/${deployedMarketId}`}>
-              <ExternalLink className="w-4 h-4 mr-2" />
-              View Market
-            </a>
-          </Button>
-          <Button className="flex-1" asChild>
-            <a href="/admin">
-              <TrendingUp className="w-4 h-4 mr-2" />
-              Back to Admin
-            </a>
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  if (deploymentStatus === 'deploying') {
-    return (
-      <div className="space-y-8 py-8">
-        <div className="text-center">
-          <motion.div
-            animate={{ rotate: 360 }}
-            transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
-            className="w-16 h-16 rounded-full border-4 border-primary/20 border-t-primary mx-auto mb-4"
-          />
-          <h3 className="text-xl font-bold mb-2">Deploying Market...</h3>
-          <p className="text-muted-foreground">
-            Please do not close this window
-          </p>
-        </div>
-
-        <div className="space-y-4">
-          {DEPLOYMENT_STEPS.map((step, index) => {
-            const isActive = index === currentStep;
-            const isCompleted = index < currentStep;
-            const isPending = index > currentStep;
-
-            return (
-              <motion.div
-                key={step.id}
-                initial={false}
-                animate={{
-                  opacity: isPending ? 0.5 : 1,
-                  x: isActive ? 10 : 0
-                }}
-                className={cn(
-                  "flex items-center gap-4 p-4 rounded-lg transition-colors",
-                  isActive && "bg-primary/5 border border-primary/20",
-                  isCompleted && "bg-green-50 dark:bg-green-900/20"
-                )}
-              >
-                <div className={cn(
-                  "w-10 h-10 rounded-full flex items-center justify-center",
-                  isCompleted ? "bg-green-500" :
-                  isActive ? "bg-primary" :
-                  "bg-gray-200 dark:bg-gray-700"
-                )}>
-                  {isCompleted ? (
-                    <Check className="w-5 h-5 text-white" />
-                  ) : isActive ? (
-                    <Loader2 className="w-5 h-5 text-white animate-spin" />
-                  ) : (
-                    <span className="text-sm font-medium text-gray-500">{index + 1}</span>
-                  )}
-                </div>
-                <div className="flex-1">
-                  <p className={cn(
-                    "font-medium",
-                    isActive && "text-primary"
-                  )}>
-                    {step.name}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    {step.description}
-                  </p>
-                </div>
-                {isActive && (
-                  <Badge variant="default" className="animate-pulse">
-                    In Progress
-                  </Badge>
-                )}
-              </motion.div>
-            );
-          })}
-        </div>
-
-        <Progress value={(currentStep / (DEPLOYMENT_STEPS.length - 1)) * 100} className="h-2" />
-      </div>
-    );
-  }
+  const bypassList = [];
+  if (adminBypass?.liquidity) bypassList.push('তারল্য (Liquidity)');
+  if (adminBypass?.legal_review) bypassList.push('আইনি পর্যালোচনা (Legal Review)');
+  if (adminBypass?.simulation) bypassList.push('সিমুলেশন (Simulation)');
 
   return (
     <div className="space-y-6">
-      {/* Pre-deployment Checklist */}
-      <div className="space-y-4">
-        <h3 className="font-medium">Pre-deployment Checklist</h3>
-        
-        <div className="space-y-3">
-          <ChecklistItem 
-            icon={FileText}
-            title="Parameters Configured"
-            description={draft.question || 'Not set'}
-            checked={!!draft.question}
-          />
-          <ChecklistItem 
-            icon={Wallet}
-            title="Liquidity Committed"
-            description={`$${draft.liquidity_commitment?.toLocaleString()} USDC`}
-            checked={draft.liquidity_deposited}
-          />
-          <ChecklistItem 
-            icon={Shield}
-            title="Legal Review"
-            description={draft.legal_review_status === 'approved' ? 'Approved' : 'Pending'}
-            checked={draft.legal_review_status === 'approved'}
-          />
-        </div>
-      </div>
-
-      {/* Deployment Summary */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">Market Summary</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <p className="text-muted-foreground">Type</p>
-              <p className="font-medium capitalize">{draft.market_type}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Category</p>
-              <p className="font-medium">{draft.category}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Oracle</p>
-              <p className="font-medium">{draft.oracle_type}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Liquidity</p>
-              <p className="font-medium">${draft.liquidity_commitment?.toLocaleString()}</p>
-            </div>
+      {/* Admin Bypass Summary */}
+      {bypassList.length > 0 && (
+        <div className="bg-amber-950/30 border border-amber-500/30 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <ShieldOff className="w-4 h-4 text-amber-400" />
+            <span className="text-sm font-medium text-amber-300">বাইপাসকৃত ধাপসমূহ</span>
           </div>
-        </CardContent>
+          <div className="flex flex-wrap gap-2">
+            {bypassList.map((item, i) => (
+              <Badge key={i} className="bg-amber-500/10 text-amber-400 border-amber-500/30">
+                <Zap className="w-3 h-3 mr-1" />
+                {item}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Final Summary */}
+      <Card className="bg-slate-900/50 border-slate-700/50 p-4 space-y-4">
+        <h4 className="text-sm font-semibold text-white">চূড়ান্ত সারসংক্ষেপ (Final Summary)</h4>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {/* Question */}
+          <div className="col-span-2 p-3 bg-slate-800/50 rounded-lg">
+            <p className="text-xs text-slate-500 mb-1">প্রশ্ন (Question)</p>
+            <p className="text-white font-medium">{draft?.question || 'N/A'}</p>
+          </div>
+
+          {/* Category */}
+          <div className="p-3 bg-slate-800/50 rounded-lg">
+            <p className="text-xs text-slate-500 mb-1">ক্যাটাগরি</p>
+            <p className="text-white">{draft?.category || 'N/A'}</p>
+          </div>
+
+          {/* Market Type */}
+          <div className="p-3 bg-slate-800/50 rounded-lg">
+            <p className="text-xs text-slate-500 mb-1">মার্কেট ধরন</p>
+            <p className="text-white capitalize">{draft?.market_type || 'N/A'}</p>
+          </div>
+
+          {/* Deadline */}
+          <div className="p-3 bg-slate-800/50 rounded-lg">
+            <div className="flex items-center gap-1 mb-1">
+              <Clock className="w-3 h-3 text-slate-500" />
+              <p className="text-xs text-slate-500">সমাধানের সময়সীমা</p>
+            </div>
+            <p className="text-white text-sm">
+              {draft?.resolution_deadline
+                ? new Date(draft.resolution_deadline).toLocaleDateString('bn-BD', {
+                  year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                })
+                : 'N/A'
+              }
+            </p>
+          </div>
+
+          {/* Liquidity */}
+          <div className="p-3 bg-slate-800/50 rounded-lg">
+            <div className="flex items-center gap-1 mb-1">
+              <DollarSign className="w-3 h-3 text-slate-500" />
+              <p className="text-xs text-slate-500">তারল্য</p>
+            </div>
+            <p className="text-white">
+              {adminBypass?.liquidity
+                ? <span className="text-amber-400">বাইপাসকৃত</span>
+                : `$${(draft?.liquidity_amount || draft?.liquidity_commitment || 0).toLocaleString()}`
+              }
+            </p>
+          </div>
+
+          {/* Oracle */}
+          <div className="p-3 bg-slate-800/50 rounded-lg">
+            <div className="flex items-center gap-1 mb-1">
+              <Cpu className="w-3 h-3 text-slate-500" />
+              <p className="text-xs text-slate-500">ওরাকল পদ্ধতি</p>
+            </div>
+            <p className="text-white">{draft?.oracle_type || 'MANUAL'}</p>
+          </div>
+
+          {/* Confirmations */}
+          <div className="p-3 bg-slate-800/50 rounded-lg">
+            <div className="flex items-center gap-1 mb-1">
+              <CheckCircle2 className="w-3 h-3 text-slate-500" />
+              <p className="text-xs text-slate-500">নিশ্চিতকরণ</p>
+            </div>
+            <p className="text-white">{draft?.required_confirmations || 1} / 5</p>
+          </div>
+
+          {/* Fee */}
+          <div className="p-3 bg-slate-800/50 rounded-lg">
+            <div className="flex items-center gap-1 mb-1">
+              <p className="text-xs text-slate-500">ট্রেডিং ফি</p>
+            </div>
+            <p className="text-white">{draft?.trading_fee_percent || 2.0}%</p>
+          </div>
+        </div>
+
+        {/* Resolution Source */}
+        {draft?.resolution_source && (
+          <div className="p-3 bg-slate-800/50 rounded-lg">
+            <div className="flex items-center gap-1 mb-1">
+              <LinkIcon className="w-3 h-3 text-slate-500" />
+              <p className="text-xs text-slate-500">সমাধানের উৎস</p>
+            </div>
+            <p className="text-white text-sm">{draft.resolution_source}</p>
+            {draft.resolution_source_url && (
+              <a href={draft.resolution_source_url} target="_blank" rel="noopener noreferrer"
+                className="text-xs text-blue-400 hover:underline flex items-center gap-1 mt-1">
+                {draft.resolution_source_url}
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            )}
+          </div>
+        )}
       </Card>
 
-      {/* Warning */}
-      <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
-        <div className="flex gap-3">
-          <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="font-medium text-amber-900 dark:text-amber-100">
-              Important Notice
-            </p>
-            <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
-              Once deployed, market parameters cannot be changed. The market will be 
-              immediately visible to all users. Ensure all details are correct before proceeding.
-            </p>
+      {/* Deployment Progress */}
+      {deployStatus !== 'idle' && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-4"
+        >
+          <div className="space-y-3">
+            {DEPLOY_STEPS.map((step, index) => {
+              const Icon = step.icon;
+              const isComplete = index < currentStep;
+              const isCurrent = index === currentStep && deployStatus !== 'complete' && deployStatus !== 'error';
+              const isPending = index > currentStep;
+
+              return (
+                <div
+                  key={step.id}
+                  className={cn(
+                    "flex items-center gap-3 p-3 rounded-lg border transition-all",
+                    isComplete ? "bg-green-900/20 border-green-800/50" :
+                      isCurrent ? "bg-blue-900/20 border-blue-800/50" :
+                        "bg-slate-900/30 border-slate-800/50"
+                  )}
+                >
+                  <div className={cn(
+                    "w-8 h-8 rounded-full flex items-center justify-center",
+                    isComplete ? "bg-green-500/20 text-green-400" :
+                      isCurrent ? "bg-blue-500/20 text-blue-400" :
+                        "bg-slate-800 text-slate-500"
+                  )}>
+                    {isComplete ? (
+                      <Check className="w-4 h-4" />
+                    ) : isCurrent ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Icon className="w-4 h-4" />
+                    )}
+                  </div>
+                  <div>
+                    <p className={cn(
+                      "text-sm font-medium",
+                      isComplete ? "text-green-300" :
+                        isCurrent ? "text-blue-300" :
+                          "text-slate-500"
+                    )}>
+                      {step.label}
+                    </p>
+                    <p className="text-xs text-slate-500">{step.labelEn}</p>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        </div>
-      </div>
+        </motion.div>
+      )}
+
+      {/* Success */}
+      {deployStatus === 'complete' && deployedMarketId && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-green-900/20 border border-green-800/50 rounded-lg p-6 text-center"
+        >
+          <div className="w-16 h-16 mx-auto bg-green-500/20 rounded-full flex items-center justify-center mb-4">
+            <Rocket className="w-8 h-8 text-green-400" />
+          </div>
+          <h3 className="text-xl font-bold text-white mb-2">
+            🎉 মার্কেট সফলভাবে ডিপ্লয় হয়েছে!
+          </h3>
+          <p className="text-sm text-green-300 mb-4">
+            আপনার মার্কেট এখন লাইভ এবং ট্রেডিংয়ের জন্য প্রস্তুত।
+          </p>
+          <div className="flex flex-col items-center gap-2">
+            <Badge className="bg-slate-800 text-slate-300 border-slate-700 font-mono text-xs">
+              Market ID: {deployedMarketId}
+            </Badge>
+            <div className="flex gap-2 mt-4">
+              <Button
+                variant="outline"
+                onClick={() => window.open(`/market/${deployedMarketId}`, '_blank')}
+                className="border-green-500/40 text-green-300"
+              >
+                <ExternalLink className="w-4 h-4 mr-2" />
+                মার্কেট দেখুন
+              </Button>
+              {onComplete && (
+                <Button onClick={() => onComplete(deployedMarketId)} className="bg-green-600 hover:bg-green-700">
+                  <Check className="w-4 h-4 mr-2" />
+                  সম্পন্ন
+                </Button>
+              )}
+            </div>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Error */}
+      {deployStatus === 'error' && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="bg-red-900/20 border border-red-800/50 rounded-lg p-4"
+        >
+          <div className="flex items-center gap-2 mb-2">
+            <AlertCircle className="w-5 h-5 text-red-400" />
+            <span className="text-sm font-medium text-red-300">ডিপ্লয়মেন্ট ব্যর্থ</span>
+          </div>
+          <p className="text-xs text-red-400/70 mb-3">{deployError}</p>
+          <Button
+            variant="outline"
+            onClick={handleDeploy}
+            className="border-red-500/40 text-red-300"
+          >
+            পুনরায় চেষ্টা করুন
+          </Button>
+        </motion.div>
+      )}
 
       {/* Navigation */}
-      <div className="flex justify-between pt-6 border-t">
-        <Button variant="outline" onClick={onBack} disabled={isDeploying}>
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back
-        </Button>
-        <Button 
-          onClick={handleDeploy} 
-          disabled={isDeploying || !draft.liquidity_deposited}
-          size="lg"
-          className="bg-gradient-to-r from-primary to-purple-600"
-        >
-          <Rocket className="w-4 h-4 mr-2" />
-          Deploy Market
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-// Checklist Item Component
-function ChecklistItem({ 
-  icon: Icon, 
-  title, 
-  description, 
-  checked 
-}: { 
-  icon: any; 
-  title: string; 
-  description: string; 
-  checked: boolean;
-}) {
-  return (
-    <div className={cn(
-      "flex items-center gap-3 p-3 rounded-lg border",
-      checked 
-        ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800" 
-        : "bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700"
-    )}>
-      <div className={cn(
-        "w-8 h-8 rounded-full flex items-center justify-center",
-        checked ? "bg-green-500" : "bg-gray-300 dark:bg-gray-600"
-      )}>
-        {checked ? (
-          <Check className="w-4 h-4 text-white" />
-        ) : (
-          <Icon className="w-4 h-4 text-white" />
+      <div className="flex justify-between pt-6 border-t border-slate-800">
+        {onBack && deployStatus === 'idle' && (
+          <Button variant="outline" onClick={onBack} className="border-slate-700 text-slate-300 hover:text-white">
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            পিছনে
+          </Button>
+        )}
+        {deployStatus === 'idle' && (
+          <Button
+            onClick={handleDeploy}
+            disabled={isSaving}
+            className="ml-auto bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500"
+            size="lg"
+          >
+            <Rocket className="w-5 h-5 mr-2" />
+            প্রোডাকশনে ডিপ্লয় করুন
+          </Button>
         )}
       </div>
-      <div className="flex-1">
-        <p className={cn("font-medium", checked && "text-green-900 dark:text-green-100")}>
-          {title}
-        </p>
-        <p className="text-sm text-muted-foreground line-clamp-1">
-          {description}
-        </p>
-      </div>
-      {checked && (
-        <Badge variant="default" className="bg-green-500">Ready</Badge>
-      )}
     </div>
   );
 }
