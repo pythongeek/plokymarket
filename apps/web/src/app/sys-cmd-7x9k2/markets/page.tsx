@@ -492,13 +492,13 @@ export default function MarketManagementPage() {
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: index * 0.1 }}
                     >
-                        <Card className="bg-slate-900 border-slate-800">
+                        <Card className="bg-slate-900/80 border-slate-700/50">
                             <CardContent className="p-5">
                                 <div className="flex items-start justify-between">
                                     <div>
-                                        <p className="text-xs text-slate-500">{stat.label}</p>
+                                        <p className="text-xs text-slate-400 font-medium">{stat.label}</p>
                                         <p className="text-2xl font-bold text-white mt-1">{stat.value}</p>
-                                        <p className="text-[10px] text-slate-600 mt-0.5">{stat.labelEn}</p>
+                                        <p className="text-[10px] text-slate-500 mt-0.5">{stat.labelEn}</p>
                                     </div>
                                     <div className={cn("p-2 rounded-lg", stat.bg)}>
                                         <stat.icon className={cn("w-5 h-5", stat.color)} />
@@ -554,7 +554,7 @@ export default function MarketManagementPage() {
                                 <SelectItem value="deployed">স্থাপিত</SelectItem>
                             </SelectContent>
                         </Select>
-                        <Button variant="outline" onClick={loadData} disabled={loading} className="border-slate-800 text-slate-400">
+                        <Button variant="outline" onClick={loadData} disabled={loading} className="border-slate-700 text-slate-300 hover:text-white">
                             <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
                         </Button>
                     </div>

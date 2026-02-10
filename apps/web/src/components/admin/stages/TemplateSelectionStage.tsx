@@ -72,14 +72,14 @@ export function TemplateSelectionStage({
 
   const handleContinue = async () => {
     if (!selectedType) return;
-    
+
     await onCreateDraft(
       selectedType,
       selectedTemplate || undefined
     );
   };
 
-  const filteredTemplates = templates.filter(t => 
+  const filteredTemplates = templates.filter(t =>
     selectedType && t.market_type === selectedType
   );
 
@@ -87,7 +87,7 @@ export function TemplateSelectionStage({
     <div className="space-y-6">
       {/* Market Type Selection */}
       <div>
-        <h3 className="text-lg font-medium mb-4">
+        <h3 className="text-lg font-semibold text-white mb-4">
           {t('admin.marketWizard.selectMarketType', 'Select Market Type')}
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -107,8 +107,8 @@ export function TemplateSelectionStage({
                 className={cn(
                   "relative p-6 rounded-xl border-2 text-left transition-all",
                   isSelected
-                    ? "border-primary bg-primary/5"
-                    : "border-gray-200 dark:border-gray-700 hover:border-gray-300"
+                    ? "border-primary bg-primary/10"
+                    : "border-slate-700 hover:border-slate-500 bg-slate-900/50"
                 )}
               >
                 {isSelected && (
@@ -123,17 +123,17 @@ export function TemplateSelectionStage({
                   <Icon className="w-6 h-6 text-white" />
                 </div>
 
-                <h4 className="font-semibold text-lg mb-1">{type.name}</h4>
-                <p className="text-sm text-muted-foreground mb-3">
+                <h4 className="font-semibold text-lg text-white mb-1">{type.name}</h4>
+                <p className="text-sm text-slate-400 mb-3">
                   {type.description}
                 </p>
 
                 <div className="space-y-1">
-                  <p className="text-xs font-medium text-muted-foreground">
+                  <p className="text-xs font-medium text-slate-400">
                     {t('admin.marketWizard.examples', 'Examples:')}
                   </p>
                   {type.examples.map((example, i) => (
-                    <p key={i} className="text-xs text-muted-foreground">
+                    <p key={i} className="text-xs text-slate-500">
                       • {example}
                     </p>
                   ))}
@@ -151,7 +151,7 @@ export function TemplateSelectionStage({
           animate={{ opacity: 1, y: 0 }}
           className="space-y-4"
         >
-          <h3 className="text-lg font-medium">
+          <h3 className="text-lg font-semibold text-white">
             {t('admin.marketWizard.chooseTemplate', 'Choose a Template (Optional)')}
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -160,15 +160,15 @@ export function TemplateSelectionStage({
               className={cn(
                 "p-4 rounded-lg border-2 text-left transition-all",
                 selectedTemplate === null
-                  ? "border-primary bg-primary/5"
-                  : "border-gray-200 hover:border-gray-300"
+                  ? "border-primary bg-primary/10"
+                  : "border-slate-700 hover:border-slate-500 bg-slate-900/50"
               )}
             >
               <div className="flex items-center gap-3">
-                <Sparkles className="w-5 h-5 text-muted-foreground" />
+                <Sparkles className="w-5 h-5 text-slate-400" />
                 <div>
-                  <p className="font-medium">Start from Scratch</p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="font-medium text-white">Start from Scratch</p>
+                  <p className="text-xs text-slate-400">
                     Build your market manually
                   </p>
                 </div>
@@ -182,14 +182,14 @@ export function TemplateSelectionStage({
                 className={cn(
                   "p-4 rounded-lg border-2 text-left transition-all",
                   selectedTemplate === template.id
-                    ? "border-primary bg-primary/5"
-                    : "border-gray-200 hover:border-gray-300"
+                    ? "border-primary bg-primary/10"
+                    : "border-slate-700 hover:border-slate-500 bg-slate-900/50"
                 )}
               >
                 <div className="flex items-start justify-between">
                   <div>
-                    <p className="font-medium">{template.name}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
+                    <p className="font-medium text-white">{template.name}</p>
+                    <p className="text-xs text-slate-400 mt-1">
                       {template.description}
                     </p>
                   </div>
@@ -216,7 +216,7 @@ export function TemplateSelectionStage({
             {t('admin.marketWizard.qualityGates', 'Quality Gates')}
           </p>
           <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
-            All markets must pass through our 6-stage quality workflow including legal review 
+            All markets must pass through our 6-stage quality workflow including legal review
             and minimum $1,000 liquidity commitment before deployment.
           </p>
         </div>

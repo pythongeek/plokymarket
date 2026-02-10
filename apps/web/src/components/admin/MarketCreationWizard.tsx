@@ -55,10 +55,10 @@ const STAGES = [
 // WIZARD COMPONENT
 // ============================================
 
-export function MarketCreationWizard({ 
-  draftId: initialDraftId, 
-  onComplete, 
-  onCancel 
+export function MarketCreationWizard({
+  draftId: initialDraftId,
+  onComplete,
+  onCancel
 }: MarketCreationWizardProps) {
   const { t } = useTranslation();
   const [draftId, setDraftId] = useState<string | undefined>(initialDraftId);
@@ -85,7 +85,7 @@ export function MarketCreationWizard({
       if (draftId) {
         const draftData = await marketCreationService.getDraft(draftId);
         setDraft(draftData);
-        
+
         // Set current stage based on draft
         const stageIndex = STAGES.findIndex(s => s.id === draftData.current_stage);
         if (stageIndex >= 0) {
@@ -114,7 +114,7 @@ export function MarketCreationWizard({
   // Save stage progress
   const saveStage = async (stageData: Record<string, any>) => {
     if (!draftId) return false;
-    
+
     setIsSaving(true);
     setErrors([]);
 
@@ -225,10 +225,10 @@ export function MarketCreationWizard({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold">
+          <h2 className="text-2xl font-bold text-white">
             {t('admin.marketWizard.title', 'Create New Market')}
           </h2>
-          <p className="text-muted-foreground">
+          <p className="text-slate-400">
             {t('admin.marketWizard.subtitle', 'Follow the guided workflow to create a quality market')}
           </p>
         </div>
@@ -247,8 +247,8 @@ export function MarketCreationWizard({
       {/* Progress Steps */}
       <div className="relative">
         {/* Progress Line */}
-        <div className="absolute top-5 left-0 right-0 h-0.5 bg-gray-200 dark:bg-gray-700" />
-        <div 
+        <div className="absolute top-5 left-0 right-0 h-0.5 bg-slate-700" />
+        <div
           className="absolute top-5 left-0 h-0.5 bg-primary transition-all duration-500"
           style={{ width: `${(currentStageIndex / (STAGES.length - 1)) * 100}%` }}
         />
@@ -277,8 +277,8 @@ export function MarketCreationWizard({
                     isCurrent
                       ? "bg-primary border-primary text-primary-foreground"
                       : isCompleted
-                      ? "bg-green-500 border-green-500 text-white"
-                      : "bg-background border-gray-300 text-gray-400"
+                        ? "bg-green-500 border-green-500 text-white"
+                        : "bg-slate-800 border-slate-600 text-slate-400"
                   )}
                 >
                   {isCompleted ? (
@@ -290,7 +290,7 @@ export function MarketCreationWizard({
                 <span
                   className={cn(
                     "text-xs font-medium",
-                    isCurrent ? "text-primary" : "text-muted-foreground"
+                    isCurrent ? "text-primary" : isCompleted ? "text-emerald-400" : "text-slate-400"
                   )}
                 >
                   {stage.name}
@@ -310,9 +310,9 @@ export function MarketCreationWizard({
           exit={{ opacity: 0, x: -20 }}
           transition={{ duration: 0.2 }}
         >
-          <Card className="min-h-[500px]">
+          <Card className="min-h-[500px] bg-slate-900/80 border-slate-700/50">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 text-white">
                 {(() => {
                   const Icon = STAGES[currentStageIndex].icon;
                   return <Icon className="w-5 h-5" />;
