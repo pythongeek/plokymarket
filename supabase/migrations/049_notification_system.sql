@@ -424,6 +424,7 @@ DECLARE
     v_body TEXT;
     v_relevance INTEGER;
     v_user_lang VARCHAR := 'bn'; -- Default to Bangla
+    rec RECORD;
 BEGIN
     -- Get template
     SELECT * INTO v_template
@@ -502,9 +503,9 @@ BEGIN
     END CASE;
     
     -- Simple template variable replacement
-    FOR var_key, var_value IN SELECT * FROM jsonb_each_text(p_data) LOOP
-        v_title := REPLACE(v_title, '{{' || var_key || '}}', var_value);
-        v_body := REPLACE(v_body, '{{' || var_key || '}}', var_value);
+    FOR rec IN SELECT * FROM jsonb_each_text(p_data) LOOP
+        v_title := REPLACE(v_title, '{{' || rec.key || '}}', rec.value);
+        v_body := REPLACE(v_body, '{{' || rec.key || '}}', rec.value);
     END LOOP;
     
     -- Create notification
