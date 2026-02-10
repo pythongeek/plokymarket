@@ -1,10 +1,15 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { updateSession } from '@/lib/supabase/middleware';
 
 export async function middleware(request: NextRequest) {
-  // Use the existing updateSession from supabase middleware
-  // It handles auth checks, admin protection, and security headers
-  return updateSession(request);
+  // Minimal middleware - just add security headers
+  const response = NextResponse.next();
+  
+  // Add security headers
+  response.headers.set('X-Frame-Options', 'DENY');
+  response.headers.set('X-Content-Type-Options', 'nosniff');
+  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  
+  return response;
 }
 
 export const config = {
