@@ -15,10 +15,9 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  // Experimental features
-  experimental: {
-    scrollRestoration: true,
-  },
+  // Disable middleware for debugging
+  skipMiddlewareUrlNormalize: true,
+  skipTrailingSlashRedirect: true,
 };
 
 module.exports = nextConfig;
