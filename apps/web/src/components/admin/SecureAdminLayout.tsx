@@ -16,6 +16,9 @@ import {
   Activity,
   AlertTriangle,
   CheckCircle,
+  Calendar,
+  Gavel,
+  ShieldCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -24,7 +27,10 @@ const SECURE_PATHS = {
   dashboard: '/sys-cmd-7x9k2',
   users: '/sys-cmd-7x9k2/users',
   markets: '/sys-cmd-7x9k2/markets',
+  events: '/sys-cmd-7x9k2/events',
+  resolution: '/sys-cmd-7x9k2/resolution',
   analytics: '/sys-cmd-7x9k2/analytics',
+  kyc: '/sys-cmd-7x9k2/kyc',
 };
 
 interface AdminUser {
@@ -178,6 +184,27 @@ export function SecureAdminLayout({ children }: { children: React.ReactNode }) {
       labelEn: 'Analytics',
       icon: BarChart3,
       requiresSuper: true,
+    },
+    {
+      path: SECURE_PATHS.events,
+      label: 'ইভেন্ট তালিকা',
+      labelEn: 'Events',
+      icon: Calendar,
+      requiresSuper: false,
+    },
+    {
+      path: SECURE_PATHS.resolution,
+      label: 'রেজোলিউশন',
+      labelEn: 'Resolution',
+      icon: Gavel,
+      requiresSuper: true,
+    },
+    {
+      path: SECURE_PATHS.kyc,
+      label: 'KYC যাচাইকরণ',
+      labelEn: 'KYC Verification',
+      icon: ShieldCheck,
+      requiresSuper: false,
     },
   ];
 

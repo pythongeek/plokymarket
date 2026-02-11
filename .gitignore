@@ -39,3 +39,4 @@ yarn-error.log*
 supabase/functions/*/deno.lock
 logs/
 *.log
+.env*.local

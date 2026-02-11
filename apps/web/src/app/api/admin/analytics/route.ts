@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { analyticsService, AnalyticsPeriod, MetricType } from '@/lib/analytics/service';
-import { createClient } from '@/utils/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 
 export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
     const type = (searchParams.get('type') as MetricType) || 'trading';
 
     // Security Check: Verify Admin
-    const supabase = createClient();
+    const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {

@@ -1,4 +1,4 @@
-import { createClient } from '@/utils/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 
 export type AnalyticsPeriod = '24h' | '7d' | '30d' | 'all';
 export type MetricType = 'trading' | 'users' | 'financial' | 'risk' | 'market_quality';
@@ -13,7 +13,7 @@ export class AnalyticsService {
      * Fetch aggregated analytics data from the database
      */
     async getMetrics(period: AnalyticsPeriod, type: MetricType): Promise<AnalyticsResponse> {
-        const supabase = createClient();
+        const supabase = await createClient();
 
         try {
             const { data, error } = await supabase.rpc('get_platform_analytics', {
@@ -38,7 +38,7 @@ export class AnalyticsService {
      * Trigger a manual refresh of the hourly snapshots (e.g. via cron or admin action)
      */
     async refreshSnapshots(): Promise<void> {
-        const supabase = createClient();
+        const supabase = await createClient();
         const { error } = await supabase.rpc('populate_analytics_last_24h');
 
         if (error) {

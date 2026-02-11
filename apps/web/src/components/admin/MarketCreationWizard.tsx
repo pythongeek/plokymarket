@@ -42,6 +42,7 @@ import { DeploymentStage } from './stages/DeploymentStage';
 
 interface MarketCreationWizardProps {
   draftId?: string;
+  eventId?: string; // Add eventId prop
   onComplete?: (marketId: string) => void;
   onCancel?: () => void;
 }
@@ -67,6 +68,7 @@ const STAGES = [
 
 export function MarketCreationWizard({
   draftId: initialDraftId,
+  eventId, // Destructure eventId
   onComplete,
   onCancel
 }: MarketCreationWizardProps) {
@@ -125,7 +127,7 @@ export function MarketCreationWizard({
   // Create new draft
   const createDraft = async (marketType: string, templateId?: string) => {
     try {
-      const newDraftId = await marketCreationService.createDraft(marketType, templateId);
+      const newDraftId = await marketCreationService.createDraft(marketType, templateId, eventId);
       setDraftId(newDraftId);
       return newDraftId;
     } catch (error) {

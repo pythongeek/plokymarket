@@ -12,7 +12,7 @@ import { VolumeChart } from './charts/VolumeChart';
 import { UserGrowthChart } from './charts/UserGrowthChart';
 import { RevenueChart } from './charts/RevenueChart';
 import { RiskHeatmap } from './charts/RiskHeatmap';
-import { AnalyticsService, AnalyticsPeriod, MetricType } from '@/lib/analytics/service';
+import { type AnalyticsPeriod, type MetricType } from '@/lib/analytics/service';
 
 export default function AnalyticsDashboard() {
     const { t } = useTranslation();
@@ -31,13 +31,17 @@ export default function AnalyticsDashboard() {
     const fetchAnalytics = async () => {
         setLoading(true);
         try {
-            // Fetch all categories in parallel for the dashboard view
-            const service = new AnalyticsService();
+            const fetchMetric = async (type: MetricType) => {
+                const res = await fetch(`/api/admin/analytics?period=${period}&type=${type}`);
+                if (!res.ok) throw new Error('Failed to fetch');
+                return res.json();
+            };
+
             const [trading, users, financial, risk] = await Promise.all([
-                service.getMetrics(period, 'trading'),
-                service.getMetrics(period, 'users'),
-                service.getMetrics(period, 'financial'),
-                service.getMetrics(period, 'risk') // Assuming endpoint handles this
+                fetchMetric('trading'),
+                fetchMetric('users'),
+                fetchMetric('financial'),
+                fetchMetric('risk')
             ]);
 
             setTradingData(trading);

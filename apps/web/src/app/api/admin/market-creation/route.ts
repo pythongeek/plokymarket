@@ -6,7 +6,7 @@ export async function GET(req: NextRequest) {
   try {
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
+
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
         .single();
 
       if (error) throw error;
-      
+
       // Check permissions
       if (data.creator_id !== user.id) {
         // Check if admin
@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
           .select('is_admin')
           .eq('id', user.id)
           .single();
-        
+
         if (!profile?.is_admin) {
           return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
+
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -88,12 +88,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
     }
 
-    const { market_type, template_id } = body;
+    const { market_type, template_id, event_id } = body;
 
     const { data, error } = await supabase.rpc('create_market_draft', {
       p_creator_id: user.id,
       p_market_type: market_type,
-      p_template_id: template_id
+      p_template_id: template_id,
+      p_event_id: event_id
     });
 
     if (error) throw error;
@@ -114,7 +115,7 @@ export async function PATCH(req: NextRequest) {
     const body = await req.json();
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
+
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -151,7 +152,7 @@ export async function DELETE(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const draftId = searchParams.get('id');
-    
+
     if (!draftId) {
       return NextResponse.json(
         { error: 'Draft ID required' },
@@ -161,7 +162,7 @@ export async function DELETE(req: NextRequest) {
 
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
+
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -183,7 +184,7 @@ export async function DELETE(req: NextRequest) {
         .select('is_admin')
         .eq('id', user.id)
         .single();
-      
+
       if (!profile?.is_admin) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
       }

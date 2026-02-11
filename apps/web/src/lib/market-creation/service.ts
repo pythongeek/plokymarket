@@ -25,6 +25,7 @@ export interface MarketDraft {
   // Stage 1
   market_type?: string;
   template_id?: string;
+  event_id?: string;
 
   // Stage 2
   question?: string;
@@ -104,11 +105,11 @@ class MarketCreationService {
   // DRAFTS
   // ============================================
 
-  async createDraft(marketType: string, templateId?: string): Promise<string> {
+  async createDraft(marketType: string, templateId?: string, eventId?: string): Promise<string> {
     const res = await fetch('/api/admin/market-creation', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ market_type: marketType, template_id: templateId })
+      body: JSON.stringify({ market_type: marketType, template_id: templateId, event_id: eventId })
     });
 
     if (!res.ok) {
@@ -353,6 +354,55 @@ class MarketCreationService {
       'deployment': 'Deploy market to the platform'
     };
     return descriptions[stage] || '';
+  }
+
+  // ============================================
+  // EVENTS SYSTEM (New)
+  // ============================================
+
+  async getEvents(): Promise<any[]> {
+    const res = await fetch('/api/admin/events');
+    if (!res.ok) throw new Error('Failed to fetch events');
+    const { data } = await res.json();
+    return data;
+  }
+
+  async getEvent(id: string): Promise<any> {
+    const res = await fetch(`/api/admin/events/${id}`);
+    if (!res.ok) throw new Error('Failed to fetch event');
+    const { data } = await res.json();
+    return data;
+  }
+
+  async createEvent(eventData: any): Promise<string> {
+    const res = await fetch('/api/admin/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(eventData)
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to create event');
+    }
+
+    const { data } = await res.json();
+    return data.id;
+  }
+
+  async updateEvent(id: string, eventData: any): Promise<boolean> {
+    const res = await fetch(`/api/admin/events/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(eventData)
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to update event');
+    }
+
+    return true;
   }
 }
 

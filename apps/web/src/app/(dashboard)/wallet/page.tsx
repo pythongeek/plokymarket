@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useStore } from '@/store/useStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,6 +17,9 @@ import {
   Building2,
   Clock,
   CheckCircle2,
+  Shield,
+  ShieldCheck,
+  ShieldAlert,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -109,11 +112,25 @@ function TransactionList({ transactions }: { transactions: any[] }) {
 export default function WalletPage() {
   const { isAuthenticated, wallet, transactions, fetchWallet, fetchTransactions } = useStore();
   const { t } = useTranslation();
+  const [kycGate, setKycGate] = useState<{
+    needs_kyc: boolean;
+    reason: string;
+    kyc_status: string;
+    total_withdrawn: number;
+    threshold: number;
+    remaining?: number;
+    override_type?: string;
+  } | null>(null);
 
   useEffect(() => {
     if (isAuthenticated) {
       fetchWallet();
       fetchTransactions();
+      // Check KYC gate
+      fetch('/api/kyc/check')
+        .then(r => r.ok ? r.json() : null)
+        .then(data => data && setKycGate(data))
+        .catch(() => { });
     }
   }, [isAuthenticated, fetchWallet, fetchTransactions]);
 
@@ -151,6 +168,68 @@ export default function WalletPage() {
         <h1 className="text-3xl font-bold">{t('wallet.title')}</h1>
         <p className="text-muted-foreground">{t('wallet.subtitle')}</p>
       </div>
+
+      {/* KYC Status Banner */}
+      {kycGate && (
+        <Card className={cn(
+          'border',
+          kycGate.kyc_status === 'verified'
+            ? 'border-green-200 bg-green-50/50 dark:bg-green-950/20 dark:border-green-900'
+            : kycGate.needs_kyc
+              ? 'border-amber-200 bg-amber-50/50 dark:bg-amber-950/20 dark:border-amber-900'
+              : 'border-blue-200 bg-blue-50/50 dark:bg-blue-950/20 dark:border-blue-900'
+        )}>
+          <CardContent className="p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              {kycGate.kyc_status === 'verified' ? (
+                <ShieldCheck className="h-6 w-6 text-green-600" />
+              ) : kycGate.needs_kyc ? (
+                <ShieldAlert className="h-6 w-6 text-amber-600" />
+              ) : (
+                <Shield className="h-6 w-6 text-blue-600" />
+              )}
+              <div>
+                {kycGate.kyc_status === 'verified' ? (
+                  <p className="font-medium text-green-700 dark:text-green-400">
+                    KYC যাচাইকৃত / KYC Verified ✓
+                  </p>
+                ) : kycGate.needs_kyc ? (
+                  <>
+                    <p className="font-medium text-amber-700 dark:text-amber-400">
+                      উত্তোলনের জন্য KYC প্রয়োজন / KYC Required for Withdrawals
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {kycGate.reason === 'threshold_exceeded'
+                        ? `আপনার মোট উত্তোলন ৳${kycGate.threshold.toLocaleString()} সীমা অতিক্রম করেছে / Total withdrawn exceeds ৳${kycGate.threshold.toLocaleString()} limit`
+                        : kycGate.reason === 'admin_forced'
+                          ? 'অ্যাডমিন দ্বারা KYC বাধ্যতামূলক / KYC mandated by admin'
+                          : 'সব ব্যবহারকারীর জন্য KYC প্রয়োজন / KYC required for all users'}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-medium text-blue-700 dark:text-blue-400">
+                      KYC ছাড়া উত্তোলন সীমা / KYC-Free Withdrawal Limit
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      বাকি আছে ৳{(kycGate.remaining || 0).toLocaleString()} / ৳{kycGate.threshold.toLocaleString()} —
+                      Remaining: ৳{(kycGate.remaining || 0).toLocaleString()} of ৳{kycGate.threshold.toLocaleString()}
+                    </p>
+                  </>
+                )}
+              </div>
+            </div>
+            {kycGate.kyc_status !== 'verified' && (
+              <Link href="/kyc">
+                <Button size="sm" variant={kycGate.needs_kyc ? 'default' : 'outline'} className="gap-2">
+                  <Shield className="h-4 w-4" />
+                  {kycGate.needs_kyc ? 'KYC সম্পন্ন করুন / Complete KYC' : 'KYC শুরু করুন / Start KYC'}
+                </Button>
+              </Link>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Balance Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -197,10 +276,19 @@ export default function WalletPage() {
           <ArrowDownLeft className="h-5 w-5" />
           {t('wallet.deposit')}
         </Button>
-        <Button size="lg" variant="outline" className="gap-2">
-          <ArrowUpRight className="h-5 w-5" />
-          {t('wallet.withdraw')}
-        </Button>
+        {kycGate?.needs_kyc ? (
+          <Link href="/kyc">
+            <Button size="lg" variant="outline" className="gap-2 border-amber-300 text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30">
+              <ShieldAlert className="h-5 w-5" />
+              KYC প্রয়োজন / KYC Required
+            </Button>
+          </Link>
+        ) : (
+          <Button size="lg" variant="outline" className="gap-2">
+            <ArrowUpRight className="h-5 w-5" />
+            {t('wallet.withdraw')}
+          </Button>
+        )}
         <Link href="/markets">
           <Button size="lg" variant="secondary" className="gap-2">
             <TrendingUp className="h-5 w-5" />
