@@ -3,6 +3,7 @@ FROM python:3.9-slim
 
 # Set environment variables for dlib compilation
 ENV CMAKE_ARGS="-DDLIB_USE_CUDA=0 -DDLIB_USE_BLAS=0 -DDLIB_USE_LAPACK=0"
+ENV CMAKE_BUILD_PARALLEL_LEVEL=1
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install system dependencies
