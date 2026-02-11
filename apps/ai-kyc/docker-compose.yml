@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  kyc-service:
+    build: .
+    container_name: plokymarket-kyc-ai
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app/src
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
