@@ -1,0 +1,345 @@
+{
+  "name": "Plokymarket AI Oracle Resolution",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "webhook-trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "webhookId": "plokymarket-resolution",
+      "path": "plokymarket-resolution",
+      "responseMode": "responseNode",
+      "httpMethod": "POST"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract market data from webhook\nconst marketData = $input.first().json.body;\n\nreturn {\n  json: {\n    market_id: marketData.market_id,\n    question: marketData.question,\n    category: marketData.category,\n    keywords: [\n      marketData.category,\n      ...marketData.question.split(' ').filter(w => w.length > 3)\n    ],\n    sources: [\n      'prothomalo.com',\n      'thedailystar.net',\n      'bdnews24.com',\n      'banglatribune.com'\n    ]\n  }\n};"
+      },
+      "id": "extract-data",
+      "name": "Extract Market Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://www.googleapis.com/customsearch/v1",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "={{ $env.GOOGLE_SEARCH_API_KEY }}"
+            },
+            {
+              "name": "cx",
+              "value": "={{ $env.GOOGLE_SEARCH_CX }}"
+            },
+            {
+              "name": "q",
+              "value": "={{ $json.question }}"
+            },
+            {
+              "name": "num",
+              "value": "=5"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "google-search",
+      "name": "Google Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        650,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://newsapi.org/v2/everything",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "apiKey",
+              "value": "={{ $env.NEWS_API_KEY }}"
+            },
+            {
+              "name": "q",
+              "value": "={{ $json.question }}"
+            },
+            {
+              "name": "sortBy",
+              "value": "=relevancy"
+            },
+            {
+              "name": "pageSize",
+              "value": "=5"
+            }
+          ]
+        }
+      },
+      "id": "news-search",
+      "name": "News API Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        650,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combine search results\nconst googleResults = $input.all()[0].json.items || [];\nconst newsResults = $input.all()[1].json.articles || [];\n\nconst sources = [\n  ...googleResults.map(item => ({\n    url: item.link,\n    title: item.title,\n    snippet: item.snippet,\n    source: 'google'\n  })),\n  ...newsResults.map(item => ({\n    url: item.url,\n    title: item.title,\n    snippet: item.description,\n    source: 'newsapi'\n  }))\n].slice(0, 8);\n\nreturn {\n  json: {\n    ...$input.first().json,\n    sources\n  }\n};"
+      },
+      "id": "combine-sources",
+      "name": "Combine Sources",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gemini-1.5-flash",
+        "options": {},
+        "prompt": "=You are an AI Oracle for a prediction market platform. Analyze the following question and sources to determine the outcome.\n\nQuestion: {{ $json.question }}\n\nSources:\n{{ JSON.stringify($json.sources, null, 2) }}\n\nAnalyze the sources and determine:\n1. What is the likely outcome? (YES or NO)\n2. What is your confidence level (0-100%)?\n3. Provide detailed reasoning based on the sources\n4. List the most relevant sources\n\nRespond in this exact JSON format:\n{\n  \"outcome\": \"YES\" or \"NO\" or \"UNCERTAIN\",\n  \"confidence_score\": number between 0-100,\n  \"reasoning\": \"detailed explanation\",\n  \"relevant_sources\": [\"url1\", \"url2\"]\n}"
+      },
+      "id": "gemini-analysis",
+      "name": "Gemini AI Analysis",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "gemini-api",
+          "name": "Gemini API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Gemini response\nconst geminiResponse = $input.first().json.response;\nlet analysis;\n\ntry {\n  // Try to parse JSON from response\n  const jsonMatch = geminiResponse.match(/\\{[\\s\\S]*\\}/);\n  if (jsonMatch) {\n    analysis = JSON.parse(jsonMatch[0]);\n  } else {\n    throw new Error('No JSON found in response');\n  }\n} catch (e) {\n  // Fallback parsing\n  const outcome = geminiResponse.toLowerCase().includes('yes') ? 'YES' :\n                  geminiResponse.toLowerCase().includes('no') ? 'NO' : 'UNCERTAIN';\n  \n  const confidenceMatch = geminiResponse.match(/(\\d+)%/);\n  const confidence = confidenceMatch ? parseInt(confidenceMatch[1]) : 50;\n  \n  analysis = {\n    outcome,\n    confidence_score: confidence,\n    reasoning: geminiResponse,\n    relevant_sources: []\n  };\n}\n\nreturn {\n  json: {\n    ...$input.first().json,\n    outcome: analysis.outcome,\n    confidence_score: analysis.confidence_score,\n    reasoning: analysis.reasoning,\n    relevant_sources: analysis.relevant_sources\n  }\n};"
+      },
+      "id": "parse-response",
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PLOKYMARKET_WEBHOOK_URL }}/api/webhooks/n8n/resolution",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-N8N-API-KEY",
+              "value": "={{ $env.N8N_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "market_id",
+              "value": "={{ $json.market_id }}"
+            },
+            {
+              "name": "question",
+              "value": "={{ $json.question }}"
+            },
+            {
+              "name": "outcome",
+              "value": "={{ $json.outcome }}"
+            },
+            {
+              "name": "confidence_score",
+              "value": "={{ $json.confidence_score }}"
+            },
+            {
+              "name": "reasoning",
+              "value": "={{ $json.reasoning }}"
+            },
+            {
+              "name": "sources",
+              "value": "={{ JSON.stringify($json.sources) }}"
+            },
+            {
+              "name": "keywords_used",
+              "value": "={{ JSON.stringify($json.keywords) }}"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ $now }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-result",
+      "name": "Send Result to Plokymarket",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"success\": true, \"market_id\": \"{{ $json.market_id }}\", \"processed\": true}",
+        "options": {}
+      },
+      "id": "respond-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1650,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Extract Market Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Market Data": {
+      "main": [
+        [
+          {
+            "node": "Google Search",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "News API Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Search": {
+      "main": [
+        [
+          {
+            "node": "Combine Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "News API Search": {
+      "main": [
+        [
+          {
+            "node": "Combine Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine Sources": {
+      "main": [
+        [
+          {
+            "node": "Gemini AI Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini AI Analysis": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Send Result to Plokymarket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Result to Plokymarket": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "plokymarket",
+      "id": "tag-plokymarket",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "name": "oracle",
+      "id": "tag-oracle",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    }
+  ]
+}

@@ -18,9 +18,22 @@ services:
       - n8n_data:/home/node/.n8n
     networks:
       - automation_net
+    depends_on:
+      - n8n-playwright
+
+  n8n-playwright:
+    image: browserless/chrome:latest
+    restart: always
+    ports:
+      - "3001:3000"
+    environment:
+      - MAX_CONCURRENT_SESSIONS=10
+    networks:
+      - automation_net
 
 volumes:
   n8n_data:
+
 
 networks:
   automation_net:

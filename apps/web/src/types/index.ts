@@ -29,6 +29,12 @@ export interface User {
   updated_at: string;
   is_admin: boolean;
   kyc_verified: boolean;
+  kyc_level: number;
+  account_status: string;
+  last_login_at?: string;
+  avatar_url?: string;
+  current_level_id?: number;
+  current_level_name?: string;
 }
 
 export interface Wallet {
@@ -100,7 +106,7 @@ export interface Order {
   created_at: string;
   updated_at: string;
   expires_at?: string;
-  
+
   // TIF (Time In Force) fields
   tif?: TIFType;
   gtd_expiry?: string;
@@ -963,19 +969,19 @@ export interface AIResolutionPipeline {
   marketId: string;
   query: string;
   status: 'running' | 'completed' | 'failed' | 'escalated';
-  
+
   // Agent Outputs
   retrieval?: AIRetrievalOutput;
   synthesis?: AISynthesisOutput;
   deliberation?: AIDeliberationOutput;
   explanation?: AIExplanationOutput;
-  
+
   // Final Result
   finalOutcome?: string;
   finalConfidence: number;
   confidenceLevel: AIConfidenceLevel;
   recommendedAction: string;
-  
+
   // Metadata
   startedAt: string;
   completedAt?: string;

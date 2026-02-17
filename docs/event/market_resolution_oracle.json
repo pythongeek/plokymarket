@@ -1,0 +1,104 @@
+{
+    "name": "Market Resolution Oracle (Gemini)",
+    "nodes": [
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "resolve-market",
+                "options": {}
+            },
+            "name": "Webhook",
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 1,
+            "position": [
+                100,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "url": "https://www.google.com/search?q={{$json[\"question\"]}} site:prothomalo.com OR site:thedailystar.net",
+                "options": {}
+            },
+            "name": "Search News",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.1,
+            "position": [
+                300,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "model": "gemini-pro",
+                "prompt": "Analyze the following news search results for the question: \"{{$node[\"Webhook\"].json[\"question\"]}}\". Determine if the outcome is YES (1) or NO (2). Provide a confidence score (0-100) and your reasoning. Return as JSON: {\"outcome\": 1 or 2, \"confidence\": 95, \"reasoning\": \"...\"}. Search Results: {{$json[\"data\"]}}",
+                "options": {}
+            },
+            "name": "Gemini AI",
+            "type": "n8n-nodes-base.googleGemini",
+            "typeVersion": 1,
+            "position": [
+                500,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "operation": "update",
+                "table": "resolution_systems",
+                "dataMode": "defineBelow",
+                "where": {
+                    "event_id": "={{$node[\"Webhook\"].json[\"market_id\"]}}"
+                },
+                "values": {
+                    "proposed_outcome": "={{$json[\"outcome\"]}}",
+                    "confidence_level": "={{$json[\"confidence\"]}}",
+                    "resolution_status": "={{$json[\"confidence\"] > 90 ? 'resolved' : 'in_progress'}}",
+                    "evidence": "=[{\"reasoning\": \"{{$json[\"reasoning\"]}}\"}]"
+                }
+            },
+            "name": "Update Resolution System",
+            "type": "n8n-nodes-base.supabase",
+            "typeVersion": 1,
+            "position": [
+                750,
+                300
+            ]
+        }
+    ],
+    "connections": {
+        "Webhook": {
+            "main": [
+                [
+                    {
+                        "node": "Search News",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Search News": {
+            "main": [
+                [
+                    {
+                        "node": "Gemini AI",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Gemini AI": {
+            "main": [
+                [
+                    {
+                        "node": "Update Resolution System",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    }
+}

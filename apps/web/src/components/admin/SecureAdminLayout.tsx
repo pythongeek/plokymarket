@@ -19,6 +19,8 @@ import {
   Calendar,
   Gavel,
   ShieldCheck,
+  Settings,
+  Workflow,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -29,8 +31,14 @@ const SECURE_PATHS = {
   markets: '/sys-cmd-7x9k2/markets',
   events: '/sys-cmd-7x9k2/events',
   resolution: '/sys-cmd-7x9k2/resolution',
+  resolutions: '/sys-cmd-7x9k2/resolutions',
   analytics: '/sys-cmd-7x9k2/analytics',
   kyc: '/sys-cmd-7x9k2/kyc',
+  p2p: '/sys-cmd-7x9k2/p2p',
+  depositSettings: '/sys-cmd-7x9k2/deposit-settings',
+  dailyTopics: '/sys-cmd-7x9k2/daily-topics',
+  aiConfigs: '/sys-cmd-7x9k2/ai-configs',
+  workflows: '/sys-cmd-7x9k2/workflows',
 };
 
 interface AdminUser {
@@ -92,9 +100,11 @@ export function SecureAdminLayout({ children }: { children: React.ReactNode }) {
         resource: pathname,
       });
 
-    } catch (err) {
-      console.error('Auth check error:', err);
-      router.replace('/auth-portal-3m5n8');
+    } catch (err: any) {
+      if (err?.name !== 'AbortError' && !err?.message?.includes('aborted')) {
+        console.error('Auth check error:', err);
+        router.replace('/auth-portal-3m5n8');
+      }
     } finally {
       setLoading(false);
     }
@@ -200,17 +210,59 @@ export function SecureAdminLayout({ children }: { children: React.ReactNode }) {
       requiresSuper: true,
     },
     {
+      path: SECURE_PATHS.resolutions,
+      label: 'রেজোলিউশন সিস্টেম',
+      labelEn: 'Resolution System',
+      icon: Gavel,
+      requiresSuper: true,
+    },
+    {
+      path: SECURE_PATHS.dailyTopics,
+      label: 'দৈনিক টপিক্স',
+      labelEn: 'Daily Topics',
+      icon: Calendar,
+      requiresSuper: true,
+    },
+    {
+      path: SECURE_PATHS.aiConfigs,
+      label: 'AI কনফিগ',
+      labelEn: 'AI Configs',
+      icon: Settings,
+      requiresSuper: true,
+    },
+    {
       path: SECURE_PATHS.kyc,
       label: 'KYC যাচাইকরণ',
       labelEn: 'KYC Verification',
       icon: ShieldCheck,
       requiresSuper: false,
     },
+    {
+      path: SECURE_PATHS.p2p,
+      label: 'P2P ব্যবস্থাপনা',
+      labelEn: 'P2P Management',
+      icon: TrendingUp,
+      requiresSuper: true,
+    },
+    {
+      path: SECURE_PATHS.depositSettings,
+      label: 'ডিপোজিট সেটিংস',
+      labelEn: 'Deposit Settings',
+      icon: Settings,
+      requiresSuper: true,
+    },
+    {
+      path: SECURE_PATHS.workflows,
+      label: 'ওয়ার্কফ্লো',
+      labelEn: 'Workflows',
+      icon: Workflow,
+      requiresSuper: true,
+    },
   ];
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+      <div className="min-h-screen bg-white flex items-center justify-center">
         <motion.div
           animate={{ rotate: 360 }}
           transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
@@ -223,21 +275,21 @@ export function SecureAdminLayout({ children }: { children: React.ReactNode }) {
   if (!admin) return null;
 
   return (
-    <div className="min-h-screen bg-slate-950">
+    <div className="min-h-screen bg-white">
       {/* Top Bar */}
-      <header className="border-b border-slate-800 bg-slate-900/50 backdrop-blur sticky top-0 z-50">
+      <header className="border-b border-gray-200 bg-white/95 backdrop-blur sticky top-0 z-50">
         <div className="flex h-16 items-center justify-between px-6">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <Shield className="w-6 h-6 text-primary" />
-              <span className="text-lg font-bold text-white tracking-tight">
+              <span className="text-lg font-bold text-gray-900 tracking-tight">
                 SYS-CMD
               </span>
               <Badge variant="outline" className={cn(
                 "text-xs font-semibold",
                 admin.is_super_admin
-                  ? "border-amber-500/40 text-amber-300 bg-amber-500/10"
-                  : "border-primary/40 text-primary bg-primary/10"
+                  ? "border-amber-400 text-amber-700 bg-amber-50"
+                  : "border-primary bg-primary/10"
               )}>
                 {admin.is_super_admin ? '⭐ SUPER ADMIN' : '🛡️ ADMIN'}
               </Badge>
@@ -246,15 +298,15 @@ export function SecureAdminLayout({ children }: { children: React.ReactNode }) {
 
           <div className="flex items-center gap-4">
             {/* System Status */}
-            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 border border-slate-800">
-              {systemStatus === 'healthy' && <CheckCircle className="w-4 h-4 text-emerald-500" />}
-              {systemStatus === 'warning' && <AlertTriangle className="w-4 h-4 text-amber-500" />}
-              {systemStatus === 'critical' && <Activity className="w-4 h-4 text-red-500" />}
+            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-gray-50 border border-gray-300">
+              {systemStatus === 'healthy' && <CheckCircle className="w-4 h-4 text-emerald-600" />}
+              {systemStatus === 'warning' && <AlertTriangle className="w-4 h-4 text-amber-600" />}
+              {systemStatus === 'critical' && <Activity className="w-4 h-4 text-red-600" />}
               <span className={cn(
                 "text-xs font-medium",
-                systemStatus === 'healthy' && 'text-emerald-500',
-                systemStatus === 'warning' && 'text-amber-500',
-                systemStatus === 'critical' && 'text-red-500',
+                systemStatus === 'healthy' && 'text-emerald-700',
+                systemStatus === 'warning' && 'text-amber-700',
+                systemStatus === 'critical' && 'text-red-700',
               )}>
                 {systemStatus.toUpperCase()}
               </span>
@@ -265,7 +317,7 @@ export function SecureAdminLayout({ children }: { children: React.ReactNode }) {
               )}
             </div>
 
-            <div className="text-sm text-slate-200 font-medium">
+            <div className="text-sm text-gray-700 font-medium">
               {admin.email}
             </div>
 
@@ -273,7 +325,7 @@ export function SecureAdminLayout({ children }: { children: React.ReactNode }) {
               variant="ghost"
               size="sm"
               onClick={handleLogout}
-              className="text-slate-400 hover:text-white"
+              className="text-gray-600 hover:text-gray-900 hover:bg-gray-100"
             >
               <LogOut className="w-4 h-4 mr-2" />
               Exit
@@ -284,7 +336,7 @@ export function SecureAdminLayout({ children }: { children: React.ReactNode }) {
 
       <div className="flex">
         {/* Sidebar */}
-        <aside className="w-64 min-h-[calc(100vh-4rem)] border-r border-slate-800 bg-slate-900/30 p-4">
+        <aside className="w-64 min-h-[calc(100vh-4rem)] border-r border-gray-200 bg-gray-50 p-4">
           <nav className="space-y-1">
             {navItems.map((item) => {
               if (item.requiresSuper && !admin.is_super_admin) return null;
@@ -299,14 +351,14 @@ export function SecureAdminLayout({ children }: { children: React.ReactNode }) {
                   className={cn(
                     'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
                     isActive
-                      ? 'bg-primary/15 text-white border border-primary/30 shadow-sm shadow-primary/10'
-                      : 'text-slate-200 hover:bg-slate-800/80 hover:text-white'
+                      ? 'bg-primary/20 text-gray-900 border border-primary/30 shadow-sm shadow-primary/10'
+                      : 'text-gray-700 hover:bg-gray-200 hover:text-gray-900'
                   )}
                 >
-                  <Icon className={cn("w-5 h-5", isActive ? "text-primary" : "text-slate-400")} />
+                  <Icon className={cn("w-5 h-5", isActive ? "text-primary" : "text-gray-500")} />
                   <div className="flex flex-col items-start">
                     <span className="font-semibold">{item.label}</span>
-                    <span className={cn("text-[10px]", isActive ? "text-slate-300" : "text-slate-400")}>{item.labelEn}</span>
+                    <span className={cn("text-[10px]", isActive ? "text-gray-700" : "text-gray-500")}>{item.labelEn}</span>
                   </div>
                 </button>
               );
@@ -314,13 +366,13 @@ export function SecureAdminLayout({ children }: { children: React.ReactNode }) {
           </nav>
 
           {/* Security Notice */}
-          <div className="mt-8 p-4 rounded-lg bg-slate-900/60 border border-primary/20">
+          <div className="mt-8 p-4 rounded-lg bg-blue-50 border border-blue-200">
             <div className="flex items-start gap-2">
-              <Shield className="w-4 h-4 text-primary mt-0.5" />
+              <Shield className="w-4 h-4 text-blue-600 mt-0.5" />
               <div className="text-xs">
-                <p className="font-semibold text-slate-200 mb-1">🔒 নিরাপদ সেশন</p>
-                <p className="text-slate-300">All actions are logged and monitored.</p>
-                <p className="mt-1 text-slate-400">
+                <p className="font-semibold text-gray-900 mb-1">🔒 নিরাপদ সেশন</p>
+                <p className="text-gray-700">All actions are logged and monitored.</p>
+                <p className="mt-1 text-gray-600">
                   Session: {new Date().toLocaleTimeString()}
                 </p>
               </div>
@@ -329,7 +381,7 @@ export function SecureAdminLayout({ children }: { children: React.ReactNode }) {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 p-6">
+        <main className="flex-1 p-6 bg-gray-50">
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { I18nProvider } from '@/components/providers/I18nProvider';
 import { ThemeProvider } from "@/components/theme-provider"
+import { AuthProvider } from '@/components/providers/AuthProvider';
 
 export const metadata: Metadata = {
   title: 'Plokymarket - Prediction Marketplace',
@@ -23,7 +24,9 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <I18nProvider>
-            {children}
+            <AuthProvider>
+              {children}
+            </AuthProvider>
           </I18nProvider>
         </ThemeProvider>
       </body>

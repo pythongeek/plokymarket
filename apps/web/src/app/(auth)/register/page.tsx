@@ -43,7 +43,7 @@ export default function RegisterPage() {
   const [isSuccess, setIsSuccess] = useState(false);
   const [rateLimitSeconds, setRateLimitSeconds] = useState(0);
 
-  const { register } = useStore();
+  const { register, loginWithGoogle } = useStore();
   const router = useRouter();
   const { t } = useTranslation();
 
@@ -302,6 +302,32 @@ export default function RegisterPage() {
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </>
                 )}
+              </Button>
+
+              <div className="relative my-4">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t"></span>
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">
+                    {t('auth.or_continue_with')}
+                  </span>
+                </div>
+              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() => loginWithGoogle()}
+                disabled={isLoading}
+              >
+                <img
+                  src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
+                  alt="Google"
+                  className="mr-2 h-4 w-4"
+                />
+                Sign up with Google
               </Button>
             </form>
 

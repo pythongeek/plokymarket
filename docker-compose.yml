@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  # 1. Main n8n Instance (General Logic)
+  n8n:
+    image: docker.n8n.io/n8nio/n8n
+    container_name: polymarket-n8n-main
+    restart: always
+    ports:
+      - "${N8N_PORT:-5678}:5678"
+    environment:
+      - N8N_HOST=${N8N_HOST:-localhost}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=https
+      - NODE_ENV=production
+      - WEBHOOK_URL=https://${N8N_HOST:-localhost}/
+      - GENERIC_TIMEZONE=${GENERIC_TIMEZONE:-Asia/Dhaka}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+    volumes:
+      - n8n_data:/home/node/.n8n
+    networks:
+      - polymarket_net
+
+  # 2. Browserless Chrome (For n8n Scraping)
+  n8n-playwright:
+    image: browserless/chrome:latest
+    container_name: polymarket-playwright
+    restart: always
+    environment:
+      - MAX_CONCURRENT_SESSIONS=10
+    networks:
+      - polymarket_net
+
+  # 3. Isolated P2P Scraper (Dedicated n8n Instance)
+  n8n-p2p:
+    image: n8nio/n8n:latest
+    container_name: polymarket-n8n-p2p
+    restart: unless-stopped
+    ports:
+      - "${N8N_P2P_PORT:-5680}:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_P2P_BASIC_AUTH_USER}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_P2P_BASIC_AUTH_PASSWORD}
+      - NODE_FUNCTION_ALLOW_EXTERNAL=axios,cheerio,puppeteer
+      - BINANCE_AFFILIATE_CODE=${BINANCE_AFFILIATE_CODE}
+      - GENERIC_TIMEZONE=${GENERIC_TIMEZONE}
+    volumes:
+      - n8n_p2p_data:/home/node/.n8n
+    networks:
+      - polymarket_net
+
+  # 4. AI-KYC Service (FastAPI)
+  kyc-ai:
+    build:
+      context: ./apps/ai-kyc
+      dockerfile: Dockerfile
+    container_name: polymarket-kyc-ai
+    ports:
+      - "${KYC_AI_PORT:-8000}:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    networks:
+      - polymarket_net
+
+volumes:
+  n8n_data:
+  n8n_p2p_data:
+
+
+networks:
+  polymarket_net:
+    name: polymarket_plus_net
+    driver: bridge

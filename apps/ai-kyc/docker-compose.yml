@@ -11,3 +11,9 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
     restart: unless-stopped
+    networks:
+      - plokymarket-kyc-net
+
+networks:
+  plokymarket-kyc-net:
+    driver: bridge

@@ -1,8 +1,14 @@
+import face_recognition
+import cv2
+import os
+import pytesseract
+from PIL import Image
+from typing import Tuple, Dict
+
+class KYCProcessor:
     def verify_face_match(self, id_doc_path: str, selfie_path: str) -> tuple:
         """Verify if faces match using facial encodings (dlib)"""
         try:
-            import face_recognition
-
             # Load images
             try:
                 id_image = face_recognition.load_image_file(id_doc_path)

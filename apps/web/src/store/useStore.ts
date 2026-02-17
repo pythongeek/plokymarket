@@ -15,6 +15,7 @@ import type {
 import {
   supabase,
   signIn,
+  signInWithGoogle,
   signUp,
   signOut,
   fetchMarkets,
@@ -46,8 +47,10 @@ interface StoreState {
   currentUser: User | null;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<boolean | string>;
+  loginWithGoogle: () => Promise<void>;
   register: (email: string, password: string, fullName: string) => Promise<boolean | string>;
   logout: () => void;
+  initializeAuth: () => void;
 
   // Data
   markets: Market[];
@@ -83,10 +86,28 @@ interface StoreState {
   updateSuggestion: (id: string, status: 'approved' | 'rejected') => Promise<void>;
   suggestions: MarketSuggestion[];
 
+  // Risk Management
+  riskControls: {
+    trading_halted: boolean;
+    withdrawals_halted: boolean;
+    emergency_message: string;
+  } | null;
+  fetchRiskControls: () => Promise<void>;
+  updateRiskControls: (controls: any) => Promise<boolean>;
+
   // Wallet Management
   generateDepositAddress: (network: string) => Promise<any>;
   verifyDeposit: (txid: string, network: string) => Promise<any>;
+  withdrawFunds: (amount: number, address: string, network: string) => Promise<{ success: boolean; message: string }>;
   activeWallet: any | null;
+
+  // KYC
+  uploadKycDocuments: (formData: FormData) => Promise<{ success: boolean; message: string }>;
+
+  // Payment Security
+  submitDeposit: (amount: number, method: string, trxId: string) => Promise<{ success: boolean; message: string }>;
+  paymentTransactions: any[];
+  fetchPaymentTransactions: () => Promise<void>;
 
   // Real-time
   subscribeToMarket: (marketId: string) => () => void;
@@ -124,9 +145,11 @@ export const useStore = create<StoreState>()(
       trades: [],
       positions: [],
       transactions: [],
+      paymentTransactions: [],
       wallet: null,
       suggestions: [],
       activeWallet: null,
+      riskControls: null,
 
       // Trading UI Initial State
       tradingState: {
@@ -172,7 +195,7 @@ export const useStore = create<StoreState>()(
             // Fetch user profile
             if (!supabase) return 'Database connection error';
             const { data: profile } = await supabase
-              .from('users')
+              .from('user_profiles')
               .select('*')
               .eq('id', data.user.id)
               .single();
@@ -203,8 +226,20 @@ export const useStore = create<StoreState>()(
 
           return 'Login failed. Please try again.';
         } catch (error: any) {
+          if (error?.name === 'AbortError' || error?.message?.includes('aborted')) {
+            // Silently ignore abort errors during login/navigation
+            return true;
+          }
           console.error('Login error:', error);
           return error?.message || 'An unexpected error occurred. Please try again.';
+        }
+      },
+
+      loginWithGoogle: async () => {
+        try {
+          await signInWithGoogle();
+        } catch (error) {
+          console.error('Google login error:', error);
         }
       },
 
@@ -228,12 +263,11 @@ export const useStore = create<StoreState>()(
 
           if (data.user) {
             // Create user profile
-            const { error: profileError } = await supabase!.from('users').insert({
+            const { error: profileError } = await supabase!.from('user_profiles').insert({
               id: data.user.id,
               email,
               full_name: fullName,
               is_admin: false,
-              kyc_verified: false,
             });
 
             if (profileError) {
@@ -260,6 +294,8 @@ export const useStore = create<StoreState>()(
                 updated_at: new Date().toISOString(),
                 is_admin: false,
                 kyc_verified: false,
+                kyc_level: 0,
+                account_status: 'active',
               },
               isAuthenticated: true,
               wallet: {
@@ -293,6 +329,80 @@ export const useStore = create<StoreState>()(
           wallet: null,
           positions: [],
           transactions: [],
+        });
+      },
+
+      initializeAuth: () => {
+        if (!supabase) return;
+
+        // Set up the listener
+        supabase.auth.onAuthStateChange(async (event: string, session: any) => {
+          if (session?.user) {
+            // Fetch user profile and related data
+            const { data: profile } = await supabase
+              .from('user_profiles')
+              .select(`
+                *,
+                user_kyc_profiles (id_expiry),
+                user_status (account_status),
+                levels (name)
+              `)
+              .eq('id', session.user.id)
+              .single();
+
+            const profileData = profile ? {
+              ...profile,
+              id_expiry: (profile as any).user_kyc_profiles?.id_expiry,
+              account_status: (profile as any).user_status?.account_status || 'active',
+              current_level_name: (profile as any).levels?.name || 'Novice'
+            } : null;
+
+            set({
+              currentUser: profileData || {
+                id: session.user.id,
+                email: session.user.email || '',
+                full_name: session.user.user_metadata?.full_name || 'User',
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+                is_admin: false,
+                kyc_verified: false,
+                kyc_level: 0,
+                account_status: 'active',
+              },
+              isAuthenticated: true,
+            });
+
+            // Track user activity (graceful)
+            supabase.rpc('track_user_activity', { p_user_id: session.user.id }).then(({ error }) => {
+              if (error) console.warn('Activity tracking failed:', error);
+            });
+
+            // Handle dormant status
+            if (profileData?.account_status === 'dormant') {
+              console.warn('User account is dormant. Verification required.');
+            }
+
+            // Load user data - suppress abort errors during initial load
+            try {
+              await Promise.all([
+                get().fetchWallet(),
+                get().fetchPositions(),
+                get().fetchTransactions()
+              ]);
+            } catch (err: any) {
+              if (err?.name !== 'AbortError' && !err?.message?.includes('aborted')) {
+                console.error('Initial data load error:', err);
+              }
+            }
+          } else if (event === 'SIGNED_OUT') {
+            set({
+              currentUser: null,
+              isAuthenticated: false,
+              wallet: null,
+              positions: [],
+              transactions: [],
+            });
+          }
         });
       },
 
@@ -347,7 +457,8 @@ export const useStore = create<StoreState>()(
         try {
           const positions = await fetchPositions(currentUser.id);
           set({ positions: positions || [] });
-        } catch (error) {
+        } catch (error: any) {
+          if (error?.name === 'AbortError' || error?.message?.includes('aborted')) return;
           console.error('Error fetching positions:', error);
           set({ positions: [] });
         }
@@ -360,7 +471,8 @@ export const useStore = create<StoreState>()(
         try {
           const wallet = await fetchWallet(currentUser.id);
           set({ wallet });
-        } catch (error) {
+        } catch (error: any) {
+          if (error?.name === 'AbortError' || error?.message?.includes('aborted')) return;
           console.error('Error fetching wallet:', error);
         }
       },
@@ -372,7 +484,8 @@ export const useStore = create<StoreState>()(
         try {
           const transactions = await fetchTransactions(currentUser.id);
           set({ transactions: transactions || [] });
-        } catch (error) {
+        } catch (error: any) {
+          if (error?.name === 'AbortError' || error?.message?.includes('aborted')) return;
           console.error('Error fetching transactions:', error);
           set({ transactions: [] });
         }
@@ -470,6 +583,49 @@ export const useStore = create<StoreState>()(
         }
       },
 
+      fetchRiskControls: async () => {
+        const { currentUser } = get();
+        if (!currentUser?.is_admin) return;
+
+        try {
+          const { data, error } = await supabase!
+            .from('admin_settings')
+            .select('value')
+            .eq('key', 'risk_controls')
+            .single();
+
+          if (error) throw error;
+          set({ riskControls: data.value });
+        } catch (error) {
+          console.error('Error fetching risk controls:', error);
+        }
+      },
+
+      updateRiskControls: async (controls: any) => {
+        const { currentUser, riskControls } = get();
+        if (!currentUser?.is_admin) return false;
+
+        const newValue = { ...riskControls, ...controls };
+
+        try {
+          const { error } = await supabase!
+            .from('admin_settings')
+            .update({
+              value: newValue,
+              updated_by: currentUser.id,
+              updated_at: new Date().toISOString()
+            })
+            .eq('key', 'risk_controls');
+
+          if (error) throw error;
+          set({ riskControls: newValue });
+          return true;
+        } catch (error) {
+          console.error('Error updating risk controls:', error);
+          return false;
+        }
+      },
+
       fetchSuggestions: async () => {
         try {
           const suggestions = await fetchMarketSuggestions();
@@ -539,9 +695,143 @@ export const useStore = create<StoreState>()(
         return { status: 'SUCCESS', amount: 500 };
       },
 
-      // ===================================
-      // REAL-TIME SUBSCRIPTIONS
-      // ===================================
+      withdrawFunds: async (amount: number, address: string, network: string) => {
+        const { currentUser } = get();
+        if (!currentUser) return { success: false, message: 'Please login first.' };
+
+        try {
+          // 1. Call RPC to request withdrawal (handles balance check and KYC check)
+          const { error } = await supabase!.rpc('request_withdrawal', {
+            p_user_id: currentUser.id,
+            p_amount: amount,
+            p_address: address,
+            p_network: network
+          });
+
+          if (error) {
+            console.error('Withdrawal error:', error);
+            // Handle specific KYC error message from backend
+            if (error.message.includes('KYC Level 1')) {
+              return { success: false, message: 'LIMIT_EXCEEDED_KYC_REQUIRED' };
+            }
+            return { success: false, message: error.message };
+          }
+
+          // Refresh wallet
+          await get().fetchWallet();
+          await get().fetchTransactions();
+
+          return { success: true, message: 'Withdrawal request submitted successfully.' };
+        } catch (error: any) {
+          console.error('Withdrawal exception:', error);
+          return { success: false, message: error.message || 'Withdrawal failed.' };
+        }
+      },
+
+      uploadKycDocuments: async (formData: FormData) => {
+        const { currentUser } = get();
+        if (!currentUser) return { success: false, message: 'Please login first.' };
+
+        try {
+          // 1. Upload images to Storage
+          const uploadFile = async (file: File, path: string) => {
+            const { data, error } = await supabase!.storage
+              .from('kyc-documents')
+              .upload(`${currentUser.id}/${path}-${Date.now()}`, file);
+
+            if (error) throw error;
+
+            // Get public URL
+            const { data: { publicUrl } } = supabase!.storage
+              .from('kyc-documents')
+              .getPublicUrl(data.path);
+
+            return publicUrl;
+          };
+
+          const frontImage = formData.get('front') as File;
+          const backImage = formData.get('back') as File;
+          const selfieImage = formData.get('selfie') as File;
+          const docType = formData.get('type') as string;
+
+          if (!frontImage || !docType) {
+            return { success: false, message: 'Missing required documents.' };
+          }
+
+          const frontUrl = await uploadFile(frontImage, 'front');
+          const backUrl = backImage ? await uploadFile(backImage, 'back') : null;
+          const selfieUrl = selfieImage ? await uploadFile(selfieImage, 'selfie') : null;
+
+          // 2. Insert into kyc_documents
+          const { error: dbError } = await supabase!
+            .from('kyc_documents')
+            .insert({
+              user_id: currentUser.id,
+              document_type: docType,
+              document_front_url: frontUrl,
+              document_back_url: backUrl,
+              selfie_url: selfieUrl,
+              status: 'pending'
+            });
+
+          if (dbError) throw dbError;
+
+          return { success: true, message: 'Documents submitted successfully. Pending review.' };
+
+        } catch (error: any) {
+          console.error('KYC Upload Error:', error);
+          return { success: false, message: error.message || 'Upload failed.' };
+        }
+      },
+
+      submitDeposit: async (amount: number, method: string, trxId: string) => {
+        const { currentUser } = get();
+        if (!currentUser) return { success: false, message: 'Please login first.' };
+
+        try {
+          const { error } = await supabase!.rpc('submit_deposit_request', {
+            p_user_id: currentUser.id,
+            p_amount: amount,
+            p_payment_method: method,
+            p_transaction_id: trxId
+          });
+
+          if (error) {
+            console.error('Deposit Error:', error);
+            if (error.message.includes('Transaction ID already used')) {
+              return { success: false, message: 'This Transaction ID has already been submitted.' };
+            }
+            return { success: false, message: error.message };
+          }
+
+          // Refresh payment transactions
+          await get().fetchPaymentTransactions();
+
+          return { success: true, message: 'Deposit request submitted successfully. Pending admin approval.' };
+        } catch (error: any) {
+          console.error('Deposit Exception:', error);
+          return { success: false, message: error.message || 'Deposit failed.' };
+        }
+      },
+
+      fetchPaymentTransactions: async () => {
+        const { currentUser } = get();
+        if (!currentUser) return;
+
+        try {
+          const { data, error } = await supabase!
+            .from('payment_transactions')
+            .select('*')
+            .eq('user_id', currentUser.id)
+            .order('created_at', { ascending: false });
+
+          if (error) throw error;
+          set({ paymentTransactions: data || [] });
+        } catch (error) {
+          console.error('Error fetching payment transactions:', error);
+          set({ paymentTransactions: [] });
+        }
+      },
 
       subscribeToMarket: (marketId: string) => {
         const { fetchOrders, fetchTrades } = get();

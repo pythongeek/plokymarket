@@ -400,9 +400,9 @@ export default function MarketManagementPage() {
         if (searchQuery) {
             const query = searchQuery.toLowerCase();
             return (
-                d.question?.toLowerCase().includes(query) ||
-                d.market_type?.toLowerCase().includes(query) ||
-                d.id.toLowerCase().includes(query)
+                d.question?.toLowerCase?.().includes(query) ||
+                d.market_type?.toLowerCase?.().includes(query) ||
+                typeof d.id === 'string' && d.id.toLowerCase().includes(query)
             );
         }
         return true;

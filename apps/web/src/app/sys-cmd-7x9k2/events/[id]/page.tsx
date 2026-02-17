@@ -66,11 +66,11 @@ export default function EventDetailsPage() {
             const data = await marketCreationService.getEvent(eventId);
             setEvent(data);
             setFormData({
-                title: data.title,
+                title: data.question || data.title || '',
                 description: data.description || '',
                 slug: data.slug,
                 category: data.category,
-                is_active: data.is_active,
+                is_active: data.status === 'active',
                 image_url: data.image_url || ''
             });
             // If markets are returned nested
@@ -201,7 +201,7 @@ export default function EventDetailsPage() {
                     </Button>
                     <div>
                         <div className="flex items-center gap-2">
-                            <h1 className="text-2xl font-bold text-white">{event.title}</h1>
+                            <h1 className="text-2xl font-bold text-white">{event.question || event.title || 'Untitled'}</h1>
                             <Badge variant="outline" className="text-slate-400 border-slate-700 font-mono text-xs">
                                 {event.slug}
                             </Badge>
@@ -209,7 +209,7 @@ export default function EventDetailsPage() {
                         <p className="text-sm text-slate-400 flex items-center gap-2 mt-1">
                             <span className="bg-slate-800 px-2 py-0.5 rounded text-xs">{event.category}</span>
                             <span className="w-1 h-1 rounded-full bg-slate-600" />
-                            <Calendar className="w-3.5 h-3.5" /> {new Date(event.start_date).toLocaleDateString()}
+                            <Calendar className="w-3.5 h-3.5" /> {new Date(event.trading_closes_at || event.start_date || event.created_at).toLocaleDateString()}
                         </p>
                     </div>
                 </div>

@@ -1,0 +1,478 @@
+-- ===============================================
+-- PRODUCTION RESOLUTION SYSTEM MIGRATION
+-- Complete implementation for AI Oracle + Admin Resolution
+-- ===============================================
+
+-- 1. Cleanup legacy tables if they exist (safe migration)
+DROP TABLE IF EXISTS public.oracle_verifications CASCADE;
+DROP TABLE IF EXISTS public.oracle_disputes CASCADE;
+DROP TABLE IF EXISTS public.oracle_assertions CASCADE;
+DROP TABLE IF EXISTS public.oracle_requests CASCADE;
+
+-- 2. Create the unified resolution_systems table (if not exists)
+-- Note: This table may already exist from migration 082
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.tables 
+                 WHERE table_schema = 'public' 
+                 AND table_name = 'resolution_systems') THEN
+    CREATE TABLE public.resolution_systems (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_id UUID NOT NULL REFERENCES public.markets(id) ON DELETE CASCADE,
+  
+  primary_method VARCHAR(50) NOT NULL CHECK (
+    primary_method IN ('ai_oracle', 'manual_admin', 'expert_panel', 'dispute_tribunal', 'external_oracle')
+  ),
+  fallback_methods VARCHAR(50)[] DEFAULT ARRAY['manual_admin'],
+  
+  ai_oracle_config JSONB DEFAULT '{
+    "sources": ["prothomalo.com", "thedailystar.net", "bdnews24.com", "banglatribune.com"],
+    "keywords": [],
+    "confidence_threshold": 90,
+    "min_sources_required": 2
+  }'::jsonb,
+  
+  assigned_experts UUID[],
+  expert_votes JSONB DEFAULT '[]'::jsonb,
+  expert_consensus_threshold NUMERIC(3, 2) DEFAULT 0.75,
+  
+  dispute_count INTEGER DEFAULT 0,
+  disputes JSONB DEFAULT '[]'::jsonb,
+  dispute_bond_amount NUMERIC(10, 2) DEFAULT 100.00,
+  
+  external_oracle_type VARCHAR(50), 
+  external_api_endpoint TEXT,
+  external_api_key_encrypted TEXT,
+  external_last_check TIMESTAMPTZ,
+  
+  resolution_status VARCHAR(20) DEFAULT 'pending' CHECK (
+    resolution_status IN ('pending', 'in_progress', 'resolved', 'disputed', 'failed')
+  ),
+  
+  proposed_outcome INTEGER CHECK (proposed_outcome IN (1, 2, NULL)), -- 1 = YES, 2 = NO
+  confidence_level NUMERIC(5, 2),
+  evidence JSONB DEFAULT '[]'::jsonb,
+  
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  resolved_at TIMESTAMPTZ,
+  
+  CONSTRAINT unique_event_resolution UNIQUE (event_id)
+);
+
+-- 3. Create AI Resolution Pipelines table for detailed tracking
+CREATE TABLE IF NOT EXISTS public.ai_resolution_pipelines (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  pipeline_id VARCHAR(100) UNIQUE NOT NULL,
+  market_id UUID NOT NULL REFERENCES public.markets(id) ON DELETE CASCADE,
+  
+  -- Pipeline stages
+  query JSONB,
+  retrieval_output JSONB,
+  synthesis_output JSONB,
+  deliberation_output JSONB,
+  explanation_output JSONB,
+  
+  -- Results
+  final_outcome VARCHAR(10) CHECK (final_outcome IN ('YES', 'NO', 'UNKNOWN')),
+  final_confidence NUMERIC(5, 2),
+  confidence_level VARCHAR(20) CHECK (confidence_level IN ('HIGH', 'MEDIUM', 'LOW', 'INSUFFICIENT')),
+  recommended_action VARCHAR(50) CHECK (recommended_action IN ('AUTO_RESOLVE', 'HUMAN_REVIEW', 'GATHER_MORE_EVIDENCE')),
+  
+  -- Execution tracking
+  status VARCHAR(20) DEFAULT 'running' CHECK (status IN ('running', 'completed', 'failed')),
+  started_at TIMESTAMPTZ DEFAULT NOW(),
+  completed_at TIMESTAMPTZ,
+  total_execution_time_ms INTEGER,
+  
+  -- Model versions for audit
+  synthesis_model_version TEXT,
+  deliberation_model_version TEXT,
+  explanation_model_version TEXT,
+  
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 4. Create Human Review Queue table
+CREATE TABLE IF NOT EXISTS public.human_review_queue (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  market_id UUID NOT NULL REFERENCES public.markets(id) ON DELETE CASCADE,
+  pipeline_id UUID REFERENCES public.ai_resolution_pipelines(id),
+  
+  -- Review details
+  ai_proposed_outcome VARCHAR(10),
+  ai_confidence NUMERIC(5, 2),
+  ai_reasoning TEXT,
+  evidence_summary JSONB,
+  
+  -- Review status
+  status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'assigned', 'reviewing', 'approved', 'rejected')),
+  priority INTEGER DEFAULT 5 CHECK (priority BETWEEN 1 AND 10),
+  
+  -- Assignment
+  assigned_to UUID REFERENCES auth.users(id),
+  assigned_at TIMESTAMPTZ,
+  
+  -- Resolution
+  final_outcome VARCHAR(10) CHECK (final_outcome IN ('YES', 'NO')),
+  reviewer_notes TEXT,
+  reviewed_at TIMESTAMPTZ,
+  
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  CONSTRAINT unique_market_review UNIQUE (market_id)
+);
+
+-- 5. Create Expert Panel table
+CREATE TABLE IF NOT EXISTS public.expert_panel (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id),
+  expert_name VARCHAR(100) NOT NULL,
+  specializations VARCHAR(50)[] NOT NULL,
+  is_verified BOOLEAN DEFAULT FALSE,
+  total_votes INTEGER DEFAULT 0,
+  accuracy_rate NUMERIC(5, 2) DEFAULT 0.00,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  CONSTRAINT unique_expert_user UNIQUE (user_id)
+);
+
+-- 6. Create Resolution Audit Log
+CREATE TABLE IF NOT EXISTS public.resolution_audit_log (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  market_id UUID NOT NULL REFERENCES public.markets(id) ON DELETE CASCADE,
+  action VARCHAR(50) NOT NULL,
+  performed_by UUID REFERENCES auth.users(id),
+  details JSONB,
+  ip_address INET,
+  user_agent TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 7. Indexes for performance
+CREATE INDEX IF NOT EXISTS idx_resolution_event ON public.resolution_systems(event_id);
+CREATE INDEX IF NOT EXISTS idx_resolution_status ON public.resolution_systems(resolution_status);
+CREATE INDEX IF NOT EXISTS idx_resolution_proposed ON public.resolution_systems(proposed_outcome, resolution_status);
+
+CREATE INDEX IF NOT EXISTS idx_pipeline_market ON public.ai_resolution_pipelines(market_id);
+CREATE INDEX IF NOT EXISTS idx_pipeline_status ON public.ai_resolution_pipelines(status);
+CREATE INDEX IF NOT EXISTS idx_pipeline_created ON public.ai_resolution_pipelines(created_at);
+
+CREATE INDEX IF NOT EXISTS idx_review_status ON public.human_review_queue(status);
+CREATE INDEX IF NOT EXISTS idx_review_assigned ON public.human_review_queue(assigned_to);
+CREATE INDEX IF NOT EXISTS idx_review_priority ON public.human_review_queue(priority, created_at);
+
+CREATE INDEX IF NOT EXISTS idx_audit_market ON public.resolution_audit_log(market_id);
+CREATE INDEX IF NOT EXISTS idx_audit_created ON public.resolution_audit_log(created_at);
+
+-- 8. RLS Policies
+ALTER TABLE public.resolution_systems ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.ai_resolution_pipelines ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.human_review_queue ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.expert_panel ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.resolution_audit_log ENABLE ROW LEVEL SECURITY;
+
+-- Resolution Systems Policies
+CREATE POLICY "Public can view resolution systems"
+  ON public.resolution_systems FOR SELECT
+  TO public
+  USING (true);
+
+CREATE POLICY "Admins can manage resolution systems"
+  ON public.resolution_systems FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND is_admin = TRUE)
+  );
+
+-- AI Pipeline Policies
+CREATE POLICY "Public can view AI pipelines"
+  ON public.ai_resolution_pipelines FOR SELECT
+  TO public
+  USING (true);
+
+CREATE POLICY "Admins can manage AI pipelines"
+  ON public.ai_resolution_pipelines FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND is_admin = TRUE)
+  );
+
+-- Human Review Queue Policies
+CREATE POLICY "Admins can view review queue"
+  ON public.human_review_queue FOR SELECT
+  TO authenticated
+  USING (
+    EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND is_admin = TRUE)
+  );
+
+CREATE POLICY "Admins can update review queue"
+  ON public.human_review_queue FOR UPDATE
+  TO authenticated
+  USING (
+    EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND is_admin = TRUE)
+  );
+
+-- Expert Panel Policies
+CREATE POLICY "Experts are public"
+  ON public.expert_panel FOR SELECT
+  TO public
+  USING (true);
+
+CREATE POLICY "Admins can manage experts"
+  ON public.expert_panel FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND is_admin = TRUE)
+  );
+
+-- Audit Log Policies (Admin only)
+CREATE POLICY "Admins can view audit log"
+  ON public.resolution_audit_log FOR SELECT
+  TO authenticated
+  USING (
+    EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND is_admin = TRUE)
+  );
+
+-- 9. Functions & Triggers
+
+-- Auto-update updated_at
+CREATE OR REPLACE FUNCTION public.sync_resolution_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER tr_resolution_updated_at
+  BEFORE UPDATE ON public.resolution_systems
+  FOR EACH ROW
+  EXECUTE FUNCTION public.sync_resolution_updated_at();
+
+CREATE TRIGGER tr_pipeline_updated_at
+  BEFORE UPDATE ON public.ai_resolution_pipelines
+  FOR EACH ROW
+  EXECUTE FUNCTION public.sync_resolution_updated_at();
+
+CREATE TRIGGER tr_review_updated_at
+  BEFORE UPDATE ON public.human_review_queue
+  FOR EACH ROW
+  EXECUTE FUNCTION public.sync_resolution_updated_at();
+
+-- Function to auto-resolve market when confidence is high
+CREATE OR REPLACE FUNCTION public.auto_resolve_market()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- Only auto-resolve if confidence is high enough and status is completed
+  IF NEW.status = 'completed' 
+     AND NEW.recommended_action = 'AUTO_RESOLVE'
+     AND NEW.final_outcome IS NOT NULL THEN
+    
+    -- Update market status
+    UPDATE public.markets
+    SET 
+      status = 'resolved',
+      winning_outcome = NEW.final_outcome,
+      resolved_at = NOW(),
+      resolution_details = jsonb_build_object(
+        'source', 'AI_ORACLE',
+        'confidence', NEW.final_confidence,
+        'pipeline_id', NEW.pipeline_id,
+        'auto_resolved', true
+      )
+    WHERE id = NEW.market_id;
+    
+    -- Update resolution system
+    UPDATE public.resolution_systems
+    SET 
+      resolution_status = 'resolved',
+      proposed_outcome = CASE NEW.final_outcome 
+        WHEN 'YES' THEN 1 
+        WHEN 'NO' THEN 2 
+        ELSE NULL 
+      END,
+      confidence_level = NEW.final_confidence,
+      resolved_at = NOW()
+    WHERE event_id = NEW.market_id;
+    
+    -- Log the action
+    INSERT INTO public.resolution_audit_log (market_id, action, details)
+    VALUES (
+      NEW.market_id, 
+      'AUTO_RESOLVED',
+      jsonb_build_object(
+        'pipeline_id', NEW.pipeline_id,
+        'outcome', NEW.final_outcome,
+        'confidence', NEW.final_confidence
+      )
+    );
+  END IF;
+  
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER tr_auto_resolve_market
+  AFTER UPDATE ON public.ai_resolution_pipelines
+  FOR EACH ROW
+  EXECUTE FUNCTION public.auto_resolve_market();
+
+-- Function to create human review entry when AI confidence is low
+CREATE OR REPLACE FUNCTION public.create_human_review()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- Create human review entry if human review is recommended
+  IF NEW.recommended_action = 'HUMAN_REVIEW' THEN
+    INSERT INTO public.human_review_queue (
+      market_id,
+      pipeline_id,
+      ai_proposed_outcome,
+      ai_confidence,
+      ai_reasoning,
+      evidence_summary,
+      priority,
+      status
+    )
+    VALUES (
+      NEW.market_id,
+      NEW.id,
+      NEW.final_outcome,
+      NEW.final_confidence,
+      NEW.explanation_output->>'naturalLanguageReasoning',
+      NEW.explanation_output->'keyEvidenceCitations',
+      5, -- Default priority
+      'pending'
+    )
+    ON CONFLICT (market_id) DO UPDATE
+    SET 
+      pipeline_id = NEW.id,
+      ai_proposed_outcome = NEW.final_outcome,
+      ai_confidence = NEW.final_confidence,
+      ai_reasoning = NEW.explanation_output->>'naturalLanguageReasoning',
+      evidence_summary = NEW.explanation_output->'keyEvidenceCitations',
+      status = 'pending',
+      updated_at = NOW();
+    
+    -- Update resolution system status
+    UPDATE public.resolution_systems
+    SET resolution_status = 'in_progress'
+    WHERE event_id = NEW.market_id;
+  END IF;
+  
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER tr_create_human_review
+  AFTER INSERT ON public.ai_resolution_pipelines
+  FOR EACH ROW
+  EXECUTE FUNCTION public.create_human_review();
+
+-- 10. Helper function to manually resolve market (for admin)
+CREATE OR REPLACE FUNCTION public.manual_resolve_market(
+  p_market_id UUID,
+  p_outcome VARCHAR(10),
+  p_admin_id UUID,
+  p_notes TEXT DEFAULT NULL
+)
+RETURNS JSONB AS $$
+DECLARE
+  v_result JSONB;
+BEGIN
+  -- Validate outcome
+  IF p_outcome NOT IN ('YES', 'NO') THEN
+    RAISE EXCEPTION 'Invalid outcome. Must be YES or NO';
+  END IF;
+  
+  -- Update market
+  UPDATE public.markets
+  SET 
+    status = 'resolved',
+    winning_outcome = p_outcome,
+    resolved_at = NOW(),
+    resolution_details = jsonb_build_object(
+      'source', 'MANUAL_ADMIN',
+      'resolved_by', p_admin_id,
+      'notes', p_notes,
+      'resolved_at', NOW()
+    )
+  WHERE id = p_market_id;
+  
+  -- Update resolution system
+  UPDATE public.resolution_systems
+  SET 
+    resolution_status = 'resolved',
+    proposed_outcome = CASE p_outcome 
+      WHEN 'YES' THEN 1 
+      WHEN 'NO' THEN 2 
+    END,
+    resolved_at = NOW()
+  WHERE event_id = p_market_id;
+  
+  -- Update human review queue if exists
+  UPDATE public.human_review_queue
+  SET 
+    status = 'approved',
+    final_outcome = p_outcome,
+    reviewer_notes = p_notes,
+    reviewed_at = NOW()
+  WHERE market_id = p_market_id;
+  
+  -- Log the action
+  INSERT INTO public.resolution_audit_log (market_id, action, performed_by, details)
+  VALUES (
+    p_market_id, 
+    'MANUAL_RESOLVED',
+    p_admin_id,
+    jsonb_build_object(
+      'outcome', p_outcome,
+      'notes', p_notes
+    )
+  );
+  
+  RETURN jsonb_build_object(
+    'success', true,
+    'market_id', p_market_id,
+    'outcome', p_outcome
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 11. View for admin resolution dashboard
+CREATE OR REPLACE VIEW public.admin_resolution_dashboard AS
+SELECT 
+  m.id as market_id,
+  m.question,
+  m.category,
+  m.status as market_status,
+  m.trading_closes_at,
+  m.event_date,
+  rs.resolution_status,
+  rs.primary_method,
+  rs.proposed_outcome,
+  rs.confidence_level,
+  rs.resolved_at,
+  hrq.status as review_status,
+  hrq.ai_confidence,
+  hrq.ai_proposed_outcome,
+  hrq.assigned_to,
+  hrq.priority,
+  p.pipeline_id,
+  p.final_outcome as ai_outcome,
+  p.recommended_action,
+  p.status as pipeline_status
+FROM public.markets m
+LEFT JOIN public.resolution_systems rs ON m.id = rs.event_id
+LEFT JOIN public.human_review_queue hrq ON m.id = hrq.market_id
+LEFT JOIN public.ai_resolution_pipelines p ON m.id = p.market_id
+WHERE m.status IN ('closed', 'resolved')
+  OR (m.status = 'active' AND m.trading_closes_at < NOW());
+
+-- Grant access to the view
+GRANT SELECT ON public.admin_resolution_dashboard TO authenticated;
+
+-- ===============================================
+-- END OF PRODUCTION RESOLUTION SYSTEM MIGRATION
+-- ===============================================

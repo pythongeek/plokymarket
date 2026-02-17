@@ -1,0 +1,20 @@
+
+{
+  "models": [
+    {
+      "title": "Novita GLM-5",
+      "provider": "openai",
+      "model": "zai-org/glm-5",
+      "apiKey": sk_a0kqWFjPLagHpnRjqZAH0mx4SXzmNmSn7jQJjzJew5o",
+      "apiBase": "https://api.novita.ai/openai"
+    }
+  ],
+  "tabAutocompleteModel": {
+    "title": "GLM-5 Autocomplete",
+    "provider": "openai",
+    "model": "zai-org/glm-5",
+          "apiKey": sk_a0kqWFjPLagHpnRjqZAH0mx4SXzmNmSn7jQJjzJew5o",
+    "apiBase": "https://api.novita.ai/openai"
+  }
+}
+

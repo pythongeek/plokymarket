@@ -1,5 +1,6 @@
 # Start from python 3.9 slim
-FROM python:3.9-slim
+# Start from python 3.9 slim (bullseye for stability)
+FROM python:3.9-slim-bullseye
 
 # Set environment variables for dlib compilation
 ENV CMAKE_ARGS="-DDLIB_USE_CUDA=0 -DDLIB_USE_BLAS=0 -DDLIB_USE_LAPACK=0"
@@ -10,7 +11,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     cmake \
-    libgl1-mesa-glx \
+    libgl1 \
+    libglib2.0-0 \
     libsm6 \
     libxext6 \
     libxrender-dev \

@@ -45,6 +45,17 @@ export async function signIn(email: string, password: string) {
   return { data, error };
 }
 
+export async function signInWithGoogle() {
+  if (!supabase) throw new Error('Supabase client not initialized');
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: `${typeof window !== 'undefined' ? window.location.origin : ''}/api/auth/callback`,
+    },
+  });
+  return { data, error };
+}
+
 export async function signOut() {
   if (!supabase) return;
   const { error } = await supabase.auth.signOut();
@@ -158,7 +169,7 @@ export async function placeAtomicOrder(order: {
   order_type?: 'limit' | 'market';
 }) {
   if (!supabase) throw new Error('Supabase client not initialized');
-  
+
   // Place the order
   const { data: orderId, error } = await supabase.rpc('place_atomic_order', {
     p_market_id: order.market_id,
@@ -173,7 +184,7 @@ export async function placeAtomicOrder(order: {
     console.error('Atomic order error:', error);
     throw error;
   }
-  
+
   // If it's a limit order (maker), start tracking for rebates
   // Market orders are taker orders, not eligible for maker rebates
   if (orderId && order.order_type !== 'market') {
@@ -191,7 +202,7 @@ export async function placeAtomicOrder(order: {
       console.error('Error starting order tracking:', trackError);
     }
   }
-  
+
   return orderId; // Returns the order UUID
 }
 

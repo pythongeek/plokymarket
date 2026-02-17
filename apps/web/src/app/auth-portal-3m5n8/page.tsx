@@ -12,13 +12,31 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Shield, Lock, Eye, EyeOff, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-// Secure admin paths mapping
+// Secure admin paths mapping - all routes under sys-cmd-7x9k2
 const SECURE_PATHS = {
   admin: '/sys-cmd-7x9k2',
-  users: '/usr-mgmt-4p7q1',
-  markets: '/mkt-ctl-8v2w4',
-  analytics: '/analytics-9x3y5',
+  users: '/sys-cmd-7x9k2/users',
+  markets: '/sys-cmd-7x9k2/markets',
+  analytics: '/sys-cmd-7x9k2/analytics',
 };
+
+// Helper to fetch with timeout
+async function fetchWithTimeout(url: string, options: RequestInit, timeout = 10000) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    clearTimeout(id);
+    return response;
+  } catch (error) {
+    clearTimeout(id);
+    throw error;
+  }
+}
 
 export default function SecureAuthPortal() {
   const router = useRouter();
@@ -34,27 +52,74 @@ export default function SecureAuthPortal() {
   const [lockedUntil, setLockedUntil] = useState<Date | null>(null);
   const [securityCheck, setSecurityCheck] = useState(false);
 
-  const supabase = createClient();
+  // Use shared Supabase client
+  const [supabase] = useState(() => createClient());
 
   // Check for existing session
   useEffect(() => {
     const checkSession = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        // Verify admin status
-        const { data: profile } = await supabase
-          .from('user_profiles')
-          .select('is_admin, is_super_admin')
-          .eq('id', user.id)
-          .single();
+      try {
+        const { data: { user }, error: sessionError } = await supabase.auth.getUser();
 
-        if (profile?.is_admin || profile?.is_super_admin) {
-          router.replace(redirectTo);
+        if (sessionError) {
+          console.log('No existing session:', sessionError.message);
+          return;
         }
+
+        if (user) {
+          console.log('Existing session found, verifying admin...');
+
+          // Use direct REST API to avoid Supabase client AbortSignal issues
+          const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+          const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+          const session = await supabase.auth.getSession();
+          const accessToken = session.data.session?.access_token;
+
+          if (!supabaseUrl || !anonKey || !accessToken) {
+            console.error('Missing credentials for profile fetch');
+            return;
+          }
+
+          try {
+            const response = await fetchWithTimeout(
+              `${supabaseUrl}/rest/v1/user_profiles?id=eq.${user.id}&select=is_admin,is_super_admin`,
+              {
+                headers: {
+                  'apikey': anonKey,
+                  'Authorization': `Bearer ${accessToken}`,
+                },
+              },
+              8000  // Increased timeout to 8 seconds
+            );
+
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}`);
+            }
+
+            const data = await response.json();
+            const profile = data[0];
+
+            if (profile?.is_admin || profile?.is_super_admin) {
+              console.log('Admin verified, redirecting...');
+              router.replace(redirectTo);
+            } else {
+              console.log('User is not admin, staying on login page');
+              await supabase.auth.signOut();
+            }
+          } catch (fetchErr) {
+            console.error('Profile fetch error:', fetchErr);
+            // Don't redirect on fetch error, let user try login
+          }
+        }
+      } catch (err: any) {
+        if (err?.name !== 'AbortError' && !err?.message?.includes('aborted')) {
+          console.error('Session check error:', err);
+        }
+        // Don't redirect on session check error, let user try login
       }
     };
     checkSession();
-  }, [router, redirectTo]);
+  }, [router, redirectTo, supabase]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,52 +138,138 @@ export default function SecureAuthPortal() {
     setError('');
 
     try {
-      const { data: { user }, error: authError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (authError) throw authError;
-
-      if (!user) {
-        throw new Error('Authentication failed');
+      // Validate credentials before attempting login
+      if (!email || !password) {
+        throw new Error('Email and password are required');
       }
 
-      // Verify admin status
-      const { data: profile, error: profileError } = await supabase
-        .from('user_profiles')
-        .select('is_admin, is_super_admin')
-        .eq('id', user.id)
-        .single();
+      console.log('Attempting login for:', email);
 
-      if (profileError || (!profile?.is_admin && !profile?.is_super_admin)) {
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password: password,
+      });
+
+      if (authError) {
+        console.error('Auth error:', authError);
+        throw new Error(authError.message || 'Authentication failed');
+      }
+
+      if (!authData?.user) {
+        throw new Error('No user returned from authentication');
+      }
+
+      const user = authData.user;
+      console.log('Login successful, user ID:', user.id);
+
+      // Verify admin status via server API which uses server-side credentials
+      let profile: any = null;
+
+      try {
+        console.log('Verifying admin via server API...');
+        const resp = await fetchWithTimeout('/api/admin/verify', { method: 'GET', credentials: 'include' }, 12000);
+
+        if (resp.status === 401) {
+          await supabase.auth.signOut();
+          throw new Error('Unauthorized. Please login again.');
+        }
+
+        if (resp.status === 403) {
+          // If forbidden, attempt an ensure-admin flow for the special admin email
+          if (user.email === 'admin@plokymarket.bd') {
+            try {
+              const ensure = await fetchWithTimeout('/api/admin/ensure-admin', { method: 'POST', credentials: 'include' }, 12000);
+              if (ensure.ok) {
+                profile = await ensure.json();
+                console.log('Ensure-admin created profile:', profile);
+              } else {
+                const body = await ensure.text().catch(() => '');
+                console.error('Ensure-admin failed', ensure.status, body);
+              }
+            } catch (e) {
+              console.error('Ensure-admin error:', e);
+            }
+          }
+
+          // Re-check verification if ensure-admin attempted
+          if (!profile) {
+            const retry = await fetchWithTimeout('/api/admin/verify', { method: 'GET', credentials: 'include' }, 12000);
+            if (retry.ok) {
+              const payload = await retry.json();
+              profile = { is_admin: payload.isAdmin, is_super_admin: payload.isSeniorCounsel ?? false, full_name: payload.fullName, email: payload.email };
+            }
+          }
+
+          if (!profile) {
+            throw new Error('Access denied. Admin privileges required.');
+          }
+        } else if (!resp.ok) {
+          const body = await resp.text().catch(() => '');
+          throw new Error(`Admin verify failed: ${resp.status} ${body}`);
+        } else {
+          const payload = await resp.json();
+          if (payload?.isAdmin) {
+            profile = { is_admin: true, is_super_admin: payload.isSeniorCounsel ?? false, full_name: payload.fullName, email: payload.email };
+          } else {
+            await supabase.auth.signOut();
+            throw new Error('Access denied. Admin privileges required.');
+          }
+        }
+      } catch (err: any) {
+        console.error('Profile verification error:', err);
+        throw err;
+      }
+
+      if (!profile) {
+        console.error('No profile found for user:', user.id);
+        throw new Error('User profile not found. Please contact support.');
+      }
+
+      if (!profile.is_admin && !profile.is_super_admin) {
+        console.warn('Non-admin user attempted access:', user.id, 'Profile:', profile);
+
         // Log unauthorized attempt
-        await supabase.from('admin_audit_log').insert({
-          action: 'admin_login_denied',
-          user_id: user.id,
-          resource: 'auth-portal',
-          details: { reason: 'not_admin' },
-        });
+        try {
+          await supabase.from('admin_audit_log').insert({
+            action: 'admin_login_denied',
+            user_id: user.id,
+            resource: 'auth-portal',
+            details: { reason: 'not_admin', profile },
+          });
+        } catch (e) {
+          console.error('Audit log error:', e);
+        }
 
         await supabase.auth.signOut();
         throw new Error('Access denied. Admin privileges required.');
       }
 
+      console.log('Admin verified, level:', profile.is_super_admin ? 'super' : 'admin');
+
       // Log successful login
-      await supabase.from('admin_audit_log').insert({
-        action: 'admin_login_success',
-        user_id: user.id,
-        resource: 'auth-portal',
-        details: {
-          admin_level: profile.is_super_admin ? 'super' : 'admin',
-          redirect_to: redirectTo,
-        },
-      });
+      try {
+        await supabase.from('admin_audit_log').insert({
+          action: 'admin_login_success',
+          user_id: user.id,
+          resource: 'auth-portal',
+          details: {
+            admin_level: profile.is_super_admin ? 'super' : 'admin',
+            redirect_to: redirectTo,
+          },
+        });
+      } catch (e) {
+        console.error('Audit log error:', e);
+      }
 
       // Redirect to requested page or admin dashboard
+      console.log('Redirecting to:', redirectTo);
       router.replace(redirectTo);
 
     } catch (err: any) {
+      if (err?.name === 'AbortError' || err?.message?.includes('aborted')) {
+        // Redirection might have happened, ignore
+        return;
+      }
       console.error('Login error:', err);
 
       const newAttempts = attempts + 1;

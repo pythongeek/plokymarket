@@ -5,19 +5,24 @@ export async function GET(
     request: Request,
     { params }: { params: { id: string } }
 ) {
-    const supabase = createClient();
+    const supabase = await createClient();
     const id = params.id;
 
     try {
-        // Fetch event with simple market count
+        // Fetch market by ID
         const { data: event, error } = await supabase
-            .from('events')
-            .select('*, markets(*)')
+            .from('markets')
+            .select('id, question, description, slug, status, category, image_url, created_at, updated_at, trading_closes_at')
             .eq('id', id)
             .single();
 
         if (error) {
             return NextResponse.json({ error: 'Event not found' }, { status: 404 });
+        }
+
+        // Map question to title for frontend compatibility
+        if (event) {
+            event.title = event.question;
         }
 
         return NextResponse.json({ data: event });
@@ -30,7 +35,7 @@ export async function PATCH(
     request: Request,
     { params }: { params: { id: string } }
 ) {
-    const supabase = createClient();
+    const supabase = await createClient();
     const id = params.id;
 
     // Check auth
@@ -40,16 +45,28 @@ export async function PATCH(
     try {
         const body = await request.json();
 
+        // Map title to question if needed
+        const updates: Record<string, any> = { ...body };
+        if (body.title && !body.question) {
+            updates.question = body.title;
+            delete updates.title;
+        }
+
         const { data, error } = await supabase
-            .from('events')
-            .update(body)
+            .from('markets')
+            .update(updates)
             .eq('id', id)
-            .select()
+            .select('id, question, description, slug, status, category, image_url, created_at, updated_at, trading_closes_at')
             .single();
 
         if (error) {
             console.error('Error updating event:', error);
             return NextResponse.json({ error: error.message }, { status: 500 });
+        }
+
+        // Map question to title for frontend compatibility
+        if (data) {
+            data.title = data.question;
         }
 
         return NextResponse.json({ data });
@@ -62,7 +79,7 @@ export async function DELETE(
     request: Request,
     { params }: { params: { id: string } }
 ) {
-    const supabase = createClient();
+    const supabase = await createClient();
     const id = params.id;
 
     // Check auth
@@ -71,7 +88,7 @@ export async function DELETE(
 
     try {
         const { error } = await supabase
-            .from('events')
+            .from('markets')
             .delete()
             .eq('id', id);
 

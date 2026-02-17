@@ -9,6 +9,8 @@
         "portfolio": "Portfolio",
         "activity": "Activity",
         "leaderboard": "Leaderboard",
+        "news": "News",
+        "search_placeholder": "Search markets...",
         "language": "Language",
         "waiting_for_data": "Waiting for live data...",
         "current": "Current",
@@ -60,6 +62,7 @@
         "forgot_password": "Forgot password?",
         "signing_in": "Signing in...",
         "sign_in": "Sign In",
+        "or_continue_with": "Or continue with",
         "demo_credentials": "Demo credentials for testing:",
         "click_to_use": "Click to use",
         "no_account": "Don't have an account?",
@@ -420,5 +423,29 @@
                 "rejected": "Rejected"
             }
         }
+    },
+    "premium_home": {
+        "hero_badge": "First Prediction Market in Bangladesh",
+        "hero_title_part1": "Predict the",
+        "hero_title_accent": "Future",
+        "hero_title_part2": "Profit Today",
+        "hero_description": "Trade on Politics, Cricket, Economy, and more. Turn your knowledge into earnings. Fast payments with bKash and Nagad.",
+        "hero_cta_start": "Get Started Now",
+        "hero_cta_how_it_works": "How it Works",
+        "cricket_special": "Cricket Special (BPL)",
+        "see_all": "See All",
+        "volume": "Volume",
+        "trade_now": "Trade Now",
+        "why_title": "Why Choose Plokymarket?",
+        "why_subtitle": "The most trusted prediction market in Bangladesh",
+        "feature_transparency_title": "100% Transparency",
+        "feature_transparency_desc": "Our platform is as transparent as blockchain technology. Every transaction is secure and visible.",
+        "feature_instant_title": "Instant Payments",
+        "feature_instant_desc": "Deposit and withdraw money via bKash or Nagad in the blink of an eye. No delays.",
+        "feature_local_title": "Local Market",
+        "feature_local_desc": "The only platform focused on local events, politics, and sports in Bangladesh.",
+        "footer_desc": "Bangladesh's first and leading prediction marketplace. Give your opinion, win rewards.",
+        "payment_methods": "Payment Methods",
+        "made_with_love": "Made with ❤️ in Bangladesh"
     }
 }

@@ -51,7 +51,7 @@ export default function MarketsPage() {
   // Filter and sort markets
   const filteredMarkets = markets.filter((market) => {
     // Search filter
-    if (searchQuery && !market.question.toLowerCase().includes(searchQuery.toLowerCase())) {
+    if (searchQuery && !market.question?.toLowerCase().includes(searchQuery.toLowerCase())) {
       return false;
     }
 

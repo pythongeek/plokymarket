@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  n8n-p2p:
+    image: n8nio/n8n:latest
+    container_name: polymarket-p2p-n8n
+    restart: unless-stopped
+    ports:
+      - "5680:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=secure_password
+      - WEBHOOK_URL=https://your-ngrok-url.ngrok.io
+      - NODE_FUNCTION_ALLOW_EXTERNAL=axios,cheerio,puppeteer
+      - EXECUTIONS_MODE=regular
+      - N8N_LOG_LEVEL=debug
+      - GENERIC_TIMEZONE=Asia/Dhaka
+      - BINANCE_AFFILIATE_CODE=RBA4A5YZ
+    volumes:
+      - n8n_p2p_data:/home/node/.n8n
+      - /usr/bin/chromium:/usr/bin/chromium:ro
+      - /usr/lib/chromium:/usr/lib/chromium:ro
+    command: n8n start
+    networks:
+      - p2p_net
+
+  ngrok-p2p:
+    image: ngrok/ngrok:latest
+    container_name: polymarket-p2p-ngrok
+    command: http n8n-p2p:5678 --authtoken=your_ngrok_auth_token
+    ports:
+      - "4041:4040"
+    depends_on:
+      - n8n-p2p
+    networks:
+      - p2p_net
+
+volumes:
+  n8n_p2p_data:
+
+
+networks:
+  p2p_net:
+    driver: bridge

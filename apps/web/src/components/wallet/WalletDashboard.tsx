@@ -1,270 +1,570 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import {
-    Wallet,
-    ArrowUpRight,
-    ArrowDownLeft,
-    Copy,
-    Check,
-    Search,
-    RefreshCw,
-    Zap,
-    ShieldCheck,
-    CreditCard,
-    QrCode
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { useStore } from '@/store/useStore';
-import { cn } from '@/lib/utils';
-import { ParticleEffect } from '../ui/ParticleEffect';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { createClient } from '@/lib/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
+import { formatCurrency } from '@/lib/utils/formatters';
+import { toast } from 'sonner';
 
-export function WalletDashboard() {
-    const { wallet, activeWallet, generateDepositAddress, verifyDeposit } = useStore();
-    const [activeTab, setActiveTab] = useState<'DEPOSIT' | 'WITHDRAW'>('DEPOSIT');
-    const [network, setNetwork] = useState('TRC20');
-    const [txid, setTxid] = useState('');
-    const [isVerifying, setIsVerifying] = useState(false);
-    const [isCopied, setIsCopied] = useState(false);
-    const [showSuccessParticles, setShowSuccessParticles] = useState(false);
-    const [verificationStatus, setVerificationStatus] = useState<any>(null);
+// Types
+interface WalletData {
+  usdt: number;
+  bdt: number;
+  exchangeRate: number;
+  totalDeposited: number;
+  totalWithdrawn: number;
+  kycStatus: 'pending' | 'verified' | 'rejected';
+  dailyWithdrawalLimit: number;
+}
 
-    useEffect(() => {
-        generateDepositAddress(network);
-    }, [network]);
+interface Transaction {
+  id: string;
+  amount: number;
+  type: 'deposit' | 'withdrawal' | 'bonus' | 'exchange' | 'refund';
+  description: string;
+  status: 'pending' | 'completed' | 'failed' | 'reversed';
+  createdAt: string;
+  formattedDate: string;
+  bdtAmount: number;
+}
 
-    const handleCopy = () => {
-        if (activeWallet?.usdt_address) {
-            navigator.clipboard.writeText(activeWallet.usdt_address);
-            setIsCopied(true);
-            setTimeout(() => setIsCopied(false), 2000);
+interface DepositRequest {
+  id: string;
+  bdtAmount: number;
+  usdtAmount: number;
+  mfsProvider: 'bkash' | 'nagad' | 'rocket';
+  txnId: string;
+  status: string;
+  createdAt: string;
+}
+
+// Constants
+const EXCHANGE_RATE = 100; // Default rate
+const MIN_DEPOSIT_BDT = 50;
+const MAX_DEPOSIT_BDT = 50000;
+const MIN_WITHDRAW_USDT = 1;
+
+export default function WalletDashboard() {
+  const { user, isLoading: authLoading } = useAuth();
+  const supabase = createClient();
+  const queryClient = useQueryClient();
+  
+  // State
+  const [activeTab, setActiveTab] = useState<'overview' | 'deposit' | 'withdraw' | 'history'>('overview');
+  const [depositAmount, setDepositAmount] = useState('');
+  const [txnId, setTxnId] = useState('');
+  const [senderNumber, setSenderNumber] = useState('');
+  const [mfsProvider, setMfsProvider] = useState<'bkash' | 'nagad' | 'rocket'>('bkash');
+  const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [withdrawNumber, setWithdrawNumber] = useState('');
+  const [withdrawProvider, setWithdrawProvider] = useState<'bkash' | 'nagad' | 'rocket'>('bkash');
+
+  // Queries
+  const { data: wallet, isLoading: walletLoading } = useQuery({
+    queryKey: ['wallet'],
+    queryFn: async (): Promise<WalletData> => {
+      if (!user) throw new Error('Not authenticated');
+      
+      const response = await fetch('/api/wallet/balance');
+      if (!response.ok) throw new Error('Failed to fetch balance');
+      
+      const result = await response.json();
+      if (!result.success) throw new Error(result.error);
+      
+      return result.balance;
+    },
+    enabled: !!user,
+    staleTime: 30000, // 30 seconds
+  });
+
+  const { data: transactions, isLoading: txsLoading } = useQuery({
+    queryKey: ['transactions'],
+    queryFn: async (): Promise<Transaction[]> => {
+      if (!user) return [];
+      
+      const response = await fetch('/api/wallet/transactions');
+      if (!response.ok) throw new Error('Failed to fetch transactions');
+      
+      const result = await response.json();
+      if (!result.success) throw new Error(result.error);
+      
+      return result.transactions;
+    },
+    enabled: !!user,
+  });
+
+  const { data: pendingDeposits } = useQuery({
+    queryKey: ['pendingDeposits'],
+    queryFn: async (): Promise<DepositRequest[]> => {
+      if (!user) return [];
+      
+      const response = await fetch('/api/deposits/request?status=pending');
+      if (!response.ok) throw new Error('Failed to fetch deposits');
+      
+      const result = await response.json();
+      if (!result.success) throw new Error(result.error);
+      
+      return result.deposits;
+    },
+    enabled: !!user,
+    refetchInterval: 30000, // Auto-refresh every 30s
+  });
+
+  // Mutations
+  const depositMutation = useMutation({
+    mutationFn: async () => {
+      const bdtAmount = parseFloat(depositAmount);
+      
+      // Validation
+      if (isNaN(bdtAmount) || bdtAmount < MIN_DEPOSIT_BDT || bdtAmount > MAX_DEPOSIT_BDT) {
+        throw new Error(`Deposit amount must be between ${MIN_DEPOSIT_BDT} and ${MAX_DEPOSIT_BDT} BDT`);
+      }
+      
+      if (!txnId.trim() || txnId.length < 8) {
+        throw new Error('Please provide a valid Transaction ID');
+      }
+      
+      if (!senderNumber.trim() || !/^01[3-9]\d{8}$/.test(senderNumber)) {
+        throw new Error('Please provide a valid Bangladeshi mobile number (01XXXXXXXXX)');
+      }
+
+      const response = await fetch('/api/deposits/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bdtAmount,
+          mfsProvider,
+          txnId: txnId.trim().toUpperCase(),
+          senderNumber: senderNumber.trim()
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to create deposit request');
+      }
+
+      const result = await response.json();
+      return result;
+    },
+    onSuccess: () => {
+      // Reset form
+      setDepositAmount('');
+      setTxnId('');
+      setSenderNumber('');
+      
+      // Invalidate queries
+      queryClient.invalidateQueries({ queryKey: ['pendingDeposits'] });
+      
+      // Switch tab
+      setActiveTab('overview');
+      
+      toast.success('✅ Deposit request submitted successfully! Please wait for admin verification.');
+    },
+    onError: (error: Error) => {
+      toast.error(`❌ Error: ${error.message}`);
+    },
+  });
+
+  const withdrawMutation = useMutation({
+    mutationFn: async () => {
+      const usdtAmount = parseFloat(withdrawAmount);
+      
+      // Validation
+      if (isNaN(usdtAmount) || usdtAmount < MIN_WITHDRAW_USDT) {
+        throw new Error(`Minimum withdrawal amount is ${MIN_WITHDRAW_USDT} USDT`);
+      }
+      
+      if (!wallet || usdtAmount > wallet.usdt) {
+        throw new Error('Insufficient balance');
+      }
+      
+      if (!withdrawNumber.trim() || !/^01[3-9]\d{8}$/.test(withdrawNumber)) {
+        throw new Error('Please provide a valid Bangladeshi mobile number');
+      }
+
+      const response = await fetch('/api/withdrawals/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: usdtAmount,
+          mfsProvider: withdrawProvider,
+          recipientNumber: withdrawNumber.trim()
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to create withdrawal request');
+      }
+
+      const result = await response.json();
+      return result;
+    },
+    onSuccess: () => {
+      // Reset form
+      setWithdrawAmount('');
+      setWithdrawNumber('');
+      
+      // Invalidate queries
+      queryClient.invalidateQueries({ queryKey: ['wallet'] });
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      
+      // Switch tab
+      setActiveTab('overview');
+      
+      toast.success('✅ Withdrawal request submitted successfully! Please wait for admin processing.');
+    },
+    onError: (error: Error) => {
+      toast.error(`❌ Error: ${error.message}`);
+    },
+  });
+
+  // Realtime subscription for balance updates
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel(`wallet:${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles',
+          filter: `id=eq.${user.id}`,
+        },
+        (payload) => {
+          queryClient.setQueryData(['wallet'], (old: WalletData | undefined) => ({
+            ...old!,
+            usdt: payload.new.balance,
+            bdt: payload.new.balance * (old?.exchangeRate || EXCHANGE_RATE)
+          }));
         }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
     };
+  }, [supabase, user, queryClient]);
 
-    const handleVerify = async () => {
-        setIsVerifying(true);
-        setVerificationStatus(null);
-        const result = await verifyDeposit(txid, network);
-        setVerificationStatus(result);
-        setIsVerifying(false);
-
-        if (result.status === 'SUCCESS') {
-            setShowSuccessParticles(true);
-            setTimeout(() => setShowSuccessParticles(false), 3000);
-        }
-    };
-
+  if (authLoading || walletLoading) {
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* 3D Asset Card */}
-            <motion.div
-                whileHover={{ scale: 1.02 }}
-                className="lg:col-span-1"
-            >
-                <Card className="relative overflow-hidden bg-gradient-to-br from-indigo-900 via-slate-900 to-black border-slate-800 h-full group">
-                    <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:opacity-20 transition-opacity">
-                        <CreditCard className="h-48 w-48 -mr-12 -mt-12 rotate-12" />
-                    </div>
-
-                    <CardContent className="p-8 space-y-8 relative z-10">
-                        <div className="flex items-center justify-between">
-                            <div className="h-12 w-12 rounded-2xl bg-indigo-500/20 flex items-center justify-center">
-                                <Wallet className="h-6 w-6 text-indigo-400" />
-                            </div>
-                            <Badge variant="outline" className="border-indigo-500/30 text-indigo-300 bg-indigo-500/10">
-                                SECURED BY TATUM
-                            </Badge>
-                        </div>
-
-                        <div className="space-y-1">
-                            <p className="text-xs font-medium text-slate-500 uppercase tracking-[0.2em]">Total Balance</p>
-                            <div className="flex items-baseline gap-2">
-                                <span className="text-4xl font-black text-white">৳{wallet?.balance.toLocaleString()}</span>
-                                <span className="text-slate-400 font-medium">BDT</span>
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm">
-                                <p className="text-[10px] text-slate-500 uppercase mb-1">Available</p>
-                                <p className="text-lg font-bold">৳{wallet?.balance.toLocaleString()}</p>
-                            </div>
-                            <div className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm">
-                                <p className="text-[10px] text-slate-500 uppercase mb-1">Locked</p>
-                                <p className="text-lg font-bold">৳{wallet?.locked_balance.toLocaleString()}</p>
-                            </div>
-                        </div>
-
-                        <div className="space-y-4">
-                            <Button
-                                className={cn(
-                                    "w-full h-12 rounded-xl text-md font-bold transition-all",
-                                    activeTab === 'DEPOSIT' ? "bg-indigo-600 hover:bg-indigo-500" : "bg-slate-800 hover:bg-slate-700"
-                                )}
-                                onClick={() => setActiveTab('DEPOSIT')}
-                            >
-                                <ArrowDownLeft className="h-5 w-5 mr-2" /> Deposit USDT
-                            </Button>
-                            <Button
-                                variant="ghost"
-                                className="w-full text-slate-400 hover:text-white"
-                                onClick={() => setActiveTab('WITHDRAW')}
-                            >
-                                Withdraw Funds <ArrowUpRight className="h-4 w-4 ml-2" />
-                            </Button>
-                        </div>
-                    </CardContent>
-                    <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-blue-500" />
-                </Card>
-            </motion.div>
-
-            {/* Action panel (Deposit/Withdraw) */}
-            <div className="lg:col-span-2">
-                <AnimatePresence mode="wait">
-                    {activeTab === 'DEPOSIT' ? (
-                        <motion.div
-                            key="deposit"
-                            initial={{ opacity: 0, x: 20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: -20 }}
-                        >
-                            <Card className="bg-slate-900/40 border-slate-800 backdrop-blur-md">
-                                <CardHeader>
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <CardTitle>Deposit Assets</CardTitle>
-                                            <CardDescription>Select network and scan QR code to add liquidity</CardDescription>
-                                        </div>
-                                        <div className="flex gap-2">
-                                            {['TRC20', 'ERC20', 'BEP20'].map(n => (
-                                                <button
-                                                    key={n}
-                                                    onClick={() => setNetwork(n)}
-                                                    className={cn(
-                                                        "px-3 py-1 text-xs rounded-full font-bold transition-all",
-                                                        network === n ? "bg-indigo-500 text-white" : "bg-slate-800 text-slate-500 hover:text-slate-300"
-                                                    )}
-                                                >
-                                                    {n}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                </CardHeader>
-                                <CardContent className="space-y-8">
-                                    <div className="flex flex-col md:flex-row gap-8 items-center">
-                                        {/* QR Code Section */}
-                                        <div className="relative group">
-                                            <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-2xl blur opacity-20 group-hover:opacity-40 transition duration-1000 group-hover:duration-200"></div>
-                                            <div className="relative bg-white p-4 rounded-xl shadow-2xl">
-                                                {activeWallet?.qr_code_url ? (
-                                                    <img src={activeWallet.qr_code_url} alt="Deposit QR" className="h-40 w-40" />
-                                                ) : (
-                                                    <div className="h-40 w-40 flex items-center justify-center">
-                                                        <RefreshCw className="h-8 w-8 text-slate-300 animate-spin" />
-                                                    </div>
-                                                )}
-                                                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 rounded-xl">
-                                                    <QrCode className="h-10 w-10 text-indigo-600" />
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div className="flex-1 space-y-4 w-full">
-                                            <div className="space-y-2">
-                                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Your Deposit Address</label>
-                                                <div className="flex gap-2">
-                                                    <Input
-                                                        readOnly
-                                                        value={activeWallet?.usdt_address || 'Generating...'}
-                                                        className="bg-black/40 border-slate-700 font-mono text-sm h-12"
-                                                    />
-                                                    <Button variant="outline" size="icon" className="h-12 w-12 shrink-0 hover:bg-indigo-500/10" onClick={handleCopy}>
-                                                        {isCopied ? <Check className="h-5 w-5 text-emerald-400" /> : <Copy className="h-5 w-5" />}
-                                                    </Button>
-                                                </div>
-                                            </div>
-
-                                            <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/10 flex gap-3">
-                                                <Zap className="h-5 w-5 text-amber-500 shrink-0" />
-                                                <p className="text-xs text-amber-200/70 leading-relaxed font-medium">
-                                                    Ensure you are sending only <strong>USDT</strong> via the <strong>{network}</strong> network.
-                                                    Tokens sent via other networks will be permanently lost.
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Verification Section */}
-                                    <div className="pt-8 border-t border-slate-800 space-y-4">
-                                        <div>
-                                            <h4 className="font-bold flex items-center gap-2">
-                                                <Search className="h-4 w-4 text-indigo-400" />
-                                                Verify Transaction
-                                            </h4>
-                                            <p className="text-xs text-slate-500">Enter your TXID after sending to speed up the confirmation process.</p>
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <Input
-                                                placeholder="Enter Block Hash or TXID..."
-                                                className="bg-black/40 border-slate-700 h-12"
-                                                value={txid}
-                                                onChange={(e) => setTxid(e.target.value)}
-                                            />
-                                            <Button
-                                                className="h-12 px-8 bg-slate-100 text-black hover:bg-white font-black"
-                                                onClick={handleVerify}
-                                                disabled={isVerifying || !txid}
-                                            >
-                                                {isVerifying ? <RefreshCw className="h-5 w-5 animate-spin" /> : 'VERIFY'}
-                                            </Button>
-                                        </div>
-
-                                        {verificationStatus && (
-                                            <motion.div
-                                                initial={{ opacity: 0, y: 10 }}
-                                                animate={{ opacity: 1, y: 0 }}
-                                                className={cn(
-                                                    "p-4 rounded-xl border flex items-center justify-between",
-                                                    verificationStatus.status === 'SUCCESS' ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" : "bg-red-500/10 border-red-500/20 text-red-400"
-                                                )}
-                                            >
-                                                <div className="flex items-center gap-3">
-                                                    {verificationStatus.status === 'SUCCESS' ? <ShieldCheck className="h-5 w-5" /> : <RefreshCw className="h-5 w-5" />}
-                                                    <div>
-                                                        <p className="text-sm font-bold uppercase">{verificationStatus.status.replace('_', ' ')}</p>
-                                                        {verificationStatus.amount && <p className="text-xs opacity-70">Deposited ৳{verificationStatus.amount.toLocaleString()}</p>}
-                                                    </div>
-                                                </div>
-                                                {verificationStatus.status === 'PENDING_CONFIRMATION' && <Badge variant="outline" className="animate-pulse">Waiting for 12 nodes</Badge>}
-                                            </motion.div>
-                                        )}
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        </motion.div>
-                    ) : (
-                        <motion.div
-                            key="withdraw"
-                            initial={{ opacity: 0, x: 20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: -20 }}
-                            className="h-full flex items-center justify-center p-20 border-2 border-dashed border-slate-800 rounded-3xl"
-                        >
-                            <div className="text-center space-y-4">
-                                <ArrowUpRight className="h-12 w-12 text-slate-700 mx-auto" />
-                                <p className="text-slate-500 font-medium font-mono tracking-widest uppercase">Feature Locked</p>
-                                <p className="text-xs text-slate-600 max-w-[300px]">Withdrawal portal is currently under maintenance. Estimated uptime: 4 hours.</p>
-                            </div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-            </div>
-            <ParticleEffect active={showSuccessParticles} />
-        </div>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
     );
+  }
+
+  if (!user) {
+    return (
+      <div className="text-center py-12">
+        <h2 className="text-2xl font-bold text-gray-900 mb-4">Please Login</h2>
+        <p className="text-gray-600">You need to be logged in to view your wallet.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-4xl mx-auto p-6 space-y-6">
+      {/* Tab Navigation */}
+      <div className="flex gap-4 border-b">
+        {(['overview', 'deposit', 'withdraw', 'history'] as const).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`pb-2 px-4 font-medium transition-colors ${
+              activeTab === tab
+                ? 'text-blue-600 border-b-2 border-blue-600'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {tab === 'overview' && 'ওভারভিউ'}
+            {tab === 'deposit' && 'ডিপোজিট'}
+            {tab === 'withdraw' && 'উইথড্র'}
+            {tab === 'history' && 'ইতিহাস'}
+          </button>
+        ))}
+      </div>
+
+      {/* Overview Tab */}
+      {activeTab === 'overview' && (
+        <div className="space-y-6">
+          {/* Balance Card */}
+          <div className="bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl p-6">
+            <h2 className="text-lg opacity-90 mb-2">মোট ব্যালেন্স</h2>
+            <div className="flex items-end gap-4">
+              <span className="text-4xl font-bold">{formatCurrency(wallet?.usdt || 0, 'USDT')}</span>
+              <span className="text-sm opacity-75 mb-1">
+                ≈ {formatCurrency(wallet?.bdt || 0, 'BDT')}
+              </span>
+            </div>
+            <p className="text-sm opacity-75 mt-2">
+              এক্সচেঞ্জ রেট: 1 USDT = {formatCurrency(wallet?.exchangeRate || EXCHANGE_RATE, 'BDT')}
+            </p>
+          </div>
+
+          {/* Stats Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-gray-50 rounded-lg p-4">
+              <p className="text-sm text-gray-500 mb-1">মোট ডিপোজিট</p>
+              <p className="text-xl font-semibold">{formatCurrency(wallet?.totalDeposited || 0, 'USDT')}</p>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-4">
+              <p className="text-sm text-gray-500 mb-1">মোট উইথড্র</p>
+              <p className="text-xl font-semibold">{formatCurrency(wallet?.totalWithdrawn || 0, 'USDT')}</p>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-4">
+              <p className="text-sm text-gray-500 mb-1">KYC স্ট্যাটাস</p>
+              <p className={`text-xl font-semibold ${
+                wallet?.kycStatus === 'verified' ? 'text-green-600' : 'text-yellow-600'
+              }`}>
+                {wallet?.kycStatus === 'verified' ? '✓ ভেরিফাইড' : '⏳ পেন্ডিং'}
+              </p>
+            </div>
+          </div>
+
+          {/* Pending Deposits */}
+          {pendingDeposits && pendingDeposits.length > 0 && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <h3 className="font-semibold text-yellow-800 mb-2">⏳ পেন্ডিং ডিপোজিট রিকোয়েস্ট</h3>
+              {pendingDeposits.map((deposit) => (
+                <div key={deposit.id} className="flex justify-between items-center py-2 border-b border-yellow-200 last:border-0">
+                  <div>
+                    <p className="font-medium">{formatCurrency(deposit.bdtAmount, 'BDT')} ({formatCurrency(deposit.usdtAmount, 'USDT')})</p>
+                    <p className="text-sm text-gray-600">{deposit.mfsProvider} • {deposit.txnId}</p>
+                  </div>
+                  <span className="text-sm text-yellow-700 bg-yellow-100 px-2 py-1 rounded">
+                    অপেক্ষমান
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Quick Actions */}
+          <div className="flex gap-4">
+            <button
+              onClick={() => setActiveTab('deposit')}
+              className="flex-1 bg-green-500 text-white py-3 rounded-lg font-semibold hover:bg-green-600 transition-colors"
+            >
+              + ডিপোজিট করুন
+            </button>
+            <button
+              onClick={() => setActiveTab('withdraw')}
+              className="flex-1 bg-blue-500 text-white py-3 rounded-lg font-semibold hover:bg-blue-600 transition-colors"
+            >
+              - উইথড্র করুন
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Deposit Tab */}
+      {activeTab === 'deposit' && (
+        <form onSubmit={(e) => { e.preventDefault(); depositMutation.mutate(); }} className="space-y-4">
+          <h3 className="text-xl font-semibold mb-4">ক্যাশ ডিপোজিট (bKash/Nagad/Rocket)</h3>
+          
+          {/* Instructions */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+            <p className="text-sm text-blue-800">
+              <strong>ধাপ ১:</strong> নিচের নাম্বারে টাকা সেন্ড করুন< br />
+              <strong>bKash:</strong> 017XXXXXXXX (Send Money)< br />
+              <strong>Nagad:</strong> 017XXXXXXXX (Send Money)< br />
+              <strong>Rocket:</strong> 017XXXXXXXX (Send Money)< br />
+              <strong>ধাপ ২:</strong> Transaction ID (TxnID) নিচে লিখুন
+            </p>
+          </div>
+
+          {/* MFS Provider */}
+          <div>
+            <label className="block text-sm font-medium mb-1">পেমেন্ট মেথড</label>
+            <select
+              value={mfsProvider}
+              onChange={(e) => setMfsProvider(e.target.value as any)}
+              className="w-full border rounded-lg p-2"
+            >
+              <option value="bkash">bKash</option>
+              <option value="nagad">Nagad</option>
+              <option value="rocket">Rocket</option>
+            </select>
+          </div>
+
+          {/* Amount */}
+          <div>
+            <label className="block text-sm font-medium mb-1">টাকার পরিমাণ (BDT)</label>
+            <input
+              type="number"
+              min={MIN_DEPOSIT_BDT}
+              max={MAX_DEPOSIT_BDT}
+              step="100"
+              placeholder={`সর্বনিম্ন ৳${MIN_DEPOSIT_BDT}`}
+              value={depositAmount}
+              onChange={(e) => setDepositAmount(e.target.value)}
+              className="w-full border rounded-lg p-2"
+            />
+            <p className="text-sm text-gray-500 mt-1">
+              আপনি পাবেন: <strong>{formatCurrency((parseFloat(depositAmount || '0') / (wallet?.exchangeRate || EXCHANGE_RATE)).toFixed(2), 'USDT')}</strong>
+            </p>
+          </div>
+
+          {/* Sender Number */}
+          <div>
+            <label className="block text-sm font-medium mb-1">সেন্ডার মোবাইল নাম্বার</label>
+            <input
+              type="tel"
+              placeholder="01XXXXXXXXX"
+              value={senderNumber}
+              onChange={(e) => setSenderNumber(e.target.value)}
+              className="w-full border rounded-lg p-2"
+            />
+          </div>
+
+          {/* Transaction ID */}
+          <div>
+            <label className="block text-sm font-medium mb-1">Transaction ID (TxnID)</label>
+            <input
+              type="text"
+              placeholder="যেমন: 8A7B6C5D4E"
+              value={txnId}
+              onChange={(e) => setTxnId(e.target.value.toUpperCase())}
+              className="w-full border rounded-lg p-2"
+            />
+          </div>
+
+          {/* Submit Button */}
+          <button
+            type="submit"
+            disabled={depositMutation.isPending}
+            className="w-full bg-green-500 text-white py-3 rounded-lg font-semibold hover:bg-green-600 disabled:opacity-50 transition-colors"
+          >
+            {depositMutation.isPending ? 'প্রসেসিং...' : 'ডিপোজিট রিকোয়েস্ট করুন'}
+          </button>
+        </form>
+      )}
+
+      {/* Withdraw Tab */}
+      {activeTab === 'withdraw' && (
+        <form onSubmit={(e) => { e.preventDefault(); withdrawMutation.mutate(); }} className="space-y-4">
+          <h3 className="text-xl font-semibold mb-4">USDT উইথড্র (BDT-তে কনভার্ট)</h3>
+          
+          {/* Instructions */}
+          <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4">
+            <p className="text-sm text-purple-800">
+              <strong>রেট:</strong> 1 USDT = {formatCurrency(wallet?.exchangeRate || EXCHANGE_RATE, 'BDT')} BDT< br />
+              <strong>সর্বনিম্ন:</strong> {MIN_WITHDRAW_USDT} USDT< br />
+              <strong>প্রসেসিং টাইম:</strong> ১-২৪ ঘণ্টা
+            </p>
+          </div>
+
+          {/* Amount */}
+          <div>
+            <label className="block text-sm font-medium mb-1">USDT পরিমাণ</label>
+            <input
+              type="number"
+              min={MIN_WITHDRAW_USDT}
+              step="0.01"
+              max={wallet?.usdt}
+              placeholder={`সর্বনিম্ন ${MIN_WITHDRAW_USDT} USDT`}
+              value={withdrawAmount}
+              onChange={(e) => setWithdrawAmount(e.target.value)}
+              className="w-full border rounded-lg p-2"
+            />
+            <p className="text-sm text-gray-500 mt-1">
+              আপনি পাবেন: <strong>{formatCurrency((parseFloat(withdrawAmount || '0') * (wallet?.exchangeRate || EXCHANGE_RATE)).toFixed(2), 'BDT')}</strong>
+            </p>
+          </div>
+
+          {/* MFS Provider */}
+          <div>
+            <label className="block text-sm font-medium mb-1">রিসিভ করবেন (bKash/Nagad/Rocket)</label>
+            <select
+              value={withdrawProvider}
+              onChange={(e) => setWithdrawProvider(e.target.value as any)}
+              className="w-full border rounded-lg p-2"
+            >
+              <option value="bkash">bKash</option>
+              <option value="nagad">Nagad</option>
+              <option value="rocket">Rocket</option>
+            </select>
+          </div>
+
+          {/* Recipient Number */}
+          <div>
+            <label className="block text-sm font-medium mb-1">মোবাইল নাম্বার (যেখানে টাকা পাবেন)</label>
+            <input
+              type="tel"
+              placeholder="01XXXXXXXXX"
+              value={withdrawNumber}
+              onChange={(e) => setWithdrawNumber(e.target.value)}
+              className="w-full border rounded-lg p-2"
+            />
+          </div>
+
+          {/* Submit Button */}
+          <button
+            type="submit"
+            disabled={withdrawMutation.isPending || !wallet || parseFloat(withdrawAmount || '0') > wallet.usdt}
+            className="w-full bg-blue-500 text-white py-3 rounded-lg font-semibold hover:bg-blue-600 disabled:opacity-50 transition-colors"
+          >
+            {withdrawMutation.isPending ? 'প্রসেসিং...' : 'উইথড্র রিকোয়েস্ট করুন'}
+          </button>
+        </form>
+      )}
+
+      {/* History Tab */}
+      {activeTab === 'history' && (
+        <div>
+          <h3 className="text-xl font-semibold mb-4">লেনদেনের ইতিহাস</h3>
+          
+          {txsLoading ? (
+            <p>লোড হচ্ছে...</p>
+          ) : transactions && transactions.length > 0 ? (
+            <div className="space-y-2">
+              {transactions.map((tx) => (
+                <div
+                  key={tx.id}
+                  className={`flex justify-between items-center p-3 rounded-lg ${
+                    tx.type === 'deposit' || tx.type === 'bonus' ? 'bg-green-50' : 'bg-red-50'
+                  }`}
+                >
+                  <div>
+                    <p className="font-medium">
+                      {tx.type === 'deposit' && '💰 ডিপোজিট'}
+                      {tx.type === 'withdrawal' && '💸 উইথড্র'}
+                      {tx.type === 'bonus' && '🎁 বোনাস'}
+                      {tx.type === 'exchange' && '💱 এক্সচেঞ্জ'}
+                      {tx.type === 'refund' && '↩️ রিফান্ড'}
+                    </p>
+                    <p className="text-sm text-gray-600">{tx.description}</p>
+                    <p className="text-xs text-gray-400">{tx.formattedDate}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className={`font-bold ${
+                      tx.type === 'deposit' || tx.type === 'bonus' ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      {tx.type === 'deposit' || tx.type === 'bonus' ? '+' : '-'}
+                      {formatCurrency(tx.amount, 'USDT')}
+                    </p>
+                    <span className={`text-xs px-2 py-1 rounded ${
+                      tx.status === 'completed' ? 'bg-green-100 text-green-700' :
+                      tx.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                      'bg-red-100 text-red-700'
+                    }`}>
+                      {tx.status === 'completed' ? '✓ সম্পন্ন' :
+                       tx.status === 'pending' ? '⏳ অপেক্ষমান' : '❌ ব্যর্থ'}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-500 text-center py-8">কোনো লেনদেন পাওয়া যায়নি</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }

@@ -22,14 +22,17 @@ import {
   Zap,
   BarChart3,
   RefreshCw,
+  Workflow,
+  Plus,
 } from 'lucide-react';
+import { QStashWorkflowManager } from '@/components/admin/QStashWorkflowManager';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 
 const SECURE_PATHS = {
   markets: '/sys-cmd-7x9k2/markets',
   users: '/sys-cmd-7x9k2/users',
-  analytics: '/analytics-9x3y5',
+  analytics: '/sys-cmd-7x9k2/analytics',
 };
 
 interface DashboardStats {
@@ -283,10 +286,10 @@ export default function AdminDashboard() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-white">
+          <h1 className="text-3xl font-bold text-gray-900">
             সিস্টেম কন্ট্রোল ড্যাশবোর্ড
           </h1>
-          <p className="text-slate-300 mt-1">
+          <p className="text-gray-600 mt-1">
             Monitor and manage platform operations
           </p>
         </div>
@@ -296,12 +299,12 @@ export default function AdminDashboard() {
             size="sm"
             onClick={fetchDashboardData}
             disabled={refreshing}
-            className="border-slate-700 text-slate-200 hover:bg-slate-800 hover:text-white"
+            className="border-gray-300 text-gray-700 hover:bg-gray-100 hover:text-gray-900"
           >
             <RefreshCw className={cn("w-4 h-4 mr-2", refreshing && "animate-spin")} />
             Refresh
           </Button>
-          <div className="flex items-center gap-2 text-sm text-slate-400 bg-slate-900/50 px-3 py-1.5 rounded-lg border border-slate-800">
+          <div className="flex items-center gap-2 text-sm text-gray-600 bg-white px-3 py-1.5 rounded-lg border border-gray-300">
             <Lock className="w-3 h-3" />
             <span>Last sync: {lastRefresh.toLocaleTimeString()}</span>
           </div>
@@ -319,7 +322,7 @@ export default function AdminDashboard() {
           >
             <Card
               className={cn(
-                "bg-slate-900/80 border cursor-pointer transition-all duration-200 hover:scale-[1.02] hover:shadow-lg",
+                "bg-white border cursor-pointer transition-all duration-200 hover:scale-[1.02] hover:shadow-lg",
                 stat.borderColor
               )}
               onClick={stat.onClick}
@@ -327,10 +330,10 @@ export default function AdminDashboard() {
               <CardContent className="p-6">
                 <div className="flex items-start justify-between">
                   <div className="space-y-1">
-                    <p className="text-sm font-medium text-slate-300">{stat.title}</p>
-                    <p className="text-xs text-slate-500">{stat.titleEn}</p>
-                    <p className="text-3xl font-bold text-white mt-2">{stat.value}</p>
-                    <p className="text-sm text-slate-400 mt-1">{stat.change}</p>
+                    <p className="text-sm font-medium text-gray-700">{stat.title}</p>
+                    <p className="text-xs text-gray-500">{stat.titleEn}</p>
+                    <p className="text-3xl font-bold text-gray-900 mt-2">{stat.value}</p>
+                    <p className="text-sm text-gray-600 mt-1">{stat.change}</p>
                   </div>
                   <div className={cn("p-3 rounded-xl", stat.bgColor)}>
                     <stat.icon className={cn("w-6 h-6", stat.color)} />
@@ -345,13 +348,13 @@ export default function AdminDashboard() {
       {/* Action Center */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Quick Actions */}
-        <Card className="bg-slate-900/80 border-slate-700/50">
+        <Card className="bg-white border border-gray-200">
           <CardHeader>
-            <CardTitle className="text-white flex items-center gap-2">
-              <Zap className="w-5 h-5 text-amber-400" />
+            <CardTitle className="text-gray-900 flex items-center gap-2">
+              <Zap className="w-5 h-5 text-amber-500" />
               দ্রুত কার্যক্রম
             </CardTitle>
-            <CardDescription className="text-slate-400">
+            <CardDescription className="text-gray-600">
               Quick Actions — Common tasks
             </CardDescription>
           </CardHeader>
@@ -365,35 +368,43 @@ export default function AdminDashboard() {
             </Button>
             <Button
               variant="outline"
-              className="w-full justify-between border-slate-600 text-slate-200 hover:bg-slate-800 hover:text-white"
+              className="w-full justify-between border-gray-300 text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+              onClick={() => router.push('/sys-cmd-7x9k2/events')}
+            >
+              <span>➕ Create New Event</span>
+              <Plus className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full justify-between border-gray-300 text-gray-700 hover:bg-gray-100 hover:text-gray-900"
               onClick={() => router.push(SECURE_PATHS.users)}
             >
               <span>👥 Review User Applications</span>
-              <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30">
+              <Badge className="bg-blue-100 text-blue-700 border-blue-300">
                 {stats.pendingReviews}
               </Badge>
             </Button>
             <Button
               variant="outline"
-              className="w-full justify-between border-slate-600 text-slate-200 hover:bg-slate-800 hover:text-white"
+              className="w-full justify-between border-gray-300 text-gray-700 hover:bg-gray-100 hover:text-gray-900"
               onClick={() => router.push(SECURE_PATHS.users)}
             >
               <span>🚫 Manage Suspended Accounts</span>
               <Badge className={cn(
                 stats.suspendedUsers > 0
-                  ? "bg-red-500/20 text-red-300 border-red-500/30"
-                  : "bg-slate-700/50 text-slate-400 border-slate-600"
+                  ? "bg-red-100 text-red-700 border-red-300"
+                  : "bg-gray-200 text-gray-700 border-gray-300"
               )}>
                 {stats.suspendedUsers}
               </Badge>
             </Button>
             <Button
               variant="outline"
-              className="w-full justify-between border-slate-600 text-slate-200 hover:bg-slate-800 hover:text-white"
+              className="w-full justify-between border-gray-300 text-gray-700 hover:bg-gray-100 hover:text-gray-900"
               onClick={() => router.push(SECURE_PATHS.markets)}
             >
               <span>📊 View All Markets</span>
-              <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30">
+              <Badge className="bg-emerald-100 text-emerald-700 border-emerald-300">
                 {stats.totalMarkets}
               </Badge>
             </Button>
@@ -401,42 +412,42 @@ export default function AdminDashboard() {
         </Card>
 
         {/* Pending Reviews */}
-        <Card className="bg-slate-900/80 border-slate-700/50">
+        <Card className="bg-white border border-gray-200">
           <CardHeader>
-            <CardTitle className="text-white flex items-center gap-2">
-              <Clock className="w-5 h-5 text-amber-400" />
+            <CardTitle className="text-gray-900 flex items-center gap-2">
+              <Clock className="w-5 h-5 text-amber-500" />
               পেন্ডিং রিভিউ
             </CardTitle>
-            <CardDescription className="text-slate-400">
+            <CardDescription className="text-gray-600">
               Pending Reviews — Items requiring attention
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-slate-300">📋 Market Legal Reviews</span>
-                <span className="text-white font-semibold">{stats.pendingReviews}</span>
+                <span className="text-gray-700">📋 Market Legal Reviews</span>
+                <span className="text-gray-900 font-semibold">{stats.pendingReviews}</span>
               </div>
               <Progress value={Math.min(stats.pendingReviews * 10, 100)} className="h-2" />
             </div>
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-slate-300">🎫 Support Tickets</span>
-                <span className="text-white font-semibold">{stats.supportTickets}</span>
+                <span className="text-gray-700">🎫 Support Tickets</span>
+                <span className="text-gray-900 font-semibold">{stats.supportTickets}</span>
               </div>
               <Progress value={Math.min(stats.supportTickets * 10, 100)} className="h-2" />
             </div>
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-slate-300">✅ User Verifications</span>
-                <span className="text-white font-semibold">{stats.pendingReviews}</span>
+                <span className="text-gray-700">✅ User Verifications</span>
+                <span className="text-gray-900 font-semibold">{stats.pendingReviews}</span>
               </div>
               <Progress value={Math.min(stats.pendingReviews * 10, 100)} className="h-2" />
             </div>
-            <div className="pt-2 border-t border-slate-800">
+            <div className="pt-2 border-t border-gray-200">
               <div className="flex justify-between text-sm">
-                <span className="text-slate-400">Total pending items</span>
-                <span className="text-amber-400 font-bold">
+                <span className="text-gray-600">Total pending items</span>
+                <span className="text-amber-600 font-bold">
                   {stats.pendingReviews + stats.supportTickets}
                 </span>
               </div>
@@ -445,13 +456,13 @@ export default function AdminDashboard() {
         </Card>
 
         {/* Recent Activity */}
-        <Card className="bg-slate-900/80 border-slate-700/50">
+        <Card className="bg-white border border-gray-200">
           <CardHeader>
-            <CardTitle className="text-white flex items-center gap-2">
-              <Activity className="w-5 h-5 text-blue-400" />
+            <CardTitle className="text-gray-900 flex items-center gap-2">
+              <Activity className="w-5 h-5 text-blue-500" />
               সাম্প্রতিক কার্যকলাপ
             </CardTitle>
-            <CardDescription className="text-slate-400">
+            <CardDescription className="text-gray-600">
               Recent Activity — Latest admin actions
             </CardDescription>
           </CardHeader>
@@ -459,27 +470,27 @@ export default function AdminDashboard() {
             <div className="space-y-2 max-h-[250px] overflow-auto pr-1">
               {recentActivity.length === 0 ? (
                 <div className="text-center py-6">
-                  <Activity className="w-8 h-8 text-slate-600 mx-auto mb-2" />
-                  <p className="text-sm text-slate-400">No recent activity</p>
-                  <p className="text-xs text-slate-500">Actions will appear here</p>
+                  <Activity className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500">No recent activity</p>
+                  <p className="text-xs text-gray-400">Actions will appear here</p>
                 </div>
               ) : (
                 recentActivity.map((activity) => (
                   <div
                     key={activity.id}
-                    className="flex items-start gap-3 p-3 rounded-lg bg-slate-950/60 border border-slate-800/50 hover:border-slate-700 transition-colors"
+                    className="flex items-start gap-3 p-3 rounded-lg bg-gray-50 border border-gray-200 hover:border-gray-300 transition-colors"
                   >
                     <div className="mt-0.5">
                       {getActivityIcon(activity.action)}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-slate-200 truncate">
+                      <p className="text-sm font-medium text-gray-900 truncate">
                         {formatAction(activity.action)}
                       </p>
-                      <p className="text-xs text-slate-400 mt-0.5">
+                      <p className="text-xs text-gray-600 mt-0.5">
                         {activity.resource || 'system'}
                       </p>
-                      <p className="text-xs text-slate-500 mt-0.5">
+                      <p className="text-xs text-gray-500 mt-0.5">
                         {new Date(activity.created_at).toLocaleString()}
                       </p>
                     </div>
@@ -492,80 +503,83 @@ export default function AdminDashboard() {
       </div>
 
       {/* System Status */}
-      <Card className="bg-slate-900/80 border-slate-700/50">
+      <Card className="bg-white border border-gray-200">
         <CardHeader>
-          <CardTitle className="text-white flex items-center gap-2">
+          <CardTitle className="text-gray-900 flex items-center gap-2">
             <BarChart3 className="w-5 h-5 text-primary" />
             সিস্টেম স্বাস্থ্য
-            <span className="text-sm font-normal text-slate-400 ml-2">System Health</span>
+            <span className="text-sm font-normal text-gray-600 ml-2">System Health</span>
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="p-4 rounded-xl bg-slate-950/60 border border-emerald-500/20">
+            <div className="p-4 rounded-xl bg-gray-50 border border-emerald-200">
               <div className="flex items-center gap-3 mb-3">
-                <div className="p-2 rounded-lg bg-emerald-500/15">
-                  <Database className="w-5 h-5 text-emerald-400" />
+                <div className="p-2 rounded-lg bg-emerald-100">
+                  <Database className="w-5 h-5 text-emerald-600" />
                 </div>
-                <span className="text-sm font-semibold text-white">Database</span>
+                <span className="text-sm font-semibold text-gray-900">Database</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <p className="text-sm text-emerald-300">Connected</p>
+                <div className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
+                <p className="text-sm text-emerald-700">Connected</p>
               </div>
-              <p className="text-xs text-slate-500 mt-1">Supabase PostgreSQL</p>
+              <p className="text-xs text-gray-600 mt-1">Supabase PostgreSQL</p>
             </div>
-            <div className="p-4 rounded-xl bg-slate-950/60 border border-emerald-500/20">
+            <div className="p-4 rounded-xl bg-gray-50 border border-emerald-200">
               <div className="flex items-center gap-3 mb-3">
-                <div className="p-2 rounded-lg bg-emerald-500/15">
-                  <Server className="w-5 h-5 text-emerald-400" />
+                <div className="p-2 rounded-lg bg-emerald-100">
+                  <Server className="w-5 h-5 text-emerald-600" />
                 </div>
-                <span className="text-sm font-semibold text-white">API Services</span>
+                <span className="text-sm font-semibold text-gray-900">API Services</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <p className="text-sm text-emerald-300">Operational</p>
+                <div className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
+                <p className="text-sm text-emerald-700">Operational</p>
               </div>
-              <p className="text-xs text-slate-500 mt-1">All endpoints active</p>
+              <p className="text-xs text-gray-600 mt-1">All endpoints active</p>
             </div>
-            <div className="p-4 rounded-xl bg-slate-950/60 border border-blue-500/20">
+            <div className="p-4 rounded-xl bg-gray-50 border border-blue-200">
               <div className="flex items-center gap-3 mb-3">
-                <div className="p-2 rounded-lg bg-blue-500/15">
-                  <Shield className="w-5 h-5 text-blue-400" />
+                <div className="p-2 rounded-lg bg-blue-100">
+                  <Shield className="w-5 h-5 text-blue-600" />
                 </div>
-                <span className="text-sm font-semibold text-white">Security</span>
+                <span className="text-sm font-semibold text-gray-900">Security</span>
               </div>
               <div className="flex items-center gap-2">
                 {stats.securityAlerts > 0 ? (
                   <>
-                    <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                    <p className="text-sm text-amber-300">{stats.securityAlerts} alerts</p>
+                    <div className="w-2 h-2 rounded-full bg-amber-600 animate-pulse" />
+                    <p className="text-sm text-amber-700">{stats.securityAlerts} alerts</p>
                   </>
                 ) : (
                   <>
-                    <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                    <p className="text-sm text-emerald-300">No threats</p>
+                    <div className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
+                    <p className="text-sm text-emerald-700">No threats</p>
                   </>
                 )}
               </div>
-              <p className="text-xs text-slate-500 mt-1">RLS enforced</p>
+              <p className="text-xs text-gray-600 mt-1">RLS enforced</p>
             </div>
-            <div className="p-4 rounded-xl bg-slate-950/60 border border-violet-500/20">
+            <div className="p-4 rounded-xl bg-gray-50 border border-violet-200 cursor-pointer hover:border-violet-400 transition-colors" onClick={() => router.push('/sys-cmd-7x9k2/workflows')}>
               <div className="flex items-center gap-3 mb-3">
-                <div className="p-2 rounded-lg bg-violet-500/15">
-                  <Zap className="w-5 h-5 text-violet-400" />
+                <div className="p-2 rounded-lg bg-violet-100">
+                  <Workflow className="w-5 h-5 text-violet-600" />
                 </div>
-                <span className="text-sm font-semibold text-white">Platform</span>
+                <span className="text-sm font-semibold text-gray-900">Workflows</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <p className="text-sm text-emerald-300">Live</p>
+                <div className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
+                <p className="text-sm text-emerald-700">Manage</p>
               </div>
-              <p className="text-xs text-slate-500 mt-1">Vercel Edge</p>
+              <p className="text-xs text-gray-600 mt-1">QStash Cron Jobs</p>
             </div>
           </div>
         </CardContent>
       </Card>
+
+      {/* QStash Workflow Manager Section */}
+      <QStashWorkflowManager />
     </div>
   );
 }

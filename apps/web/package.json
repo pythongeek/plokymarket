@@ -6,7 +6,17 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+
+    "qstash:setup:batch": "node scripts/setup-qstash-schedule.js",
+    "qstash:setup:check": "node scripts/setup-qstash.js",
+    "qstash:setup:daily-topics": "node scripts/setup-daily-topics-cron.js",
+    "qstash:setup:daily-ai": "node scripts/setup-daily-ai-cron.js",
+    "qstash:setup:tick": "node scripts/setup-tick-adjustment-cron.js",
+    "qstash:setup:leaderboard": "node scripts/setup-leaderboard-cron.js",
+    "qstash:setup:all": "node scripts/setup-all-qstash.js",
+    "usdt:setup": "node scripts/setup-usdt-workflows.js",
+    "usdt:cleanup": "node scripts/setup-usdt-workflows.js cleanup"
   },
   "dependencies": {
     "@msgpack/msgpack": "^3.1.3",
@@ -32,6 +42,7 @@
     "@supabase/supabase-js": "^2.45.0",
     "@tanstack/react-virtual": "^3.13.18",
     "@types/canvas-confetti": "^1.9.0",
+    "@upstash/qstash": "^2.9.0",
     "canvas-confetti": "^1.9.4",
     "chart.js": "^4.5.1",
     "chartjs-adapter-date-fns": "^3.0.0",
@@ -39,6 +50,7 @@
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "date-fns": "^3.6.0",
+    "dotenv": "^17.2.4",
     "framer-motion": "^12.31.0",
     "hammerjs": "^2.0.8",
     "html2canvas": "^1.4.1",
@@ -54,8 +66,10 @@
     "react-day-picker": "^9.13.1",
     "react-dom": "^18.3.1",
     "react-i18next": "^16.5.4",
+    "react-medium-image-zoom": "^5.4.0",
     "react-router-dom": "^7.13.0",
     "recharts": "^2.12.7",
+    "sonner": "^2.0.7",
     "tailwind-merge": "^2.4.0",
     "zod": "^3.23.8",
     "zustand": "^4.5.4"

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { KycService } from '@/lib/kyc/service';
 
+const validIdTypes = ['national_id', 'passport', 'driving_license'];
+
 // GET /api/kyc - Get user's own KYC profile
 export async function GET() {
     try {
@@ -29,6 +31,7 @@ export async function GET() {
 }
 
 // POST /api/kyc - Submit KYC documents
+
 export async function POST(req: NextRequest) {
     try {
         const supabase = await createClient();

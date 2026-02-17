@@ -8,13 +8,21 @@ export async function GET(request: Request) {
 
     try {
         let query = supabase
-            .from('events')
-            .select('*')
+            .from('markets')
+            .select('id, question, description, slug, status, category, image_url, created_at, updated_at, trading_closes_at')
             .order('created_at', { ascending: false });
 
+        // Map question to title for frontend compatibility
+        if (data) {
+            data.forEach((event: any) => {
+                event.title = event.question;
+            });
+        }
+
         if (status) {
-            if (status === 'active') query = query.eq('is_active', true);
-            else if (status === 'inactive') query = query.eq('is_active', false);
+            if (status === 'active') query = query.eq('status', 'active');
+            else if (status === 'closed') query = query.eq('status', 'closed');
+            else if (status === 'resolved') query = query.eq('status', 'resolved');
         }
 
         const { data, error } = await query;
@@ -39,17 +47,9 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Verify admin role (assuming you have a way to check, usually via rls or profiles table)
-    /* 
-    const { data: profile } = await supabase.from('user_profiles').select('is_admin').eq('id', user.id).single();
-    if (!profile?.is_admin) {
-       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-    */
-
     try {
         const body = await request.json();
-        const { title, slug, description, category, image_url, start_date, end_date } = body;
+        const { title, slug, description, category, image_url, trading_closes_at } = body;
 
         // Basic validation
         if (!title || !category) {
@@ -60,19 +60,23 @@ export async function POST(request: Request) {
         const finalSlug = slug || title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
 
         const { data, error } = await supabase
-            .from('events')
+            .from('markets')
             .insert({
-                title,
+                question: title,
                 slug: finalSlug,
                 description,
                 category,
                 image_url,
-                start_date: start_date || new Date().toISOString(),
-                end_date,
-                created_by: user.id
+                status: 'active',
+                trading_closes_at: trading_closes_at || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
             })
-            .select()
+            .select('id, question, description, slug, status, category, image_url, created_at, updated_at, trading_closes_at')
             .single();
+
+        // Map question to title for frontend compatibility
+        if (data) {
+            data.title = data.question;
+        }
 
         if (error) {
             console.error('Error creating event:', error);

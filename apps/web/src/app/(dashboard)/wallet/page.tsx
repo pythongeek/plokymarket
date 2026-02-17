@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { motion } from 'framer-motion';
 import { useStore } from '@/store/useStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Progress } from '@/components/ui/progress';
 import {
   Wallet as WalletIcon,
   ArrowDownLeft,
@@ -20,11 +22,14 @@ import {
   Shield,
   ShieldCheck,
   ShieldAlert,
+  Lightbulb,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { bn } from 'date-fns/locale';
 import { useTranslation } from 'react-i18next';
+import BinanceP2PSelector from '@/components/deposit/BinanceP2PSelector';
+
 
 function TransactionList({ transactions }: { transactions: any[] }) {
   const { t, i18n } = useTranslation();
@@ -110,7 +115,7 @@ function TransactionList({ transactions }: { transactions: any[] }) {
 }
 
 export default function WalletPage() {
-  const { isAuthenticated, wallet, transactions, fetchWallet, fetchTransactions } = useStore();
+  const { isAuthenticated, currentUser: user, wallet, transactions, fetchWallet, fetchTransactions } = useStore();
   const { t } = useTranslation();
   const [kycGate, setKycGate] = useState<{
     needs_kyc: boolean;
@@ -121,6 +126,28 @@ export default function WalletPage() {
     remaining?: number;
     override_type?: string;
   } | null>(null);
+  const [depositMethod, setDepositMethod] = useState<'bkash' | 'nagad' | 'bank' | null>(null);
+  const [showP2P, setShowP2P] = useState(false);
+  const [depositAmount, setDepositAmount] = useState(5000);
+
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.1,
+      },
+    },
+  };
+
+  const itemVariants = {
+    hidden: { y: 20, opacity: 0 },
+    visible: {
+      y: 0,
+      opacity: 1,
+    },
+  };
+
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -169,67 +196,82 @@ export default function WalletPage() {
         <p className="text-muted-foreground">{t('wallet.subtitle')}</p>
       </div>
 
-      {/* KYC Status Banner */}
+      {/* Smart Withdraw Limits Progress Bar */}
       {kycGate && (
-        <Card className={cn(
-          'border',
-          kycGate.kyc_status === 'verified'
-            ? 'border-green-200 bg-green-50/50 dark:bg-green-950/20 dark:border-green-900'
-            : kycGate.needs_kyc
-              ? 'border-amber-200 bg-amber-50/50 dark:bg-amber-950/20 dark:border-amber-900'
-              : 'border-blue-200 bg-blue-50/50 dark:bg-blue-950/20 dark:border-blue-900'
-        )}>
-          <CardContent className="p-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              {kycGate.kyc_status === 'verified' ? (
-                <ShieldCheck className="h-6 w-6 text-green-600" />
-              ) : kycGate.needs_kyc ? (
-                <ShieldAlert className="h-6 w-6 text-amber-600" />
-              ) : (
-                <Shield className="h-6 w-6 text-blue-600" />
-              )}
-              <div>
-                {kycGate.kyc_status === 'verified' ? (
-                  <p className="font-medium text-green-700 dark:text-green-400">
-                    KYC যাচাইকৃত / KYC Verified ✓
-                  </p>
-                ) : kycGate.needs_kyc ? (
-                  <>
-                    <p className="font-medium text-amber-700 dark:text-amber-400">
-                      উত্তোলনের জন্য KYC প্রয়োজন / KYC Required for Withdrawals
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      {kycGate.reason === 'threshold_exceeded'
-                        ? `আপনার মোট উত্তোলন ৳${kycGate.threshold.toLocaleString()} সীমা অতিক্রম করেছে / Total withdrawn exceeds ৳${kycGate.threshold.toLocaleString()} limit`
-                        : kycGate.reason === 'admin_forced'
-                          ? 'অ্যাডমিন দ্বারা KYC বাধ্যতামূলক / KYC mandated by admin'
-                          : 'সব ব্যবহারকারীর জন্য KYC প্রয়োজন / KYC required for all users'}
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <p className="font-medium text-blue-700 dark:text-blue-400">
-                      KYC ছাড়া উত্তোলন সীমা / KYC-Free Withdrawal Limit
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      বাকি আছে ৳{(kycGate.remaining || 0).toLocaleString()} / ৳{kycGate.threshold.toLocaleString()} —
-                      Remaining: ৳{(kycGate.remaining || 0).toLocaleString()} of ৳{kycGate.threshold.toLocaleString()}
-                    </p>
-                  </>
-                )}
+        <Card className="border-amber-200 bg-amber-50/30 dark:bg-amber-950/10">
+          <CardContent className="p-4">
+            <div className="flex justify-between items-center mb-2">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 text-amber-600" />
+                <span className="text-sm font-semibold text-amber-800 dark:text-amber-400">
+                  উইথড্রাল লিমিট / Withdrawal Limit
+                </span>
               </div>
+              <span className="text-xs font-medium text-amber-700 dark:text-amber-500">
+                ৳{kycGate.total_withdrawn.toLocaleString()} / ৳{kycGate.threshold.toLocaleString()}
+              </span>
             </div>
-            {kycGate.kyc_status !== 'verified' && (
-              <Link href="/kyc">
-                <Button size="sm" variant={kycGate.needs_kyc ? 'default' : 'outline'} className="gap-2">
-                  <Shield className="h-4 w-4" />
-                  {kycGate.needs_kyc ? 'KYC সম্পন্ন করুন / Complete KYC' : 'KYC শুরু করুন / Start KYC'}
-                </Button>
-              </Link>
-            )}
+            <Progress
+              value={(kycGate.total_withdrawn / kycGate.threshold) * 100}
+              className="h-2 bg-amber-200 dark:bg-amber-900/40"
+            />
+            <p className="text-[10px] text-amber-700 dark:text-amber-500 mt-2">
+              আপনার বর্তমান KYC লেভেলে আপনি দৈনিক সর্বোচ্চ ৳{kycGate.threshold.toLocaleString()} তুলতে পারবেন।
+              {kycGate.kyc_status !== 'verified' && (
+                <> লিট বাড়াতে <Link href="/kyc" className="underline font-bold">এখানে ক্লিক করে KYC সম্পন্ন করুন</Link>।</>
+              )}
+            </p>
           </CardContent>
         </Card>
       )}
+
+      {/* Governance & Compliance Alerts */}
+      <motion.div
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+        className="space-y-6"
+      >
+        {/* Governance & Compliance Alerts */}
+        {(user?.account_status === 'dormant' || (user as any)?.id_expiry) && (
+          <div className="space-y-3">
+            {user?.account_status === 'dormant' && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex gap-3 items-start"
+              >
+                <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
+                <div>
+                  <h3 className="font-bold text-amber-800">অ্যাকাউন্টটি বর্তমানে নিষ্ক্রিয় (Dormant)</h3>
+                  <p className="text-sm text-amber-700">
+                    আপনি ৯০ দিনের বেশি সময় লগ-ইন না করায় আপনার অ্যাকাউন্টটি নিরাপত্তার জন্য নিষ্ক্রিয় করা হয়েছে। অ্যাকাউন্টের পূর্ণ সুবিধা পেতে ইমেইল ভেরিফিকেশন করুন।
+                  </p>
+                </div>
+              </motion.div>
+            )}
+
+            {(user as any)?.id_expiry && (new Date((user as any).id_expiry).getTime() - new Date().getTime()) / (1000 * 3600 * 24) <= 30 && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-red-50 border border-red-200 rounded-lg p-4 flex gap-3 items-start"
+              >
+                <ShieldAlert className="w-5 h-5 text-red-600 mt-0.5" />
+                <div>
+                  <h3 className="font-bold text-red-800">কেওয়াইসি (KYC) মেয়াদ শেষ হতে চলেছে</h3>
+                  <p className="text-sm text-red-700">
+                    আপনার এনআইডি বা পাসপোর্টের মেয়ার আগামী {Math.ceil((new Date((user as any).id_expiry).getTime() - new Date().getTime()) / (1000 * 3600 * 24))} দিনের মধ্যে শেষ হবে। নিরবচ্ছিন্ন সেবার জন্য ডকুমেন্ট আপডেট করুন।
+                  </p>
+                  <Button variant="outline" size="sm" className="mt-2 border-red-200 hover:bg-red-100 text-red-700" asChild>
+                    <Link href="/portfolio">আপডেট করুন</Link>
+                  </Button>
+                </div>
+              </motion.div>
+            )}
+          </div>
+        )}
+      </motion.div>
 
       {/* Balance Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -270,6 +312,30 @@ export default function WalletPage() {
         </Card>
       </div>
 
+      {/* Automated Nudge for Unfilled Orders */}
+      {lockedBalance > 0 && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-primary/5 border border-primary/20 rounded-xl p-4 flex items-start gap-3"
+        >
+          <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+            <Lightbulb className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <p className="font-semibold text-sm">অর্ডার ম্যাচ হচ্ছে না? / Order not matching?</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              আপনার ৳{lockedBalance.toLocaleString()} বর্তমানে অর্ডারগুলোতে লক করা আছে। যদি আপনার অর্ডার ম্যাচ না হয়, তবে মার্কেটের বর্তমান প্রাইস চেক করুন এবং প্রয়োজনে অর্ডার বাতিল করে নতুন প্রাইসে প্লেস করুন।
+            </p>
+            <Link href="/portfolio">
+              <Button variant="link" size="sm" className="h-auto p-0 text-xs mt-2 underline">
+                আপনার ওপেন অর্ডার গুলো দেখুন / View your open orders
+              </Button>
+            </Link>
+          </div>
+        </motion.div>
+      )}
+
       {/* Action Buttons */}
       <div className="flex flex-wrap gap-4">
         <Button size="lg" className="gap-2">
@@ -303,37 +369,72 @@ export default function WalletPage() {
           <CardTitle>{t('wallet.payment_methods')}</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="flex items-center gap-4 p-4 rounded-lg border hover:border-primary transition-colors cursor-pointer">
-              <div className="h-12 w-12 rounded-lg bg-pink-500/10 flex items-center justify-center">
-                <Smartphone className="h-6 w-6 text-pink-500" />
+          {!showP2P ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div
+                className="flex items-center gap-4 p-4 rounded-lg border hover:border-primary transition-colors cursor-pointer"
+                onClick={() => { setDepositMethod('bkash'); setShowP2P(true); }}
+              >
+                <div className="h-12 w-12 rounded-lg bg-pink-500/10 flex items-center justify-center">
+                  <Smartphone className="h-6 w-6 text-pink-500" />
+                </div>
+                <div>
+                  <div className="font-semibold">bKash</div>
+                  <div className="text-sm text-muted-foreground">{t('wallet.instant_deposit')}</div>
+                </div>
               </div>
-              <div>
-                <div className="font-semibold">bKash</div>
-                <div className="text-sm text-muted-foreground">{t('wallet.instant_deposit')}</div>
-              </div>
-            </div>
 
-            <div className="flex items-center gap-4 p-4 rounded-lg border hover:border-primary transition-colors cursor-pointer">
-              <div className="h-12 w-12 rounded-lg bg-orange-500/10 flex items-center justify-center">
-                <CreditCard className="h-6 w-6 text-orange-500" />
+              <div
+                className="flex items-center gap-4 p-4 rounded-lg border hover:border-primary transition-colors cursor-pointer"
+                onClick={() => { setDepositMethod('nagad'); setShowP2P(true); }}
+              >
+                <div className="h-12 w-12 rounded-lg bg-orange-500/10 flex items-center justify-center">
+                  <CreditCard className="h-6 w-6 text-orange-500" />
+                </div>
+                <div>
+                  <div className="font-semibold">Nagad</div>
+                  <div className="text-sm text-muted-foreground">{t('wallet.instant_deposit')}</div>
+                </div>
               </div>
-              <div>
-                <div className="font-semibold">Nagad</div>
-                <div className="text-sm text-muted-foreground">{t('wallet.instant_deposit')}</div>
-              </div>
-            </div>
 
-            <div className="flex items-center gap-4 p-4 rounded-lg border hover:border-primary transition-colors cursor-pointer">
-              <div className="h-12 w-12 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                <Building2 className="h-6 w-6 text-blue-500" />
-              </div>
-              <div>
-                <div className="font-semibold">Bank Transfer</div>
-                <div className="text-sm text-muted-foreground">{t('wallet.business_days')}</div>
+              <div className="flex items-center gap-4 p-4 rounded-lg border hover:border-primary transition-colors cursor-pointer">
+                <div className="h-12 w-12 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                  <Building2 className="h-6 w-6 text-blue-500" />
+                </div>
+                <div>
+                  <div className="font-semibold">Bank Transfer</div>
+                  <div className="text-sm text-muted-foreground">{t('wallet.business_days')}</div>
+                </div>
               </div>
             </div>
-          </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <Button variant="ghost" size="sm" onClick={() => setShowP2P(false)}>
+                  ← {t('common.back')}
+                </Button>
+                <div className="text-sm font-medium">
+                  ডিপোজিট পরিমাণ / Deposit Amount:
+                  <input
+                    type="number"
+                    value={depositAmount}
+                    onChange={(e) => setDepositAmount(Number(e.target.value))}
+                    className="ml-2 w-24 p-1 border rounded bg-background"
+                    placeholder="5000"
+                    title="Deposit Amount"
+                  /> ৳
+                </div>
+              </div>
+              <BinanceP2PSelector
+                method={depositMethod as 'bkash' | 'nagad'}
+                amount={depositAmount}
+                onSelectSeller={(seller) => {
+                  alert(`Selected ${seller.nickname}. Redirecting to Binance with affiliate...`);
+                  window.open(`https://accounts.binance.com/en/register?ref=RBA4A5YZ`, '_blank');
+                }}
+              />
+            </div>
+          )}
         </CardContent>
       </Card>
 

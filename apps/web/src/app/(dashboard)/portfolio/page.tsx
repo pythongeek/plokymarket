@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, Suspense } from 'react';
+import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Wallet,
@@ -15,7 +16,8 @@ import {
   ChevronRight,
   Flame,
   Award,
-  Crown
+  Crown,
+  ShieldCheck,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -50,8 +52,8 @@ const achievements = [
 
 const pageVariants = {
   initial: { opacity: 0, y: 20 },
-  animate: { 
-    opacity: 1, 
+  animate: {
+    opacity: 1,
     y: 0,
     transition: { duration: 0.5, ease: "easeOut" }
   },
@@ -150,9 +152,9 @@ export default function PortfolioPage() {
                       <p className="text-white/80 text-sm">আপনার ট্রেডিং যাত্রা শুরু হোক। প্রতিদিন নতুন সুযোগ!</p>
                     </div>
                   </div>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     className="text-white hover:bg-white/20"
                     onClick={() => setShowWelcome(false)}
                   >
@@ -166,7 +168,7 @@ export default function PortfolioPage() {
 
         {/* Main Content */}
         <div className="container mx-auto px-4 py-6">
-          <motion.div 
+          <motion.div
             variants={containerVariants}
             initial="hidden"
             animate="visible"
@@ -186,31 +188,68 @@ export default function PortfolioPage() {
                           </AvatarFallback>
                         </Avatar>
                         <div className="absolute -bottom-1 -right-1 bg-emerald-500 text-white text-xs px-2 py-0.5 rounded-full font-medium">
-                          Lvl 3
+                          Lvl {user?.current_level_id || 1}
                         </div>
                       </div>
                       <div className="flex-1">
                         <h2 className="text-xl font-bold">{user?.name || 'ট্রেডার'}</h2>
                         <p className="text-muted-foreground text-sm">{user?.email || 'trader@example.com'}</p>
                         <div className="flex items-center gap-2 mt-2">
-                          <Badge variant="secondary" className="bg-emerald-100 text-emerald-700">
-                            <TrendingUp className="w-3 h-3 mr-1" />
-                            প্রো ট্রেডার
-                          </Badge>
+                          <Link href="/levels">
+                            <Badge variant="secondary" className="bg-emerald-100 text-emerald-700 hover:bg-emerald-200 cursor-pointer">
+                              <TrendingUp className="w-3 h-3 mr-1" />
+                              {user?.current_level_name || 'Novice'}
+                            </Badge>
+                          </Link>
+                          {user?.kycLevel && user.kycLevel > 0 && (
+                            <Badge variant="default" className="bg-blue-500 hover:bg-blue-600 text-white gap-1">
+                              <ShieldCheck className="w-3 h-3" />
+                              Verified Trader
+                            </Badge>
+                          )}
                         </div>
                       </div>
                     </div>
 
-                    {/* XP Progress */}
-                    <div className="mt-4">
-                      <div className="flex justify-between text-sm mb-1">
-                        <span className="text-muted-foreground">XP Progress</span>
-                        <span className="font-medium">750 / 1000</span>
+                    {/* Trust Score & XP Progress */}
+                    <div className="mt-4 space-y-4">
+                      <div>
+                        <div className="flex justify-between text-sm mb-1">
+                          <span className="text-muted-foreground">Trust Score</span>
+                          <span className="font-bold text-emerald-600">{user?.kycLevel && user.kycLevel > 0 ? '১০০%' : '৬০%'}</span>
+                        </div>
+                        <Progress value={user?.kycLevel && user.kycLevel > 0 ? 100 : 60} className="h-2 bg-emerald-100 dark:bg-emerald-900/30" />
                       </div>
-                      <Progress value={75} className="h-2" />
-                      <p className="text-xs text-muted-foreground mt-1">
-                        লেভেল 4-এ আপগ্রেড করতে আরও ২৫০ XP লাগবে
-                      </p>
+
+                      <div>
+                        <div className="flex justify-between text-sm mb-1">
+                          <span className="text-muted-foreground">XP Progress</span>
+                          <span className="font-medium">750 / 1000</span>
+                        </div>
+                        <Progress value={75} className="h-2" />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          লেভেল 4-এ আপগ্রেড করতে আরও ২৫০ XP লাগবে
+                        </p>
+                      </div>
+
+                      {(user as any)?.idExpiry && !isNaN(new Date((user as any).idExpiry).getTime()) && (
+                        <div className="pt-2 border-t border-primary/5">
+                          <div className="flex justify-between items-center text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
+                            <span>Document Expiry</span>
+                            <span className={cn(
+                              "font-bold",
+                              (new Date((user as any).idExpiry).getTime() - new Date().getTime()) / (1000 * 3600 * 24) <= 30 ? "text-red-500" : "text-emerald-500"
+                            )}>
+                              {format(new Date((user as any).idExpiry), 'MMM d, yyyy')}
+                            </span>
+                          </div>
+                          {(new Date((user as any).idExpiry).getTime() - new Date().getTime()) / (1000 * 3600 * 24) <= 30 && (
+                            <p className="text-[10px] text-red-500 font-medium">
+                              মেয়াদ শেষ হওয়ার আগে আপডেট করুন
+                            </p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -291,7 +330,7 @@ export default function PortfolioPage() {
                     {achievements.map((achievement) => {
                       const isUnlocked = unlockedAchievements.includes(achievement.id);
                       const Icon = achievement.icon;
-                      
+
                       return (
                         <motion.div
                           key={achievement.id}
@@ -304,7 +343,7 @@ export default function PortfolioPage() {
                         >
                           <div className={cn(
                             "p-4 rounded-xl border-2 transition-all",
-                            isUnlocked 
+                            isUnlocked
                               ? "bg-emerald-100 border-emerald-300 dark:bg-emerald-900/30"
                               : "bg-muted border-muted"
                           )}>
@@ -409,9 +448,9 @@ export default function PortfolioPage() {
                         বাংলাদেশ ক্রিকেট, রাজনীতি, এবং আরও অনেক কিছুতে সুযোগ রয়েছে।
                       </p>
                     </div>
-                    <Button 
-                      size="lg" 
-                      variant="secondary" 
+                    <Button
+                      size="lg"
+                      variant="secondary"
                       className="gap-2 bg-white text-emerald-600 hover:bg-white/90"
                     >
                       মার্কেট দেখুন
@@ -423,22 +462,22 @@ export default function PortfolioPage() {
             </motion.div>
           </motion.div>
         </div>
-      </motion.div>
-    </PortfolioErrorBoundary>
+      </motion.div >
+    </PortfolioErrorBoundary >
   );
 }
 
-function QuickStatCard({ 
-  label, 
-  value, 
-  change, 
-  icon: Icon, 
-  color 
-}: { 
-  label: string; 
-  value: string; 
-  change: string; 
-  icon: React.ElementType; 
+function QuickStatCard({
+  label,
+  value,
+  change,
+  icon: Icon,
+  color
+}: {
+  label: string;
+  value: string;
+  change: string;
+  icon: React.ElementType;
   color: string;
 }) {
   const colorClasses: Record<string, string> = {

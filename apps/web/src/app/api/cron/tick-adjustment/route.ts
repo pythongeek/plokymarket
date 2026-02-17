@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { MarketVolatilityService } from '@/lib/clob/MarketVolatilityService';
+import { verifyQStashSignature } from '@/lib/qstash/verify';
+
+export const runtime = 'edge';
 
 export async function GET(request: NextRequest) {
-    const authHeader = request.headers.get('authorization');
-    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    // Verify QStash signature (cron job protection)
+    const isValid = await verifyQStashSignature(request);
+    if (!isValid) {
         return new NextResponse('Unauthorized', { status: 401 });
     }
 

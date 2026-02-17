@@ -7,9 +7,6 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 const SECURE_PATHS = {
   admin: '/sys-cmd-7x9k2',
   auth: '/auth-portal-3m5n8',
-  users: '/usr-mgmt-4p7q1',
-  markets: '/mkt-ctl-8v2w4',
-  analytics: '/analytics-9x3y5',
 };
 
 // IP whitelist for admin access (optional additional security)
@@ -116,9 +113,6 @@ export const config = {
   matcher: [
     '/sys-cmd-7x9k2/:path*',
     '/auth-portal-3m5n8/:path*',
-    '/usr-mgmt-4p7q1/:path*',
-    '/mkt-ctl-8v2w4/:path*',
-    '/analytics-9x3y5/:path*',
     '/api/admin/:path*',
   ],
 };
