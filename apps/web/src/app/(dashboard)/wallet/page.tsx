@@ -28,7 +28,9 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { bn } from 'date-fns/locale';
 import { useTranslation } from 'react-i18next';
+
 import BinanceP2PSelector from '@/components/deposit/BinanceP2PSelector';
+import { P2PRateDisplay } from '@/components/wallet/P2PRateDisplay';
 
 
 function TransactionList({ transactions }: { transactions: any[] }) {
@@ -190,11 +192,14 @@ export default function WalletPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+            {/* Header */}
       <div>
         <h1 className="text-3xl font-bold">{t('wallet.title')}</h1>
         <p className="text-muted-foreground">{t('wallet.subtitle')}</p>
       </div>
+
+      {/* Real-time P2P Exchange Rate */}
+      <P2PRateDisplay showCalculator />
 
       {/* Smart Withdraw Limits Progress Bar */}
       {kycGate && (

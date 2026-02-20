@@ -6,11 +6,11 @@
 import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  Clock, 
-  BadgeCheck, 
+import {
+  TrendingUp,
+  TrendingDown,
+  Clock,
+  BadgeCheck,
   Flame,
   PauseCircle,
   CheckCircle2,
@@ -40,25 +40,27 @@ const categoryColors: Record<string, string> = {
   Business: 'bg-emerald-100 text-emerald-800 border-emerald-200',
 };
 
-const statusConfig = {
+const statusConfig: Record<string, { icon: any; color: string; label: string }> = {
   active: { icon: null, color: '', label: 'Active' },
+  draft: { icon: Clock, color: 'text-gray-500', label: 'Draft' },
+  pending: { icon: Clock, color: 'text-blue-500', label: 'Pending' },
   paused: { icon: PauseCircle, color: 'text-amber-500', label: 'Paused' },
+  closed: { icon: XCircle, color: 'text-blue-500', label: 'Closed' },
   resolved: { icon: CheckCircle2, color: 'text-green-500', label: 'Resolved' },
   cancelled: { icon: XCircle, color: 'text-red-500', label: 'Cancelled' },
-  pending: { icon: Clock, color: 'text-blue-500', label: 'Pending' },
 };
 
 export function EventCard({ event, variant = 'default' }: EventCardProps) {
   const [isHovered, setIsHovered] = useState(false);
   const yesPrice = useRealtimePrice(event.id, 'yes');
-  
-  const timeRemaining = useMemo(() => 
-    formatTimeRemaining(event.ends_at), 
-    [event.ends_at]
+
+  const timeRemaining = useMemo(() =>
+    formatTimeRemaining(event.trading_closes_at || event.ends_at || ''),
+    [event.trading_closes_at, event.ends_at]
   );
-  
+
   const priceChange = event.price_24h_change || 0;
-  const status = statusConfig[event.trading_status];
+  const status = statusConfig[event.status || event.trading_status || 'active'] || statusConfig.active;
   const StatusIcon = status.icon;
 
   if (variant === 'compact') {
@@ -84,7 +86,7 @@ export function EventCard({ event, variant = 'default' }: EventCardProps) {
               {(yesPrice * 100).toFixed(1)}¢
             </p>
             <p className="text-xs text-gray-500">
-              ${formatCompactNumber(event.volume)}
+              ${formatCompactNumber(event.total_volume || event.volume || 0)}
             </p>
           </div>
         </motion.div>
@@ -95,9 +97,8 @@ export function EventCard({ event, variant = 'default' }: EventCardProps) {
   return (
     <Link to={`/markets/${event.slug}`}>
       <motion.div
-        className={`group relative bg-white dark:bg-gray-800 rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 cursor-pointer overflow-hidden border border-gray-200 dark:border-gray-700 ${
-          variant === 'featured' ? 'ring-2 ring-blue-500/20' : ''
-        }`}
+        className={`group relative bg-white dark:bg-gray-800 rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 cursor-pointer overflow-hidden border border-gray-200 dark:border-gray-700 ${variant === 'featured' ? 'ring-2 ring-blue-500/20' : ''
+          }`}
         whileHover={{ y: -4 }}
         onHoverStart={() => setIsHovered(true)}
         onHoverEnd={() => setIsHovered(false)}
@@ -107,7 +108,7 @@ export function EventCard({ event, variant = 'default' }: EventCardProps) {
           {event.image_url ? (
             <img
               src={event.image_url}
-              alt={event.name}
+              alt={event.title || event.name}
               className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
               loading="lazy"
             />
@@ -125,11 +126,11 @@ export function EventCard({ event, variant = 'default' }: EventCardProps) {
             <span className={`px-2.5 py-1 text-xs font-semibold rounded-full border backdrop-blur-sm bg-white/90 dark:bg-gray-800/90 ${categoryColors[event.category] || 'bg-gray-100 text-gray-800 border-gray-200'}`}>
               {event.category}
             </span>
-            
+
             {event.is_verified && (
               <BadgeCheck className="w-6 h-6 text-blue-500 bg-white/90 dark:bg-gray-800/90 rounded-full p-0.5" />
             )}
-            
+
             {event.is_trending && (
               <span className="flex items-center gap-1 px-2 py-1 text-xs font-bold rounded-full bg-red-500 text-white">
                 <Flame className="w-3 h-3" />
@@ -139,7 +140,7 @@ export function EventCard({ event, variant = 'default' }: EventCardProps) {
           </div>
 
           {/* Status Overlay */}
-          {event.trading_status !== 'active' && StatusIcon && (
+          {(event.status || event.trading_status) !== 'active' && StatusIcon && (
             <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
               <div className={`flex items-center gap-2 px-4 py-2 rounded-lg bg-white/95 dark:bg-gray-800/95 ${status.color}`}>
                 <StatusIcon className="w-5 h-5" />
@@ -188,11 +189,11 @@ export function EventCard({ event, variant = 'default' }: EventCardProps) {
                 )}
               </div>
             </div>
-            
+
             <div className="text-right">
               <span className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Volume</span>
               <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                ${formatCompactNumber(event.volume)}
+                ${formatCompactNumber(event.total_volume || event.volume || 0)}
               </p>
             </div>
           </div>

@@ -74,15 +74,15 @@ export function usePnL(userId?: string, timeHorizon: TimeHorizon = 'allTime') {
       setLoading(false);
       return;
     }
-    
+
     setLoading(true);
     try {
       const supabase = createClient();
-      
+
       // Calculate date range based on time horizon
       const now = new Date();
       let startDate = new Date(0);
-      
+
       switch (timeHorizon) {
         case 'intraday':
           startDate = new Date(now.setHours(0, 0, 0, 0));
@@ -107,27 +107,27 @@ export function usePnL(userId?: string, timeHorizon: TimeHorizon = 'allTime') {
           break;
       }
 
-      // Fetch user's trades (both as buyer and seller)
-      const { data: buyerTrades, error: buyerError } = await supabase
+      // Fetch user's trades (both as maker and taker)
+      const { data: makerTrades, error: makerError } = await supabase
         .from('trades')
         .select(`
           *,
           markets:market_id (question, category, status, winning_outcome)
         `)
-        .eq('buyer_id', userId)
+        .eq('maker_id', userId)
         .gte('created_at', startDate.toISOString());
 
-      const { data: sellerTrades, error: sellerError } = await supabase
+      const { data: takerTrades, error: takerError } = await supabase
         .from('trades')
         .select(`
           *,
           markets:market_id (question, category, status, winning_outcome)
         `)
-        .eq('seller_id', userId)
+        .eq('taker_id', userId)
         .gte('created_at', startDate.toISOString());
 
-      if (buyerError) throw buyerError;
-      if (sellerError) throw sellerError;
+      if (makerError) throw makerError;
+      if (takerError) throw takerError;
 
       // Fetch open positions with market data
       const { data: openPositions, error: positionsError } = await supabase
@@ -145,7 +145,7 @@ export function usePnL(userId?: string, timeHorizon: TimeHorizon = 'allTime') {
       // For prediction markets:
       // - Buying YES at $0.50, selling at $0.70 = $0.20 profit per share
       // - Buying NO at $0.30, market resolves NO = $0.70 profit per share (1 - 0.30)
-      
+
       let realized = 0;
       let winningTrades = 0;
       let losingTrades = 0;
@@ -155,25 +155,21 @@ export function usePnL(userId?: string, timeHorizon: TimeHorizon = 'allTime') {
         politics: 0, cricket: 0, economy: 0, weather: 0, entertainment: 0, other: 0
       };
 
-      // Process trades where user was buyer (bought shares)
-      buyerTrades?.forEach(trade => {
-        // For prediction markets, realized PnL is calculated when:
-        // 1. Market resolves and position is settled
-        // 2. User sells shares (we need to track this via orders/trades)
-        
-        // For now, track unrealized based on current positions
-        const category = trade.markets?.category?.toLowerCase() || 'other';
-        if (categoryPnl[category] !== undefined) {
-          // Placeholder - actual PnL calculation would need more data
-          categoryPnl[category] += 0;
-        }
-      });
+      const allTrades = [
+        ...(makerTrades || []).map((t: any) => {
+          const isTakerBuyer = t.taker_side === 'BUY';
+          return { ...t, isBuyer: isTakerBuyer ? false : true }
+        }),
+        ...(takerTrades || []).map((t: any) => {
+          const isTakerBuyer = t.taker_side === 'BUY';
+          return { ...t, isBuyer: isTakerBuyer ? true : false }
+        })
+      ];
 
-      // Process trades where user was seller (sold shares)
-      sellerTrades?.forEach(trade => {
+      allTrades.forEach((trade: any) => {
         const category = trade.markets?.category?.toLowerCase() || 'other';
         if (categoryPnl[category] !== undefined) {
-          categoryPnl[category] += 0;
+          categoryPnl[category] += 0; // Placeholder
         }
       });
 
@@ -182,7 +178,7 @@ export function usePnL(userId?: string, timeHorizon: TimeHorizon = 'allTime') {
       // - Current market price vs average entry price
       // - If market resolves in favor, PnL = (1 - entry_price) * quantity
       // - If against, PnL = -entry_price * quantity
-      
+
       let unrealized = 0;
       const suggestions: TaxLossHarvestingSuggestion[] = [];
 
@@ -190,10 +186,10 @@ export function usePnL(userId?: string, timeHorizon: TimeHorizon = 'allTime') {
         const market = position.markets;
         const entryPrice = position.average_price || 0;
         const quantity = position.quantity || 0;
-        
+
         // Calculate potential PnL based on market status
         let potentialPnl = 0;
-        
+
         if (market?.status === 'resolved') {
           // Market resolved - calculate final PnL
           const won = market.winning_outcome === position.outcome;
@@ -210,7 +206,7 @@ export function usePnL(userId?: string, timeHorizon: TimeHorizon = 'allTime') {
           const currentPrice = entryPrice; // Would need actual current price from order book
           potentialPnl = (currentPrice - entryPrice) * quantity;
         }
-        
+
         unrealized += potentialPnl;
 
         // Check for tax loss harvesting opportunities
@@ -220,7 +216,7 @@ export function usePnL(userId?: string, timeHorizon: TimeHorizon = 'allTime') {
           );
           const lossAmount = Math.abs(potentialPnl);
           const potentialTaxSavings = lossAmount * 0.15; // 15% tax rate assumption
-          
+
           suggestions.push({
             marketId: position.market_id,
             marketName: market?.question || 'Unknown Market',
@@ -230,7 +226,7 @@ export function usePnL(userId?: string, timeHorizon: TimeHorizon = 'allTime') {
             potentialTaxSavings,
             potentialTaxSavingsBDT: potentialTaxSavings * USD_TO_BDT,
             action: daysHeld > 30 ? 'harvest' : 'wait',
-            reason: daysHeld > 30 
+            reason: daysHeld > 30
               ? 'আপনার এই পজিশনে উল্লেখযোগ্য লোস রয়েছে। ট্যাক্স সেভিংয়ের জন্য এটি বিক্রয় করুন।'
               : '৩০ দিনের ওয়েটিং পিরিয়ড শেষ হলে ট্যাক্স হারভেস্টিং করুন।'
           });
@@ -238,7 +234,7 @@ export function usePnL(userId?: string, timeHorizon: TimeHorizon = 'allTime') {
       });
 
       // Calculate metrics
-      const totalTrades = (buyerTrades?.length || 0) + (sellerTrades?.length || 0);
+      const totalTrades = (makerTrades?.length || 0) + (takerTrades?.length || 0);
       const winRate = totalTrades > 0 ? (winningTrades / totalTrades) * 100 : 0;
       const avgWin = winningTrades > 0 ? totalWins / winningTrades : 0;
       const avgLoss = losingTrades > 0 ? totalLosses / losingTrades : 0;
@@ -249,7 +245,7 @@ export function usePnL(userId?: string, timeHorizon: TimeHorizon = 'allTime') {
       const maxDrawdown = 0; // Would need equity curve data
 
       // Mock return percentage (would calculate from initial investment)
-      const totalInvested = openPositions?.reduce((sum: number, pos: any) => 
+      const totalInvested = openPositions?.reduce((sum: number, pos: any) =>
         sum + ((pos.average_price || 0) * (pos.quantity || 0)), 0) || 10000;
       const returnPercentage = totalInvested > 0 ? ((realized + unrealized) / totalInvested) * 100 : 0;
 
@@ -276,10 +272,10 @@ export function usePnL(userId?: string, timeHorizon: TimeHorizon = 'allTime') {
       setAttribution({
         byCategory: categoryPnl as PnLAttribution['byCategory'],
         byStrategy: { momentum: 0, contrarian: 0, arbitrage: 0, longTerm: 0 },
-        byOutcome: { 
-          correct: winningTrades, 
-          incorrect: losingTrades, 
-          pending: openPositions?.length || 0 
+        byOutcome: {
+          correct: winningTrades,
+          incorrect: losingTrades,
+          pending: openPositions?.length || 0
         }
       });
 

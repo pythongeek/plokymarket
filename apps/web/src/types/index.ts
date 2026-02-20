@@ -2,7 +2,7 @@
 // ENUM TYPES
 // ===================================
 
-export type MarketStatus = 'active' | 'closed' | 'resolved' | 'cancelled';
+export type MarketStatus = 'active' | 'closed' | 'resolved' | 'cancelled' | 'paused';
 export type TradingPhase = 'PRE_OPEN' | 'CONTINUOUS' | 'AUCTION' | 'HALTED' | 'CLOSED';
 export type OutcomeType = 'YES' | 'NO';
 export type OrderType = 'limit' | 'market';
@@ -52,6 +52,7 @@ export interface Wallet {
 
 export interface Market {
   id: string;
+  event_id?: string;
   question: string;
   description?: string;
   category: string;
@@ -86,6 +87,13 @@ export interface Market {
   // Computed fields
   yes_price?: number;
   no_price?: number;
+
+  // Pause Control
+  trading_status?: 'active' | 'paused' | 'resolved' | 'cancelled';
+  pause_reason?: string;
+  paused_at?: string;
+  paused_by?: string;
+  estimated_resume_at?: string;
 }
 
 // ===================================
@@ -127,8 +135,8 @@ export interface Trade {
   outcome: OutcomeType;
   price: number;
   quantity: number;
-  buyer_id?: string;
-  seller_id?: string;
+  maker_id?: string;
+  taker_id?: string;
   created_at: string;
 }
 
@@ -526,6 +534,8 @@ export interface TradeLedger {
   marketId: string;
   buyerId: string;
   sellerId: string;
+  makerId?: string;
+  takerId?: string;
   price: number;
   quantity: number;
   totalValue: number;

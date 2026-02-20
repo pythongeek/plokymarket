@@ -8,11 +8,11 @@
 const https = require('https');
 
 const config = {
-  supabaseUrl: 'https://sltcfmqefujecqfbmkvz.supabase.co',
-  supabaseKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNsdGNmbXFlZnVqZWNxZmJta3Z6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAxNTY3NjAsImV4cCI6MjA4NTczMjc2MH0._g4OI7XhlXQ0SwH0RqZ6hyHCEc5O8H1C9ns-q_rYYxE',
+  supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co',
+  supabaseKey: process.env.SUPABASE_SERVICE_ROLE_KEY || 'YOUR_SUPABASE_KEY',
   marketId: '2698853e-f9fc-48d4-b9c9-d8663a929a93',
-  adminEmail: 'admin@plokymarket.bd',
-  adminPassword: 'PlokyAdmin2026!'
+  adminEmail: process.env.ADMIN_EMAIL || 'admin@plokymarket.bd',
+  adminPassword: process.env.ADMIN_PASSWORD || 'YOUR_ADMIN_PASSWORD'
 };
 
 // Helper: Async fetch wrapper
@@ -90,7 +90,7 @@ async function phase2_CreateTestUsers() {
 
   // For this demo, we'll use existing admin user
   // In production, create via registration endpoint
-  
+
   const testUsers = [
     { email: 'test.buyer@plokymarket.bd', name: 'Test Buyer' },
     { email: 'test.seller@plokymarket.bd', name: 'Test Seller' }

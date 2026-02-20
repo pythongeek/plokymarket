@@ -43,6 +43,7 @@ export interface MarketDraft {
   resolution_deadline?: string;
   oracle_type?: string;
   oracle_config?: Record<string, any>;
+  resolver_reference?: string;
   image_url?: string;
 
   // Stage 3

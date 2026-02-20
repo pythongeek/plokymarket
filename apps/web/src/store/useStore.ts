@@ -63,6 +63,9 @@ interface StoreState {
   // Actions
   fetchMarkets: () => Promise<void>;
   fetchMarket: (id: string) => Promise<Market | null>;
+  addMarket: (market: Market) => void;
+  updateMarket: (id: string, partialMarket: Partial<Market>) => void;
+  removeMarket: (id: string) => void;
   fetchOrders: (marketId: string) => Promise<void>;
   fetchTrades: (marketId: string) => Promise<void>;
   fetchPositions: () => Promise<void>;
@@ -75,7 +78,10 @@ interface StoreState {
     side: OrderSide,
     outcome: OutcomeType,
     price: number,
-    quantity: number
+    quantity: number,
+    orderType?: 'market' | 'limit',
+    limitPrice?: number,
+    slippageTolerance?: number
   ) => Promise<boolean>;
   cancelOrder: (orderId: string) => Promise<boolean>;
 
@@ -338,23 +344,17 @@ export const useStore = create<StoreState>()(
         // Set up the listener
         supabase.auth.onAuthStateChange(async (event: string, session: any) => {
           if (session?.user) {
-            // Fetch user profile and related data
+            // Fetch user profile (simple query — no joins to non-existent tables)
             const { data: profile } = await supabase
               .from('user_profiles')
-              .select(`
-                *,
-                user_kyc_profiles (id_expiry),
-                user_status (account_status),
-                levels (name)
-              `)
+              .select('*')
               .eq('id', session.user.id)
               .single();
 
             const profileData = profile ? {
               ...profile,
-              id_expiry: (profile as any).user_kyc_profiles?.id_expiry,
-              account_status: (profile as any).user_status?.account_status || 'active',
-              current_level_name: (profile as any).levels?.name || 'Novice'
+              account_status: profile.account_status || 'active',
+              current_level_name: 'Novice'
             } : null;
 
             set({
@@ -430,6 +430,28 @@ export const useStore = create<StoreState>()(
         }
       },
 
+      addMarket: (market: Market) => {
+        set((state) => {
+          // Prevent duplicates
+          if (state.markets.some(m => m.id === market.id)) return state;
+          return { markets: [market, ...state.markets] };
+        });
+      },
+
+      updateMarket: (id: string, partialMarket: Partial<Market>) => {
+        set((state) => ({
+          markets: state.markets.map(m =>
+            m.id === id ? { ...m, ...partialMarket } : m
+          )
+        }));
+      },
+
+      removeMarket: (id: string) => {
+        set((state) => ({
+          markets: state.markets.filter(m => m.id !== id)
+        }));
+      },
+
       fetchOrders: async (marketId: string) => {
         try {
           const orders = await fetchOrders(marketId);
@@ -500,15 +522,22 @@ export const useStore = create<StoreState>()(
         side: OrderSide,
         outcome: OutcomeType,
         price: number,
-        quantity: number
+        quantity: number,
+        orderType: 'market' | 'limit' = 'market',
+        limitPrice?: number,
+        slippageTolerance?: number
       ) => {
         try {
+          const executionPrice = orderType === 'limit' && limitPrice ? limitPrice : price;
+
           const orderId = await placeAtomicOrder({
             market_id: marketId,
             side,
             outcome,
-            price,
+            price: executionPrice,
             quantity,
+            // Note: Actual DB RPC `place_atomic_order` handles execution.
+            // Future enhancement: Pass slippage and order_type explicitly to the RPC.
           });
 
           if (!orderId) return false;

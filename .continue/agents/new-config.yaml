@@ -1,20 +1,16 @@
-
-{
-  "models": [
-    {
-      "title": "Novita GLM-5",
-      "provider": "openai",
-      "model": "zai-org/glm-5",
-      "apiKey": sk_a0kqWFjPLagHpnRjqZAH0mx4SXzmNmSn7jQJjzJew5o",
-      "apiBase": "https://api.novita.ai/openai"
-    }
-  ],
-  "tabAutocompleteModel": {
-    "title": "GLM-5 Autocomplete",
-    "provider": "openai",
-    "model": "zai-org/glm-5",
-          "apiKey": sk_a0kqWFjPLagHpnRjqZAH0mx4SXzmNmSn7jQJjzJew5o",
-    "apiBase": "https://api.novita.ai/openai"
-  }
-}
-
+name: Local Config
+version: 1.0.0
+schema: v1
+models:
+  - name: GLM 5
+    provider: novita
+    model: zai-org/glm-5
+    apiKey: sk_a0kqWFjPLagHpnRjqZAH0mx4SXzmNmSn7jQJjzJew5o
+  - name: Llama 3.1 8B
+    provider: novita
+    model: meta-llama/llama-3.1-8b-instruct
+    apiKey: sk_a0kqWFjPLagHpnRjqZAH0mx4SXzmNmSn7jQJjzJew5o
+  - name: deepseek v3
+    provider: novita
+    model: deepseek/deepseek_v3
+    apiKey: sk_a0kqWFjPLagHpnRjqZAH0mx4SXzmNmSn7jQJjzJew5o

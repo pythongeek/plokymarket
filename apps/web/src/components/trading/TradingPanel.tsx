@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useStore } from '@/store/useStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -16,17 +16,20 @@ import {
   CheckCircle2,
   AlertCircle,
   Zap,
-  Target
+  Target,
+  AlertTriangle
 } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
 import type { Market, OutcomeType } from '@/types';
 import { useTranslation } from 'react-i18next';
 
 interface TradingPanelProps {
   market: Market;
+  isPaused?: boolean;
 }
 
-export function TradingPanel({ market }: TradingPanelProps) {
+export function TradingPanel({ market, isPaused }: TradingPanelProps) {
   const {
     wallet,
     placeOrder,
@@ -51,6 +54,11 @@ export function TradingPanel({ market }: TradingPanelProps) {
   const [stopLoss, setStopLoss] = useState<string>('');
   const [takeProfit, setTakeProfit] = useState<string>('');
 
+  // Advanced Trading State
+  const [orderType, setOrderType] = useState<'market' | 'limit'>('market');
+  const [limitPrice, setLimitPrice] = useState<string>('');
+  const [slippage, setSlippage] = useState<number>(1);
+
   const maxPrice = 0.99;
   const minPrice = 0.01;
 
@@ -58,8 +66,11 @@ export function TradingPanel({ market }: TradingPanelProps) {
   useEffect(() => {
     if (tradingState.price !== null && tradingState.price !== parseFloat(price)) {
       setPrice(tradingState.price.toFixed(2));
+      if (!limitPrice && orderType === 'limit') {
+        setLimitPrice(tradingState.price.toFixed(2));
+      }
     }
-  }, [tradingState.price]); // Intentionally omitting 'price' dependency to avoid loop
+  }, [tradingState.price, limitPrice, orderType, price]);
 
   useEffect(() => {
     if (tradingState.side && tradingState.side !== activeTab) {
@@ -67,12 +78,38 @@ export function TradingPanel({ market }: TradingPanelProps) {
     }
   }, [tradingState.side]);
 
-  const totalCost = parseFloat(price) * parseInt(quantity || '0');
+  // Computations
+  const executionPrice = orderType === 'market'
+    ? parseFloat(price || '0')
+    : parseFloat(limitPrice || '0');
+
+  const parsedQty = parseInt(quantity || '0');
+  const totalCost = executionPrice * parsedQty;
+
   const potentialProfit = outcome === 'YES'
-    ? (1 - parseFloat(price)) * parseInt(quantity || '0')
-    : (1 - parseFloat(price)) * parseInt(quantity || '0');
+    ? (1 - executionPrice) * parsedQty
+    : (1 - executionPrice) * parsedQty;
+
+  const { maxAmount, estimatedReceive, priceImpact } = useMemo(() => {
+    const balance = wallet?.balance || 0;
+
+    // Max Amount Calculation
+    const max = executionPrice > 0 ? Math.floor(balance / executionPrice) : 0;
+
+    // Estimated Receive (-2% platform fee)
+    const feeRate = 0.02;
+    const est = parsedQty * (1 - feeRate);
+
+    // Price Impact Proxy (assume 1% impact per 5,000 shares ordered at market)
+    const impact = orderType === 'market' && parsedQty > 0
+      ? (parsedQty / 5000) * 0.01
+      : 0;
+
+    return { maxAmount: max, estimatedReceive: est, priceImpact: impact };
+  }, [wallet?.balance, executionPrice, parsedQty, orderType]);
 
   const handlePriceChange = (value: string) => {
+    if (isPaused) return;
     const numValue = parseFloat(value);
     if (!isNaN(numValue) && numValue >= minPrice && numValue <= maxPrice) {
       setPrice(value);
@@ -81,6 +118,7 @@ export function TradingPanel({ market }: TradingPanelProps) {
   };
 
   const handleQuantityChange = (value: string) => {
+    if (isPaused) return;
     setQuantity(value);
     const num = parseInt(value);
     if (!isNaN(num)) setTradingQuantity(num);
@@ -88,20 +126,15 @@ export function TradingPanel({ market }: TradingPanelProps) {
 
   const setPercentageQuantity = (pct: number) => {
     if (!wallet) return;
-    // For BUY: Cost = Price * Qty -> Qty = Balance * Pct / Price
-    // For SELL: Qty = Held Shares * Pct (Complex logic, let's stick to Wallet Balance for buys)
+    const maxAffordable = maxAmount;
+    if (maxAffordable <= 0) return;
 
-    const balance = wallet.balance;
-    const currentPrice = parseFloat(price);
-    if (currentPrice <= 0) return;
-
-    const maxAffordable = Math.floor(balance / currentPrice);
     const targetQty = Math.floor(maxAffordable * pct);
-
     handleQuantityChange(targetQty.toString());
   };
 
   const handleSubmit = async () => {
+    if (isPaused) return;
     if (!isAuthenticated) {
       setError(t('trading.login_required'));
       return;
@@ -116,7 +149,10 @@ export function TradingPanel({ market }: TradingPanelProps) {
         activeTab,
         outcome,
         parseFloat(price),
-        parseInt(quantity)
+        parseInt(quantity),
+        orderType,
+        orderType === 'limit' ? parseFloat(limitPrice) : undefined,
+        slippage / 100
       );
 
       if (success) {
@@ -248,72 +284,122 @@ export function TradingPanel({ market }: TradingPanelProps) {
           </button>
         </div>
 
-        {/* Price Input */}
-        <div className="space-y-2">
-          <div className="flex justify-between">
-            <Label>{t('trading.price_per_share')}</Label>
-            <span className="text-sm text-muted-foreground">
-              {t('trading.range')}: ৳{minPrice} - ৳{maxPrice}
-            </span>
-          </div>
-          <div className="flex gap-2">
-            <Input
-              type="number"
-              value={price}
-              onChange={(e) => handlePriceChange(e.target.value)}
-              min={minPrice}
-              max={maxPrice}
-              step={0.01}
-              className="text-lg"
-            />
-            <div className="flex items-center px-3 bg-muted rounded-md">
-              <span className="text-sm font-medium">BDT</span>
-            </div>
-          </div>
-          <Slider
-            value={[parseFloat(price)]}
-            onValueChange={([v]) => handlePriceChange(v.toFixed(2))}
-            min={minPrice}
-            max={maxPrice}
-            step={0.01}
-          />
+        {/* Order Type Tabs */}
+        <div className="flex gap-4 my-4 border-b">
+          <button
+            onClick={() => setOrderType('market')}
+            className={`pb-2 text-sm font-medium border-b-2 transition-colors ${orderType === 'market' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+          >
+            {t('trading.market_order', 'Market Order')}
+          </button>
+          <button
+            onClick={() => setOrderType('limit')}
+            className={`pb-2 text-sm font-medium border-b-2 transition-colors ${orderType === 'limit' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+          >
+            {t('trading.limit_order', 'Limit Order')}
+          </button>
         </div>
 
-        {/* Quantity Input */}
+        {/* Quantity (Amount) Input */}
         <div className="space-y-2">
-          <div className="flex justify-between">
-            <Label>{t('trading.quantity')}</Label>
+          <div className="flex justify-between items-center">
+            <Label>{t('trading.quantity', 'Amount (Shares)')}</Label>
             <div className="flex gap-1">
               {[0.25, 0.5, 0.75, 1].map((pct) => (
                 <button
                   key={pct}
                   onClick={() => setPercentageQuantity(pct)}
-                  className="px-1.5 py-0.5 text-[10px] bg-muted hover:bg-muted/80 rounded"
+                  className="px-1.5 py-0.5 text-[10px] bg-muted hover:bg-muted/80 rounded transition-colors"
                 >
-                  {pct * 100}%
+                  {pct === 1 ? 'Max' : `${pct * 100}%`}
                 </button>
               ))}
             </div>
           </div>
-          <Input
-            type="number"
-            value={quantity}
-            onChange={(e) => handleQuantityChange(e.target.value)}
-            min={1}
-            className="text-lg"
-          />
+          <div className="relative">
+            <Input
+              type="number"
+              value={quantity}
+              onChange={(e) => handleQuantityChange(e.target.value)}
+              min={1}
+              className="text-lg pr-16"
+              placeholder="0"
+            />
+            <button
+              onClick={() => setPercentageQuantity(1)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+            >
+              Max
+            </button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Max available: {maxAmount.toLocaleString()} shares
+          </p>
+        </div>
+
+        {/* Limit Price Input (Conditional) */}
+        {orderType === 'limit' && (
+          <div className="space-y-2 animate-in slide-in-from-top-2">
+            <div className="flex justify-between">
+              <Label>{t('trading.limit_price', 'Limit Price (BDT)')}</Label>
+              <span className="text-xs text-muted-foreground">
+                Range: ৳{minPrice} - ৳{maxPrice}
+              </span>
+            </div>
+            <Input
+              type="number"
+              value={limitPrice}
+              onChange={(e) => setLimitPrice(e.target.value)}
+              min={minPrice}
+              max={maxPrice}
+              step={0.01}
+              className="text-lg"
+              placeholder="0.50"
+            />
+          </div>
+        )}
+
+        {/* Slippage Tolerance */}
+        <div className="space-y-2">
+          <Label className="text-sm">{t('trading.slippage', 'Slippage Tolerance')}</Label>
           <div className="flex gap-2">
-            {quickAmounts.map((amount) => (
+            {[0.5, 1, 2].map(tol => (
               <button
-                key={amount}
-                onClick={() => handleQuantityChange(amount.toString())}
-                className="flex-1 px-2 py-1 text-xs font-medium rounded bg-muted hover:bg-muted/80 transition-colors"
+                key={tol}
+                onClick={() => setSlippage(tol)}
+                className={`px-3 py-1.5 text-sm rounded-md border transition-colors ${slippage === tol
+                  ? 'bg-primary/10 border-primary text-primary font-medium'
+                  : 'border-border text-muted-foreground hover:bg-muted'
+                  }`}
               >
-                {amount}
+                {tol}%
               </button>
             ))}
+            <div className="relative w-20">
+              <Input
+                type="number"
+                value={slippage}
+                onChange={(e) => setSlippage(parseFloat(e.target.value))}
+                className="h-full pr-6 text-sm"
+                step={0.1}
+                min={0.1}
+              />
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">%</span>
+            </div>
           </div>
         </div>
+
+        {/* Price Impact Warning */}
+        {priceImpact > 0.01 && (
+          <Alert variant="destructive" className="bg-destructive/10 text-destructive border-destructive/20">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>High Price Impact</AlertTitle>
+            <AlertDescription className="text-xs mt-1">
+              Your order may move the market price by {(priceImpact * 100).toFixed(2)}%.
+              Consider reducing size or using a limit order.
+            </AlertDescription>
+          </Alert>
+        )}
 
         {/* Advanced Settings Checkbox/Toggle */}
         <div className="flex items-center justify-between py-2 border-t border-b">
@@ -349,27 +435,23 @@ export function TradingPanel({ market }: TradingPanelProps) {
         )}
 
         {/* Order Summary */}
-        <div className="rounded-lg bg-muted p-4 space-y-2">
+        <div className="rounded-xl bg-muted/50 p-4 space-y-3 border border-border/50">
           <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">{t('trading.total_cost')}</span>
-            <span className="font-medium">৳{totalCost.toFixed(2)}</span>
+            <span className="text-muted-foreground">{t('trading.estimated_shares', 'Estimated shares')}</span>
+            <span className="font-medium">{estimatedReceive.toFixed(2)}</span>
           </div>
           <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">{t('trading.potential_profit')}</span>
-            <span className="font-medium text-green-500">
-              +৳{potentialProfit.toFixed(2)}
-            </span>
+            <span className="text-muted-foreground">{t('trading.platform_fee', 'Platform fee (2%)')}</span>
+            <span className="font-medium text-muted-foreground">৳{(totalCost * 0.02).toFixed(2)}</span>
           </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">{t('trading.return_on_win')}</span>
-            <span className="font-medium text-green-500">
-              +{((potentialProfit / totalCost || 0) * 100).toFixed(0)}%
-            </span>
+          <div className="flex justify-between text-sm pt-2 border-t font-semibold">
+            <span>{t('trading.total_cost', 'Total cost')}</span>
+            <span>৳{totalCost.toFixed(2)}</span>
           </div>
           {wallet && (
-            <div className="flex justify-between text-sm pt-2 border-t">
-              <span className="text-muted-foreground">{t('trading.available_balance')}</span>
-              <span className="font-medium">৳{wallet.balance.toLocaleString()}</span>
+            <div className="flex justify-between text-xs pt-1 text-muted-foreground">
+              <span>{t('trading.available_balance', 'Available balance')}</span>
+              <span>৳{wallet.balance.toLocaleString()}</span>
             </div>
           )}
         </div>
@@ -393,20 +475,23 @@ export function TradingPanel({ market }: TradingPanelProps) {
         {/* Submit Button */}
         <Button
           onClick={handleSubmit}
-          disabled={isSubmitting || totalCost <= 0}
+          disabled={isSubmitting || parsedQty <= 0 || totalCost > (wallet?.balance || 0) || isPaused}
           className={cn(
-            "w-full text-lg font-semibold",
+            "w-full h-14 text-lg font-bold rounded-xl",
             activeTab === 'buy'
-              ? "bg-green-500 hover:bg-green-600"
-              : "bg-red-500 hover:bg-red-600"
+              ? "bg-green-500 hover:bg-green-600 text-white shadow-lg shadow-green-500/20"
+              : "bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20"
           )}
         >
-          {isSubmitting ? (
+          {isPaused ? (
+            t('trading.paused', 'Trading Paused')
+          ) : isSubmitting ? (
             t('trading.processing')
           ) : (
             <>
-              {activeTab === 'buy' ? t('trading.buy') : t('trading.sell')} {outcome === 'YES' ? t('common.yes') : t('common.no')}
-              <span className="ml-2">৳{totalCost.toFixed(2)}</span>
+              {orderType === 'market'
+                ? (activeTab === 'buy' ? t('trading.buy_now', 'Buy Now') : t('trading.sell_now', 'Sell Now'))
+                : t('trading.place_limit', 'Place Limit Order')}
             </>
           )}
         </Button>

@@ -288,6 +288,8 @@ function mapLedgerFromDB(data: any): TradeLedger {
     marketId: data.market_id,
     buyerId: data.buyer_id,
     sellerId: data.seller_id,
+    makerId: data.maker_id, // Added maker_id mapping
+    takerId: data.taker_id, // Added taker_id mapping
     price: parseFloat(data.price),
     quantity: parseFloat(data.quantity),
     totalValue: parseFloat(data.total_value),

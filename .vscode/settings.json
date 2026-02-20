@@ -1,4 +1,6 @@
 {
     "kimi.yoloMode": true,
-    "kimi.alwaysExpandThinking": true
+    "kimi.alwaysExpandThinking": true,
+    "continue.enableConsole": true,
+    "continue.disableQuickFix": false
 }

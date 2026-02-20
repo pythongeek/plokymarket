@@ -12,7 +12,8 @@ import {
     PenLine,
     ExternalLink,
     Loader2,
-    Search
+    Search,
+    Globe
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -214,6 +215,15 @@ export default function EventDetailsPage() {
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => window.open(`/market/${eventId}`, '_blank')}
+                        className="border-blue-500/30 text-blue-400 hover:bg-blue-950/30 hover:text-blue-300"
+                    >
+                        <Globe className="w-4 h-4 mr-2" />
+                        View on Frontend
+                    </Button>
                     <Button variant="destructive" size="sm" onClick={handleDelete} className="bg-red-950/30 text-red-400 border border-red-900/50 hover:bg-red-950/50">
                         <Trash2 className="w-4 h-4 mr-2" />
                         Delete

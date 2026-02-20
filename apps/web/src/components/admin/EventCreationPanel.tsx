@@ -66,7 +66,7 @@ export function EventCreationPanel({ onEventCreated }: EventCreationPanelProps) 
     tags: [] as string[],
     image_url: '',
     trading_closes_at: '',
-    resolution_delay_hours: 24,
+    resolution_delay: 1440,
     initial_liquidity: 1000,
     slug: '',
     answer1: 'হ্যাঁ',
@@ -193,7 +193,7 @@ export function EventCreationPanel({ onEventCreated }: EventCreationPanelProps) 
         tags: [],
         image_url: '',
         trading_closes_at: '',
-        resolution_delay_hours: 24,
+        resolution_delay: 1440,
         initial_liquidity: 1000,
         slug: '',
         answer1: 'হ্যাঁ',
@@ -472,11 +472,11 @@ export function EventCreationPanel({ onEventCreated }: EventCreationPanelProps) 
                 />
               </div>
               <div className="space-y-2">
-                <Label className="text-slate-300">সমাধানের ডিলে</Label>
+                <Label className="text-slate-300">সমাধানের ডিলে (মিনিট)</Label>
                 <Input
                   type="number"
-                  value={eventData.resolution_delay_hours}
-                  onChange={(e) => setEventData(prev => ({ ...prev, resolution_delay_hours: parseInt(e.target.value) }))}
+                  value={eventData.resolution_delay}
+                  onChange={(e) => setEventData(prev => ({ ...prev, resolution_delay: parseInt(e.target.value) }))}
                   placeholder="24"
                   className="bg-slate-800 border-slate-700 text-white"
                 />

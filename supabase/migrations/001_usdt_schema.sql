@@ -5,26 +5,46 @@
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- Create custom types for transaction and status management
-CREATE TYPE transaction_type AS ENUM (
-  'deposit', 'withdrawal', 'bonus', 'exchange', 'refund', 'fee', 'commission'
-);
+-- Create custom types for transaction and status management (idempotent)
+DO $$ BEGIN
+  CREATE TYPE transaction_type AS ENUM (
+    'deposit', 'withdrawal', 'bonus', 'exchange', 'refund', 'fee', 'commission'
+  );
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
-CREATE TYPE transaction_status AS ENUM (
-  'pending', 'completed', 'failed', 'reversed'
-);
+DO $$ BEGIN
+  CREATE TYPE transaction_status AS ENUM (
+    'pending', 'completed', 'failed', 'reversed'
+  );
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
-CREATE TYPE mfs_provider AS ENUM (
-  'bkash', 'nagad', 'rocket', 'upay'
-);
+DO $$ BEGIN
+  CREATE TYPE mfs_provider AS ENUM (
+    'bkash', 'nagad', 'rocket', 'upay'
+  );
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
-CREATE TYPE deposit_status AS ENUM (
-  'pending', 'under_review', 'verified', 'rejected', 'auto_approved', 'completed'
-);
+DO $$ BEGIN
+  CREATE TYPE deposit_status AS ENUM (
+    'pending', 'under_review', 'verified', 'rejected', 'auto_approved', 'completed'
+  );
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
-CREATE TYPE withdrawal_status AS ENUM (
-  'pending', 'processing', 'completed', 'rejected', 'cancelled'
-);
+DO $$ BEGIN
+  CREATE TYPE withdrawal_status AS ENUM (
+    'pending', 'processing', 'completed', 'rejected', 'cancelled'
+  );
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- Enhanced profiles table for USDT balance management
 CREATE TABLE IF NOT EXISTS public.profiles (
@@ -45,8 +65,8 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   CONSTRAINT positive_balance CHECK (balance >= 0)
 );
 
--- Transactions table for audit trail
-CREATE TABLE IF NOT EXISTS public.transactions (
+-- Wallet Transactions table for audit trail
+CREATE TABLE IF NOT EXISTS public.wallet_transactions (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
   amount DECIMAL(12,2) NOT NULL CHECK (amount > 0),
@@ -183,14 +203,14 @@ CREATE TABLE IF NOT EXISTS public.notifications (
 );
 
 -- Indexes for performance optimization
-CREATE INDEX IF NOT EXISTS idx_transactions_user_created 
-  ON public.transactions(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_wallet_transactions_user_created 
+  ON public.wallet_transactions(user_id, created_at DESC);
 
-CREATE INDEX IF NOT EXISTS idx_transactions_type_status 
-  ON public.transactions(type, status);
+CREATE INDEX IF NOT EXISTS idx_wallet_transactions_type_status 
+  ON public.wallet_transactions(type, status);
 
-CREATE INDEX IF NOT EXISTS idx_transactions_reference 
-  ON public.transactions(reference_id) WHERE reference_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_wallet_transactions_reference 
+  ON public.wallet_transactions(reference_id) WHERE reference_id IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_deposits_status_created 
   ON public.deposit_requests(status, created_at);
@@ -223,18 +243,22 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Triggers for automatic timestamp updates
+DROP TRIGGER IF EXISTS update_profiles_updated_at ON public.profiles;
 CREATE TRIGGER update_profiles_updated_at
   BEFORE UPDATE ON public.profiles
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_deposit_requests_updated_at ON public.deposit_requests;
 CREATE TRIGGER update_deposit_requests_updated_at
   BEFORE UPDATE ON public.deposit_requests
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_withdrawal_requests_updated_at ON public.withdrawal_requests;
 CREATE TRIGGER update_withdrawal_requests_updated_at
   BEFORE UPDATE ON public.withdrawal_requests
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_exchange_rates_updated_at ON public.exchange_rates;
 CREATE TRIGGER update_exchange_rates_updated_at
   BEFORE UPDATE ON public.exchange_rates
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

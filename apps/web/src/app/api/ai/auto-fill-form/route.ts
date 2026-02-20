@@ -27,14 +27,14 @@ function getDefaultEndDate(category: string): string {
     social: 7,
     weather: 5
   };
-  
+
   now.setDate(now.getDate() + (days[category as keyof typeof days] || 7));
   return now.toISOString().slice(0, 16);
 }
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
-  
+
   try {
     const body = await request.json();
     const { topic, partial_data } = body;
@@ -124,7 +124,7 @@ Make it engaging and relevant to Bangladesh audience.
       subcategory: aiData.subcategory || '',
       tags: Array.isArray(aiData.tags) ? aiData.tags : ['বাংলাদেশ', 'প্রেডিকশন'],
       trading_closes_at: getDefaultEndDate(aiData.category || 'sports'),
-      resolution_delay_hours: 24,
+      resolution_delay: 1440,
       initial_liquidity: 1000,
       resolution_method: 'manual_admin' as const
     };

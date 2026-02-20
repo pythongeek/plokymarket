@@ -56,7 +56,7 @@ BEGIN
     
   -- Record bonus transaction only if bonus > 0
   IF v_bonus_amount > 0 THEN
-    INSERT INTO public.transactions (
+    INSERT INTO public.wallet_transactions (
       user_id, 
       amount, 
       type, 
@@ -488,7 +488,7 @@ BEGIN
   
   -- Check daily limit
   SELECT COALESCE(SUM(amount), 0) INTO v_daily_total
-  FROM transactions
+  FROM wallet_transactions
   WHERE user_id = p_user_id
     AND type = 'withdrawal'
     AND status = 'completed'
@@ -507,11 +507,13 @@ ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.profiles FORCE ROW LEVEL SECURITY;
 
 -- Users can view own profile
+DROP POLICY IF EXISTS "Users can view own profile" ON public.profiles;
 CREATE POLICY "Users can view own profile"
   ON public.profiles FOR SELECT
   USING (auth.uid() = id);
 
 -- Users can update own non-financial fields
+DROP POLICY IF EXISTS "Users can update own non-financial fields" ON public.profiles;
 CREATE POLICY "Users can update own non-financial fields"
   ON public.profiles FOR UPDATE
   USING (auth.uid() = id)
@@ -523,6 +525,7 @@ CREATE POLICY "Users can update own non-financial fields"
   );
 
 -- Admins have full access
+DROP POLICY IF EXISTS "Admins have full access" ON public.profiles;
 CREATE POLICY "Admins have full access"
   ON public.profiles FOR ALL
   USING (
@@ -533,6 +536,7 @@ CREATE POLICY "Admins have full access"
   );
 
 -- Service role can modify balance
+DROP POLICY IF EXISTS "Service role can modify balance" ON public.profiles;
 CREATE POLICY "Service role can modify balance"
   ON public.profiles FOR ALL
   TO service_role
@@ -540,30 +544,35 @@ CREATE POLICY "Service role can modify balance"
   WITH CHECK (true);
 
 -- Transactions RLS
-ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.transactions FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.wallet_transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.wallet_transactions FORCE ROW LEVEL SECURITY;
 
 -- Users can view own transactions
+DROP POLICY IF EXISTS "Users can view own transactions" ON public.wallet_transactions;
 CREATE POLICY "Users can view own transactions"
-  ON public.transactions FOR SELECT
+  ON public.wallet_transactions FOR SELECT
   USING (auth.uid() = user_id);
 
 -- No direct inserts/updates/deletes by users
+DROP POLICY IF EXISTS "No direct inserts by users" ON public.wallet_transactions;
 CREATE POLICY "No direct inserts by users"
-  ON public.transactions FOR INSERT
+  ON public.wallet_transactions FOR INSERT
   WITH CHECK (false);
 
+DROP POLICY IF EXISTS "No updates by users" ON public.wallet_transactions;
 CREATE POLICY "No updates by users"
-  ON public.transactions FOR UPDATE
+  ON public.wallet_transactions FOR UPDATE
   USING (false);
 
+DROP POLICY IF EXISTS "No deletes by users" ON public.wallet_transactions;
 CREATE POLICY "No deletes by users"
-  ON public.transactions FOR DELETE
+  ON public.wallet_transactions FOR DELETE
   USING (false);
 
 -- Service role full access
+DROP POLICY IF EXISTS "Service role can manage transactions" ON public.wallet_transactions;
 CREATE POLICY "Service role can manage transactions"
-  ON public.transactions FOR ALL
+  ON public.wallet_transactions FOR ALL
   TO service_role
   USING (true)
   WITH CHECK (true);
@@ -573,22 +582,26 @@ ALTER TABLE public.deposit_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.deposit_requests FORCE ROW LEVEL SECURITY;
 
 -- Users can view own requests
+DROP POLICY IF EXISTS "Users can view own deposit requests" ON public.deposit_requests;
 CREATE POLICY "Users can view own deposit requests"
   ON public.deposit_requests FOR SELECT
   USING (auth.uid() = user_id);
 
 -- Users can create requests
+DROP POLICY IF EXISTS "Users can create deposit requests" ON public.deposit_requests;
 CREATE POLICY "Users can create deposit requests"
   ON public.deposit_requests FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
 -- Users can update pending requests
+DROP POLICY IF EXISTS "Users can update own pending requests" ON public.deposit_requests;
 CREATE POLICY "Users can update own pending requests"
   ON public.deposit_requests FOR UPDATE
   USING (auth.uid() = user_id AND status = 'pending')
   WITH CHECK (auth.uid() = user_id AND status = 'pending');
 
 -- Admins can manage all requests
+DROP POLICY IF EXISTS "Admins can manage all deposit requests" ON public.deposit_requests;
 CREATE POLICY "Admins can manage all deposit requests"
   ON public.deposit_requests FOR ALL
   USING (
@@ -599,6 +612,7 @@ CREATE POLICY "Admins can manage all deposit requests"
   );
 
 -- Service role full access
+DROP POLICY IF EXISTS "Service role can manage deposit requests" ON public.deposit_requests;
 CREATE POLICY "Service role can manage deposit requests"
   ON public.deposit_requests FOR ALL
   TO service_role
@@ -610,23 +624,27 @@ ALTER TABLE public.withdrawal_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.withdrawal_requests FORCE ROW LEVEL SECURITY;
 
 -- Users can view own requests
+DROP POLICY IF EXISTS "Users can view own withdrawal requests" ON public.withdrawal_requests;
 CREATE POLICY "Users can view own withdrawal requests"
   ON public.withdrawal_requests FOR SELECT
   USING (auth.uid() = user_id);
 
 -- Users can create requests
+DROP POLICY IF EXISTS "Users can create withdrawal requests" ON public.withdrawal_requests;
 CREATE POLICY "Users can create withdrawal requests"
   ON public.withdrawal_requests FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
 -- Users can cancel pending requests
+DROP POLICY IF EXISTS "Users can cancel own pending requests" ON public.withdrawal_requests;
 CREATE POLICY "Users can cancel own pending requests"
   ON public.withdrawal_requests FOR UPDATE
   USING (auth.uid() = user_id AND status = 'pending')
   WITH CHECK (auth.uid() = user_id AND status = 'pending');
 
 -- Admins can manage all requests
-CREATE POLICY "Admins can manage all withdrawal requests"
+DROP POLICY IF EXISTS "Admins can manage all withdrawal requests" ON public.withdrawal_requests;
+CREATE POLICY "Admins have full access to withdrawal requests"
   ON public.withdrawal_requests FOR ALL
   USING (
     EXISTS (
@@ -636,6 +654,7 @@ CREATE POLICY "Admins can manage all withdrawal requests"
   );
 
 -- Service role full access
+DROP POLICY IF EXISTS "Service role can manage withdrawal requests" ON public.withdrawal_requests;
 CREATE POLICY "Service role can manage withdrawal requests"
   ON public.withdrawal_requests FOR ALL
   TO service_role

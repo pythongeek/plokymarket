@@ -19,9 +19,10 @@ import { cn } from '@/lib/utils';
 interface MarketStatusDisplayProps {
     market: Market;
     oracleConfidence?: number;
+    isPaused?: boolean;
 }
 
-export function MarketStatusDisplay({ market, oracleConfidence }: MarketStatusDisplayProps) {
+export function MarketStatusDisplay({ market, oracleConfidence, isPaused }: MarketStatusDisplayProps) {
     const { t } = useTranslation();
     const [timeLeft, setTimeLeft] = useState<string>('');
 
@@ -59,7 +60,7 @@ export function MarketStatusDisplay({ market, oracleConfidence }: MarketStatusDi
         }
     };
 
-    const currentPhase = market.trading_phase || 'CONTINUOUS';
+    const currentPhase = isPaused ? 'HALTED' : (market.trading_phase || 'CONTINUOUS');
     const config = phaseConfig[currentPhase];
     const nextPhaseTime = market.next_phase_time ? new Date(market.next_phase_time) : null;
 

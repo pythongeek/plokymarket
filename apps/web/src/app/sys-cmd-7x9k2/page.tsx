@@ -74,7 +74,7 @@ export default function AdminDashboard() {
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
 
   const supabase = createClient();
 
@@ -160,17 +160,8 @@ export default function AdminDashboard() {
         // table may not exist
       }
 
-      // Fetch support tickets (graceful fallback)
-      let supportTickets = 0;
-      try {
-        const { count, error } = await supabase
-          .from('support_tickets')
-          .select('*', { count: 'exact', head: true })
-          .eq('status', 'open');
-        if (!error) supportTickets = count || 0;
-      } catch {
-        // table may not exist
-      }
+      // support_tickets table doesn't exist in production — skip to avoid 404 noise
+      const supportTickets = 0;
 
       // Fetch recent admin activity
       let activityData: RecentActivity[] = [];
@@ -306,7 +297,7 @@ export default function AdminDashboard() {
           </Button>
           <div className="flex items-center gap-2 text-sm text-gray-600 bg-white px-3 py-1.5 rounded-lg border border-gray-300">
             <Lock className="w-3 h-3" />
-            <span>Last sync: {lastRefresh.toLocaleTimeString()}</span>
+            <span>Last sync: {lastRefresh ? lastRefresh.toLocaleTimeString() : '...'}</span>
           </div>
         </div>
       </div>

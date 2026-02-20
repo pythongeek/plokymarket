@@ -7,12 +7,12 @@ import { createClient } from '@/lib/supabase/client';
 // TYPES & INTERFACES
 // ============================================
 
-export type LeaderboardCategory = 
-  | 'absoluteProfit' 
-  | 'returnPercentage' 
-  | 'riskAdjusted' 
-  | 'accuracy' 
-  | 'consistency' 
+export type LeaderboardCategory =
+  | 'absoluteProfit'
+  | 'returnPercentage'
+  | 'riskAdjusted'
+  | 'accuracy'
+  | 'consistency'
   | 'volume';
 
 export type TimePeriod = 'daily' | 'weekly' | 'monthly' | 'allTime';
@@ -23,7 +23,7 @@ export interface LeaderboardEntry {
   userName: string;
   userAvatar?: string;
   isKycVerified: boolean;
-  
+
   // Metrics
   absoluteProfit: number;
   absoluteProfitBDT: number;
@@ -33,7 +33,7 @@ export interface LeaderboardEntry {
   consistency: number;
   volume: number;
   volumeBDT: number;
-  
+
   // Anti-gaming stats
   totalTrades: number;
   winningTrades: number;
@@ -44,10 +44,10 @@ export interface LeaderboardEntry {
   winRate: number;
   avgPositionTime: number; // in hours
   tradingDays: number;
-  
+
   // Time-weighted score
   weightedScore: number;
-  
+
   // Movement
   rankChange: number; // positive = up, negative = down
   previousRank?: number;
@@ -428,22 +428,22 @@ function validateAntiGaming(
 ): AntiGamingResult {
   const violations: string[] = [];
   const config = LEADERBOARD_CATEGORIES[category];
-  
+
   // Minimum trades check
   if ((entry.totalTrades || 0) < config.minTrades) {
     violations.push(`Minimum ${config.minTrades} trades required`);
   }
-  
+
   // Minimum trading days check
   if (config.minTradingDays && (entry.tradingDays || 0) < config.minTradingDays) {
     violations.push(`Minimum ${config.minTradingDays} trading days required`);
   }
-  
+
   // Position time check (for absolute profit)
   if (category === 'absoluteProfit' && (entry.avgPositionTime || 0) < 1) {
     violations.push('Average position time must be > 1 hour');
   }
-  
+
   // Win rate variance check (for consistency)
   if (category === 'consistency') {
     const winRate = entry.winRate || 0;
@@ -451,7 +451,7 @@ function validateAntiGaming(
       violations.push('Suspicious win rate variance');
     }
   }
-  
+
   // Wash trading detection (for volume)
   if (category === 'volume' && entry.totalTrades) {
     const avgTradeSize = (entry.volume || 0) / entry.totalTrades;
@@ -460,7 +460,7 @@ function validateAntiGaming(
       violations.push('Potential wash trading detected');
     }
   }
-  
+
   return {
     isValid: violations.length === 0,
     violations,
@@ -488,7 +488,7 @@ export function useLeaderboard(
     setLoading(true);
     try {
       const supabase = createClient();
-      
+
       // Calculate date range
       const endDate = new Date();
       const startDate = new Date();
@@ -500,8 +500,8 @@ export function useLeaderboard(
         .select(`
           *,
           markets:market_id (category, status, winning_outcome),
-          buyer:buyer_id (id, full_name, kyc_verified),
-          seller:seller_id (id, full_name, kyc_verified)
+          maker:maker_id (id, full_name, kyc_verified),
+          taker:taker_id (id, full_name, kyc_verified)
         `)
         .gte('created_at', startDate.toISOString())
         .order('created_at', { ascending: true });
@@ -529,8 +529,8 @@ export function useLeaderboard(
       }>();
 
       // Aggregate trades
-      trades?.forEach(trade => {
-        [trade.buyer, trade.seller].forEach(user => {
+      trades?.forEach((trade: any) => {
+        [trade.maker, trade.taker].forEach(user => {
           if (!user) return;
           if (!userStats.has(user.id)) {
             userStats.set(user.id, { user, trades: [], positions: [], tradingDays: new Set() });
@@ -544,11 +544,11 @@ export function useLeaderboard(
       positions?.forEach(position => {
         if (!position.user) return;
         if (!userStats.has(position.user.id)) {
-          userStats.set(position.user.id, { 
-            user: position.user, 
-            trades: [], 
-            positions: [], 
-            tradingDays: new Set() 
+          userStats.set(position.user.id, {
+            user: position.user,
+            trades: [],
+            positions: [],
+            tradingDays: new Set()
           });
         }
         userStats.get(position.user.id)!.positions.push(position);
@@ -570,19 +570,19 @@ export function useLeaderboard(
         let totalPredictions = 0;
         let totalWins = 0;
         let totalLosses = 0;
-        
+
         const returns: number[] = [];
 
         // Process positions for P&L
         positions.forEach(pos => {
           const entryPrice = pos.average_price || 0;
           const quantity = pos.quantity || 0;
-          
+
           if (pos.markets?.status === 'resolved') {
             const won = pos.markets.winning_outcome === pos.outcome;
             const pnl = won ? (1 - entryPrice) * quantity : -entryPrice * quantity;
             absoluteProfit += pnl;
-            
+
             totalPredictions++;
             if (won) {
               correctPredictions++;
@@ -593,7 +593,7 @@ export function useLeaderboard(
               totalLosses += Math.abs(pnl);
             }
           }
-          
+
           totalVolume += entryPrice * quantity;
         });
 
@@ -602,21 +602,21 @@ export function useLeaderboard(
         const winRate = totalTrades > 0 ? winningTrades / totalTrades : 0;
         const avgWin = winningTrades > 0 ? totalWins / winningTrades : 0;
         const avgLoss = losingTrades > 0 ? totalLosses / losingTrades : 0;
-        
+
         // Starting capital estimation (from wallet or first trade)
         const startingCapital = 10000; // Default, would fetch from actual data
         const returnPercentage = startingCapital > 0 ? (absoluteProfit / startingCapital) * 100 : 0;
-        
+
         // Sharpe ratio calculation
         const avgReturn = returns.length > 0 ? returns.reduce((a, b) => a + b, 0) / returns.length : 0;
-        const stdDev = returns.length > 0 
+        const stdDev = returns.length > 0
           ? Math.sqrt(returns.reduce((sq, n) => sq + Math.pow(n - avgReturn, 2), 0) / returns.length)
           : 1;
         const sharpeRatio = stdDev > 0 ? (avgReturn - 0.05) / stdDev : 0;
-        
+
         // Accuracy
         const accuracy = totalPredictions > 0 ? correctPredictions / totalPredictions : 0;
-        
+
         // Consistency (Win Rate × Win/Loss Ratio)
         const winLossRatio = avgLoss > 0 ? avgWin / avgLoss : avgWin > 0 ? Infinity : 0;
         const consistency = winRate * (winLossRatio > 0 ? Math.min(winLossRatio, 5) : 0);
@@ -701,9 +701,9 @@ export function useLeaderboard(
         if (userEntry) {
           const nextEntry = leaderboardData[userEntry.rank - 2];
           const prevEntry = leaderboardData[userEntry.rank];
-          
+
           const percentile = ((leaderboardData.length - userEntry.rank) / leaderboardData.length) * 100;
-          
+
           setUserRank({
             currentRank: userEntry.rank,
             previousRank: userEntry.rank - userEntry.rankChange,
@@ -741,14 +741,14 @@ export function useLeaderboard(
     } finally {
       setLoading(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [category, period, kycOnly, currentUserId]);
 
   useEffect(() => {
     fetchLeaderboard();
     const interval = setInterval(fetchLeaderboard, 60000); // Refresh every minute
     return () => clearInterval(interval);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [category, period, kycOnly, currentUserId]);
 
   return {

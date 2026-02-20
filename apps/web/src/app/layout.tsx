@@ -3,6 +3,7 @@ import './globals.css';
 import { I18nProvider } from '@/components/providers/I18nProvider';
 import { ThemeProvider } from "@/components/theme-provider"
 import { AuthProvider } from '@/components/providers/AuthProvider';
+import { NuqsAdapter } from 'nuqs/adapters/next/app';
 
 export const metadata: Metadata = {
   title: 'Plokymarket - Prediction Marketplace',
@@ -25,7 +26,9 @@ export default function RootLayout({
         >
           <I18nProvider>
             <AuthProvider>
-              {children}
+              <NuqsAdapter>
+                {children}
+              </NuqsAdapter>
             </AuthProvider>
           </I18nProvider>
         </ThemeProvider>

@@ -7,9 +7,12 @@ import { OrderBook } from '@/components/clob/OrderBook';
 import { DepthChart } from '@/components/clob/DepthChart';
 import { LiquidityHeatMap } from '@/components/clob/LiquidityHeatMap';
 import { MarketStatusDisplay } from '@/components/market/MarketStatusDisplay';
-import { CommentThread } from '@/components/social/CommentThread';
+import { CommentSection } from '@/components/social/CommentSection';
 import { TradingPanel } from '@/components/trading/TradingPanel';
 import { PriceChart } from '@/components/trading/PriceChart';
+import { PauseBanner } from '@/components/trading/PauseBanner';
+import { useMarketStore } from '@/store/marketStore';
+import { Market } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -31,16 +34,34 @@ import { bn, enUS } from 'date-fns/locale';
 export default function MarketDetailPage() {
   const params = useParams() as { id?: string };
   const router = useRouter();
-  const { markets, orders, fetchMarkets, fetchOrders } = useStore();
   const { t, i18n } = useTranslation();
+
+  const marketId = params.id;
+  const {
+    markets,
+    orders,
+    fetchMarkets,
+    fetchOrders,
+  } = useStore();
+
+  const {
+    isPlatformPaused,
+    categoryPauseStatus,
+    subscribeToEmergencySettings,
+    unsubscribeAll,
+    events
+  } = useMarketStore();
 
   useEffect(() => {
     fetchMarkets();
     if (params.id) fetchOrders(params.id);
-  }, [fetchMarkets, fetchOrders, params.id]);
+    subscribeToEmergencySettings();
+    return () => unsubscribeAll();
+  }, [fetchMarkets, fetchOrders, params.id, subscribeToEmergencySettings, unsubscribeAll]);
 
-  const marketId = params.id;
-  const market = marketId ? markets.find((m) => m.id === marketId) : undefined;
+  // Use event from marketStore if available for real-time pause updates
+  const event = marketId ? events.get(marketId) : undefined;
+  const market = (event as unknown as Market) || (marketId ? markets.find((m) => m.id === marketId) : undefined);
 
   const dateLocale = i18n.language === 'bn' ? bn : enUS;
 
@@ -103,33 +124,35 @@ export default function MarketDetailPage() {
           <p className="text-muted-foreground max-w-3xl">{market.description}</p>
         )}
 
-        {/* Market Stats */}
-        <div className="flex flex-wrap gap-4 text-sm">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <BarChart3 className="h-4 w-4" />
-            <span>{t('market_detail.volume')}: ৳{market.total_volume.toLocaleString()}</span>
-          </div>
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Calendar className="h-4 w-4" />
-            <span>{t('market_detail.closes')}: {formatDistanceToNow(new Date(market.trading_closes_at), { addSuffix: true, locale: dateLocale })}</span>
-          </div>
-          {market.source_url && (
-            <a
-              href={market.source_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 text-primary hover:underline"
-            >
-              <ExternalLink className="h-4 w-4" />
-              <span>{t('market_detail.source')}</span>
-            </a>
-          )}
-        </div>
       </div>
+
+      {/* Emergency Pause Banner */}
+      {(() => {
+        const categoryPause = market ? categoryPauseStatus.get(market.category) : undefined;
+        const isCategoryPaused = categoryPause?.paused || false;
+        const isMarketPaused = market?.trading_status === 'paused';
+
+        if (isPlatformPaused || isCategoryPaused || isMarketPaused) {
+          const level = isPlatformPaused ? 'platform' : isCategoryPaused ? 'category' : 'market';
+          const reason = isPlatformPaused ? undefined : isCategoryPaused ? categoryPause?.reason : market?.pause_reason;
+          const pausedAt = isPlatformPaused ? undefined : isCategoryPaused ? undefined : market?.paused_at; // Platform/Category pause times could be added if needed
+
+          return (
+            <PauseBanner
+              level={level}
+              reason={reason}
+              pausedAt={pausedAt}
+              estimatedResumeAt={market?.estimated_resume_at}
+            />
+          );
+        }
+        return null;
+      })()}
 
       <MarketStatusDisplay
         market={market}
         oracleConfidence={market.resolution_details?.ai_confidence || 85} // Mock default if not present
+        isPaused={isPlatformPaused || (market ? (categoryPauseStatus.get(market.category)?.paused || market.trading_status === 'paused') : false)}
       />
 
       <Separator />
@@ -304,20 +327,17 @@ export default function MarketDetailPage() {
 
           {/* Comments Section - Enhanced with Threading & Social Features */}
           <div className="mt-10 pt-10 border-t border-primary/10">
-            <CommentThread 
-              marketId={market.id} 
-              marketQuestion={market.question}
-              maxDepth={10}
-              defaultCollapsedDepth={3}
-              enableRealtime={true}
-            />
+            <CommentSection eventId={market.event_id || market.id} />
           </div>
         </div>
 
         {/* Right Column - Trading Panel */}
         <div className="lg:col-span-1">
           <div className="sticky top-24">
-            <TradingPanel market={market} />
+            <TradingPanel
+              market={market}
+              isPaused={isPlatformPaused || (market ? (categoryPauseStatus.get(market.category)?.paused || market.trading_status === 'paused') : false)}
+            />
           </div>
         </div>
       </div>

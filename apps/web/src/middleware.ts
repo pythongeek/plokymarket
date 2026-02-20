@@ -86,7 +86,7 @@ export async function middleware(request: NextRequest) {
     // Check admin status
     const { data: profile, error: profileError } = await supabase
       .from('user_profiles')
-      .select('is_admin, is_super_admin')
+      .select('is_admin, is_super_admin, email')
       .eq('id', user.id)
       .single();
 
@@ -95,15 +95,26 @@ export async function middleware(request: NextRequest) {
       return new NextResponse('Forbidden', { status: 403 });
     }
 
-    // Add admin info to headers for downstream use
-    response.headers.set('x-admin-id', user.id);
-    response.headers.set('x-admin-level', profile.is_super_admin ? 'super' : 'admin');
+    // Pass metadata to request headers so Server Components can read them
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set('x-admin-id', user.id);
+    requestHeaders.set('x-admin-email', profile.email || user.email || '');
+    requestHeaders.set('x-admin-level', profile.is_super_admin ? 'super' : 'admin');
 
-    // Add security headers
-    response.headers.set('X-Frame-Options', 'DENY');
-    response.headers.set('X-Content-Type-Options', 'nosniff');
-    response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-    response.headers.set('X-Robots-Tag', 'noindex, nofollow');
+    // Create a new response with the modified headers for the downstream request
+    const responseWithHeaders = NextResponse.next({
+      request: {
+        headers: requestHeaders,
+      },
+    });
+
+    // Also add security headers to the actual output response
+    responseWithHeaders.headers.set('X-Frame-Options', 'DENY');
+    responseWithHeaders.headers.set('X-Content-Type-Options', 'nosniff');
+    responseWithHeaders.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+    responseWithHeaders.headers.set('X-Robots-Tag', 'noindex, nofollow');
+
+    return responseWithHeaders;
   }
 
   return response;

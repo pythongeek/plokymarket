@@ -1,0 +1,49 @@
+{
+  "timestamp": "2026-02-17T22:26:29.417Z",
+  "appUrl": "https://polymarket-bangladesh.vercel.app",
+  "qstashUrl": "https://qstash.upstash.io",
+  "schedules": [
+    {
+      "name": "Daily Report",
+      "description": "Send daily summary report at 9 AM BD time",
+      "cron": "0 9 * * *",
+      "timezone": "Asia/Dhaka",
+      "endpoint": "/api/workflows/daily-report",
+      "method": "POST",
+      "retries": 3,
+      "status": "failed",
+      "error": "HTTP 400: {\"error\":\"invalid destination url: endpoint has invalid scheme, add http:// or https://\"}"
+    },
+    {
+      "name": "Exchange Rate Update",
+      "description": "Update USDT/BDT exchange rate every 5 minutes",
+      "cron": "*/5 * * * *",
+      "endpoint": "/api/workflows/exchange-rate",
+      "method": "POST",
+      "retries": 3,
+      "status": "failed",
+      "error": "HTTP 400: {\"error\":\"invalid destination url: endpoint has invalid scheme, add http:// or https://\"}"
+    },
+    {
+      "name": "Auto-Verification Check",
+      "description": "Check pending deposits for auto-verification every 10 minutes",
+      "cron": "*/10 * * * *",
+      "endpoint": "/api/workflows/auto-verify",
+      "method": "POST",
+      "retries": 2,
+      "status": "failed",
+      "error": "HTTP 400: {\"error\":\"invalid destination url: endpoint has invalid scheme, add http:// or https://\"}"
+    },
+    {
+      "name": "Expired Deposit Cleanup",
+      "description": "Clean up expired pending deposits daily at midnight",
+      "cron": "0 0 * * *",
+      "timezone": "Asia/Dhaka",
+      "endpoint": "/api/workflows/cleanup-expired",
+      "method": "POST",
+      "retries": 2,
+      "status": "failed",
+      "error": "HTTP 400: {\"error\":\"invalid destination url: endpoint has invalid scheme, add http:// or https://\"}"
+    }
+  ]
+}

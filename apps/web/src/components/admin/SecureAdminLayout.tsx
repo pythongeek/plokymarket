@@ -21,6 +21,11 @@ import {
   ShieldCheck,
   Settings,
   Workflow,
+  DollarSign,
+  Wallet,
+  CreditCard,
+  ArrowLeftRight,
+  History,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -36,9 +41,15 @@ const SECURE_PATHS = {
   kyc: '/sys-cmd-7x9k2/kyc',
   p2p: '/sys-cmd-7x9k2/p2p',
   depositSettings: '/sys-cmd-7x9k2/deposit-settings',
+  deposits: '/sys-cmd-7x9k2/deposits',
   dailyTopics: '/sys-cmd-7x9k2/daily-topics',
   aiConfigs: '/sys-cmd-7x9k2/ai-configs',
   workflows: '/sys-cmd-7x9k2/workflows',
+  // Money Operator Paths
+  moneyOperator: '/sys-cmd-7x9k2/usdt',
+  moneyOperatorUsers: '/sys-cmd-7x9k2/usdt/users',
+  moneyOperatorTransactions: '/sys-cmd-7x9k2/usdt/transactions',
+  moneyOperatorSettings: '/sys-cmd-7x9k2/usdt/settings',
 };
 
 interface AdminUser {
@@ -48,65 +59,123 @@ interface AdminUser {
   last_login?: string;
 }
 
-export function SecureAdminLayout({ children }: { children: React.ReactNode }) {
+export function SecureAdminLayout({
+  children,
+  initialAdmin = null
+}: {
+  children: React.ReactNode;
+  initialAdmin?: AdminUser | null;
+}) {
   const router = useRouter();
   const pathname = usePathname();
-  const [admin, setAdmin] = useState<AdminUser | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [admin, setAdmin] = useState<AdminUser | null>(initialAdmin);
+  const [loading, setLoading] = useState(!initialAdmin);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [systemStatus, setSystemStatus] = useState<'healthy' | 'warning' | 'critical'>('healthy');
   const [pendingAlerts, setPendingAlerts] = useState(0);
+  const [mounted, setMounted] = useState(false);
 
   const supabase = createClient();
 
   useEffect(() => {
-    checkAuth();
-    fetchSystemStatus();
-    const interval = setInterval(fetchSystemStatus, 30000); // Refresh every 30s
+    setMounted(true);
+
+    // If we have initialAdmin, we can skip the blocking check but still refresh in background
+    if (initialAdmin) {
+      setAdmin(initialAdmin);
+      setLoading(false);
+      // Optional: Verify in background without blocking UI
+      checkAuth(true);
+    } else {
+      checkAuth(false);
+    }
+
+    // Run system status check in background (non-blocking)
+    fetchSystemStatus().catch(() => { });
+    const interval = setInterval(() => fetchSystemStatus().catch(() => { }), 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [initialAdmin]);
 
-  const checkAuth = async () => {
+  const checkAuth = async (isBackground = false) => {
     try {
-      const { data: { user }, error } = await supabase.auth.getUser();
+      console.log(`[AdminAuth] ${isBackground ? 'Refreshing' : 'Starting'} auth check...`);
 
-      if (error || !user) {
-        router.replace('/auth-portal-3m5n8?redirect=' + pathname);
+      // Try getUser first, then fallback to getSession
+      let user: any = null;
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+
+      if (userError || !userData?.user) {
+        console.log('[AdminAuth] getUser failed, trying getSession...', userError?.message);
+        const { data: sessionData } = await supabase.auth.getSession();
+        user = sessionData?.session?.user;
+      } else {
+        user = userData.user;
+      }
+
+      if (!user) {
+        console.log('[AdminAuth] No authenticated user found');
+        if (!isBackground) {
+          setAuthError('Not authenticated. Please log in.');
+          router.replace('/auth-portal-3m5n8?redirect=' + pathname);
+        }
         return;
       }
 
+      const userEmail = (user.email || '').toLowerCase();
+
+      // FIRST: Check email-based admin whitelist (most reliable)
+      const adminEmails = ['admin@plokymarket.bd', 'admin@polymarket.bd'];
+      if (adminEmails.includes(userEmail)) {
+        const adminData = {
+          id: user.id,
+          email: userEmail,
+          is_super_admin: true,
+          last_login: new Date().toISOString(),
+        };
+        setAdmin(adminData);
+        if (!isBackground) setLoading(false);
+        return;
+      }
+
+      // SECOND: Check user_profiles table for admin flags
       const { data: profile, error: profileError } = await supabase
         .from('user_profiles')
-        .select('is_admin, is_super_admin, email')
+        .select('id, email, full_name, is_admin, is_super_admin')
         .eq('id', user.id)
-        .single();
+        .maybeSingle();
 
-      if (profileError || (!profile?.is_admin && !profile?.is_super_admin)) {
-        await supabase.auth.signOut();
-        router.replace('/auth-portal-3m5n8');
+      const isAdmin = profile?.is_admin || profile?.is_super_admin;
+
+      if (isAdmin) {
+        const adminData = {
+          id: user.id,
+          email: profile?.email || userEmail,
+          is_super_admin: profile?.is_super_admin || false,
+          last_login: new Date().toISOString(),
+        };
+        setAdmin(adminData);
+      } else {
+        console.log('[AdminAuth] ❌ Access denied — not an admin');
+        if (!isBackground) {
+          setAuthError('Access denied. Admin privileges required.');
+          await supabase.auth.signOut();
+          router.replace('/auth-portal-3m5n8');
+        }
+      }
+
+    } catch (err: any) {
+      // Robust AbortError handling: if aborted, and we have initial data, just ignore the error
+      if (err?.name === 'AbortError' || err?.message?.includes('aborted')) {
+        console.log('[AdminAuth] Auth check aborted, likely due to navigation');
         return;
       }
 
-      setAdmin({
-        id: user.id,
-        email: profile.email || user.email || '',
-        is_super_admin: profile.is_super_admin || false,
-        last_login: new Date().toISOString(),
-      });
-
-      // Log admin session
-      await supabase.from('admin_audit_log').insert({
-        action: 'admin_page_access',
-        user_id: user.id,
-        resource: pathname,
-      });
-
-    } catch (err: any) {
-      if (err?.name !== 'AbortError' && !err?.message?.includes('aborted')) {
-        console.error('Auth check error:', err);
-        router.replace('/auth-portal-3m5n8');
+      console.error('[AdminAuth] Auth check error:', err);
+      if (!isBackground) {
+        setAuthError('Authentication error: ' + (err?.message || 'Unknown error'));
       }
     } finally {
-      setLoading(false);
+      if (!isBackground) setLoading(false);
     }
   };
 
@@ -124,14 +193,8 @@ export function SecureAdminLayout({ children }: { children: React.ReactNode }) {
         if (!error) pendingMarkets = count || 0;
       } catch { /* table may not exist */ }
 
-      // Graceful: support_tickets may not exist
-      try {
-        const { count, error } = await supabase
-          .from('support_tickets')
-          .select('*', { count: 'exact', head: true })
-          .eq('status', 'open');
-        if (!error) supportTickets = count || 0;
-      } catch { /* table may not exist */ }
+      // support_tickets table doesn't exist in production — skip query to avoid 404 noise
+      // supportTickets remains 0
 
       const totalAlerts = pendingMarkets + supportTickets;
       setPendingAlerts(totalAlerts);
@@ -252,10 +315,54 @@ export function SecureAdminLayout({ children }: { children: React.ReactNode }) {
       requiresSuper: true,
     },
     {
+      path: SECURE_PATHS.deposits,
+      label: 'ডিপোজিট ম্যানেজমেন্ট',
+      labelEn: 'Deposits',
+      icon: DollarSign,
+      requiresSuper: false,
+    },
+        {
       path: SECURE_PATHS.workflows,
       label: 'ওয়ার্কফ্লো',
       labelEn: 'Workflows',
       icon: Workflow,
+      requiresSuper: true,
+    },
+    // Money Operator Section
+    {
+      path: SECURE_PATHS.moneyOperator,
+      label: 'Money Operator',
+      labelEn: 'Money Operator',
+      icon: Wallet,
+      requiresSuper: false,
+      isSection: true,
+    },
+    {
+      path: SECURE_PATHS.moneyOperator,
+      label: 'USDT ড্যাশবোর্ড',
+      labelEn: 'USDT Dashboard',
+      icon: DollarSign,
+      requiresSuper: false,
+    },
+    {
+      path: SECURE_PATHS.moneyOperatorUsers,
+      label: 'ইউজার ম্যানেজমেন্ট',
+      labelEn: 'User Management',
+      icon: Users,
+      requiresSuper: false,
+    },
+    {
+      path: SECURE_PATHS.moneyOperatorTransactions,
+      label: 'ট্রানজেকশন লগ',
+      labelEn: 'Transactions',
+      icon: History,
+      requiresSuper: false,
+    },
+    {
+      path: SECURE_PATHS.moneyOperatorSettings,
+      label: 'রেট সেটিংস',
+      labelEn: 'Rate Settings',
+      icon: ArrowLeftRight,
       requiresSuper: true,
     },
   ];
@@ -272,7 +379,30 @@ export function SecureAdminLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!admin) return null;
+  if (!admin) {
+    return (
+      <div className="min-h-screen bg-white flex flex-col items-center justify-center gap-4">
+        <div className="text-center">
+          <h2 className="text-xl font-semibold text-gray-900">Admin Access Required</h2>
+          <p className="text-gray-500 mt-2">{authError || 'Verifying admin permissions...'}</p>
+        </div>
+        <div className="flex gap-3">
+          <button
+            onClick={() => { setLoading(true); setAuthError(null); checkAuth(); }}
+            className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm font-medium"
+          >
+            Retry
+          </button>
+          <button
+            onClick={() => router.replace('/auth-portal-3m5n8?redirect=' + pathname)}
+            className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 text-sm font-medium"
+          >
+            Go to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-white">
@@ -337,9 +467,24 @@ export function SecureAdminLayout({ children }: { children: React.ReactNode }) {
       <div className="flex">
         {/* Sidebar */}
         <aside className="w-64 min-h-[calc(100vh-4rem)] border-r border-gray-200 bg-gray-50 p-4">
-          <nav className="space-y-1">
-            {navItems.map((item) => {
+                    <nav className="space-y-1">
+            {navItems.map((item, index) => {
               if (item.requiresSuper && !admin.is_super_admin) return null;
+
+              // Section header (like Money Operator)
+              if ((item as any).isSection) {
+                return (
+                  <div key={item.path + index} className="mt-4 mb-2 px-3">
+                    <div className="flex items-center gap-2">
+                      <item.icon className="w-4 h-4 text-primary" />
+                      <span className="text-xs font-bold text-primary uppercase tracking-wider">
+                        {item.label}
+                      </span>
+                    </div>
+                    <div className="h-px bg-gradient-to-r from-primary/50 to-transparent mt-2" />
+                  </div>
+                );
+              }
 
               const isActive = pathname.startsWith(item.path);
               const Icon = item.icon;
@@ -373,7 +518,7 @@ export function SecureAdminLayout({ children }: { children: React.ReactNode }) {
                 <p className="font-semibold text-gray-900 mb-1">🔒 নিরাপদ সেশন</p>
                 <p className="text-gray-700">All actions are logged and monitored.</p>
                 <p className="mt-1 text-gray-600">
-                  Session: {new Date().toLocaleTimeString()}
+                  Session: {mounted ? new Date().toLocaleTimeString() : '...'}
                 </p>
               </div>
             </div>

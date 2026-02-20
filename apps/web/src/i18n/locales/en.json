@@ -138,7 +138,15 @@
         "info": "If the market resolves to {{outcome}}, you will receive ৳1 per share. If it resolves to {{opposite}}, you lose your investment.",
         "range": "Range",
         "buy": "Buy",
-        "sell": "Sell"
+        "sell": "Sell",
+        "status_paused": "Trading Temporarily Paused",
+        "pause_reason": "Reason: {{reason}}",
+        "paused_at": "Paused at: {{time}}",
+        "resume_estimated": "Estimated resume: {{time}}",
+        "platform_paused_title": "Platform-wide Trading Halt",
+        "platform_paused_desc": "Trading is temporarily suspended across the entire platform for technical maintenance or emergency reasons. We will be back shortly.",
+        "market_paused_title": "Trading Paused for this Market",
+        "category_paused_title": "Trading Paused for this Category"
     },
     "chart": {
         "title": "Price Chart",

@@ -1,5 +1,6 @@
 {
   "dependencies": {
-    "@upstash/qstash": "^2.9.0"
+    "@upstash/qstash": "^2.9.0",
+    "pg": "^8.18.0"
   }
 }

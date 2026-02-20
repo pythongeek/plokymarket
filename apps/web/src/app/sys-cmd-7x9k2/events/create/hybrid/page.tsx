@@ -17,16 +17,16 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { 
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { 
-  Sparkles, 
-  Edit3, 
+import {
+  Sparkles,
+  Edit3,
   Lightbulb,
   RefreshCw,
   CheckCircle,
@@ -78,7 +78,7 @@ interface FormData {
   subcategory: string;
   tags: string[];
   trading_closes_at: string;
-  resolution_delay_hours: number;
+  resolution_delay: number;
   initial_liquidity: number;
   image_url: string;
   resolution_method: 'manual_admin' | 'ai_oracle' | 'expert_panel';
@@ -86,7 +86,7 @@ interface FormData {
 
 export default function HybridEventCreator() {
   const router = useRouter();
-  
+
   const [formData, setFormData] = useState<FormData>({
     name: '',
     question: '',
@@ -95,7 +95,7 @@ export default function HybridEventCreator() {
     subcategory: '',
     tags: [],
     trading_closes_at: '',
-    resolution_delay_hours: 24,
+    resolution_delay: 1440,
     initial_liquidity: 1000,
     image_url: '',
     resolution_method: 'manual_admin'
@@ -115,13 +115,13 @@ export default function HybridEventCreator() {
   // Generate suggestion for specific field
   const generateFieldSuggestion = useCallback(async (field: keyof FormData) => {
     if (generatingField) return;
-    
+
     setGeneratingField(field);
     setError(null);
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      
+
       const response = await fetch('/api/ai/suggest-field', {
         method: 'POST',
         headers: {
@@ -156,7 +156,7 @@ export default function HybridEventCreator() {
   // Auto-suggest on field change (debounced)
   const handleFieldChange = useCallback((field: keyof FormData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-    
+
     // Clear suggestion if field is modified
     if (appliedFields.has(field)) {
       setAppliedFields(prev => {
@@ -169,13 +169,13 @@ export default function HybridEventCreator() {
     // Auto-trigger for text fields after 2 seconds of inactivity
     if (['name', 'question', 'description'].includes(field) && typeof value === 'string' && value.length >= 15) {
       if (debounceTimer) clearTimeout(debounceTimer);
-      
+
       const timer = setTimeout(() => {
         if (!appliedFields.has(field)) {
           generateFieldSuggestion(field as keyof FormData);
         }
       }, 2000);
-      
+
       setDebounceTimer(timer);
     }
   }, [appliedFields, debounceTimer, generateFieldSuggestion]);
@@ -186,7 +186,7 @@ export default function HybridEventCreator() {
     if (!suggestion) return;
 
     let value = suggestion.value;
-    
+
     // Handle array fields
     if (field === 'tags') {
       value = suggestion.value.split(',').map((t: string) => t.trim()).filter(Boolean);
@@ -194,7 +194,7 @@ export default function HybridEventCreator() {
 
     setFormData(prev => ({ ...prev, [field]: value }));
     setAppliedFields(prev => new Set(prev).add(field));
-    
+
     // Remove applied suggestion
     setSuggestions(prev => {
       const next = { ...prev };
@@ -215,7 +215,7 @@ export default function HybridEventCreator() {
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      
+
       const response = await fetch('/api/ai/auto-fill-form', {
         method: 'POST',
         headers: {
@@ -238,7 +238,7 @@ export default function HybridEventCreator() {
         ...prev,
         ...result.form_data
       }));
-      
+
       setAppliedFields(new Set(Object.keys(result.form_data)));
       setSuccess('✨ AI সম্পূর্ণ ফর্ম পূরণ করেছে!');
       setTimeout(() => setSuccess(null), 3000);
@@ -273,7 +273,7 @@ export default function HybridEventCreator() {
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      
+
       const response = await fetch('/api/admin/events/create', {
         method: 'POST',
         headers: {
@@ -300,7 +300,7 @@ export default function HybridEventCreator() {
       }
 
       setSuccess('✅ ইভেন্ট সফলভাবে তৈরি হয়েছে!');
-      
+
       setTimeout(() => {
         router.push(`/sys-cmd-7x9k2/events/${result.event_id}`);
       }, 1500);
@@ -343,11 +343,11 @@ export default function HybridEventCreator() {
             </Button>
           </div>
         </div>
-        
+
         <p className="text-sm text-purple-800 dark:text-purple-200 mb-2">
           {suggestion.value}
         </p>
-        
+
         <p className="text-xs text-purple-600 dark:text-purple-400">
           <Lightbulb className="w-3 h-3 inline mr-1" />
           {suggestion.reasoning}
@@ -394,7 +394,7 @@ export default function HybridEventCreator() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      
+
       {success && (
         <Alert className="mb-6 bg-green-50 border-green-200">
           <CheckCircle className="w-4 h-4 text-green-600" />
@@ -413,14 +413,14 @@ export default function HybridEventCreator() {
               <div>
                 <h3 className="font-semibold">AI Assistant</h3>
                 <p className="text-sm text-muted-foreground">
-                  {appliedFields.size > 0 
+                  {appliedFields.size > 0
                     ? `${appliedFields.size}টি ফিল্ড AI দিয়ে পূরণ করা হয়েছে`
                     : 'ফিল্ডে <Sparkles /> আইকনে ক্লিক করুন অথবা টাইপ করতে থাকুন'
                   }
                 </p>
               </div>
             </div>
-            
+
             <Button
               onClick={autoFillForm}
               disabled={autoFilling || !formData.name || formData.name.length < 10}
@@ -446,7 +446,7 @@ export default function HybridEventCreator() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Form */}
         <div className="lg:col-span-2 space-y-6">
-          
+
           {/* Title Field */}
           <Card>
             <CardHeader className="pb-3">
@@ -624,11 +624,11 @@ export default function HybridEventCreator() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label>রেজোলিউশন ডিলে (ঘণ্টা)</Label>
+                  <Label>রেজোলিউশন ডিলে (মিনিট)</Label>
                   <Input
                     type="number"
-                    value={formData.resolution_delay_hours}
-                    onChange={(e) => handleFieldChange('resolution_delay_hours', parseInt(e.target.value) || 24)}
+                    value={formData.resolution_delay}
+                    onChange={(e) => handleFieldChange('resolution_delay', parseInt(e.target.value) || 24)}
                     className="mt-1"
                   />
                 </div>
@@ -686,15 +686,15 @@ export default function HybridEventCreator() {
                   {appliedFields.size}/8
                 </Badge>
               </div>
-              
+
               <div className="flex justify-between items-center">
                 <span className="text-sm">গড় Confidence:</span>
                 <span className="font-semibold">
                   {Object.values(suggestions).length > 0
                     ? Math.round(
-                        Object.values(suggestions).reduce((sum, s) => sum + (s?.confidence || 0), 0) / 
-                        Object.values(suggestions).length
-                      )
+                      Object.values(suggestions).reduce((sum, s) => sum + (s?.confidence || 0), 0) /
+                      Object.values(suggestions).length
+                    )
                     : 0}%
                 </span>
               </div>

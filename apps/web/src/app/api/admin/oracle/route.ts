@@ -17,6 +17,34 @@ export async function GET(request: Request) {
         const { searchParams } = new URL(request.url);
         const marketId = searchParams.get('market_id');
         const status = searchParams.get('status');
+        const pending = searchParams.get('pending') === 'true';
+
+        if (pending) {
+            // Fetch markets that have closed but have no oracle requests yet
+            const now = new Date().toISOString();
+
+            // Subquery to find market_ids that already have requests
+            const { data: existingRequests } = await supabase
+                .from('oracle_requests')
+                .select('market_id');
+
+            const excludedIds = existingRequests?.map(r => r.market_id) || [];
+
+            let pendingQuery = supabase
+                .from('markets')
+                .select('id, question, category, status, trading_closes_at')
+                .lt('trading_closes_at', now)
+                .not('status', 'in', '("resolved","cancelled")');
+
+            if (excludedIds.length > 0) {
+                pendingQuery = pendingQuery.not('id', 'in', `(${excludedIds.map(id => `"${id}"`).join(',')})`);
+            }
+
+            const { data: pendingMarkets, error: pendingError } = await pendingQuery.limit(20);
+            if (pendingError) throw pendingError;
+
+            return NextResponse.json({ data: pendingMarkets });
+        }
 
         let query = supabase
             .from('oracle_requests')

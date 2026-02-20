@@ -6,8 +6,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     Shield, AlertTriangle, CheckCircle2, Clock, Gavel,
     Play, Eye, XCircle, ChevronDown, ChevronRight,
-    Zap, DollarSign, BarChart3, RefreshCw, Search,
-    ArrowRight, Timer, Activity, TrendingUp
+    Zap, DollarSign, BarChart3, RefreshCw, Search, ShieldCheck,
+    ArrowRight, Timer, Activity, TrendingUp, Sparkles
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,7 +24,22 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
 
-// Types
+interface ResolvableEvent {
+    id: string;
+    question: string;
+    category: string;
+    trading_status: string;
+    ends_at: string;
+    resolution_delay: number;
+    resolution_available_at: string;
+    is_ready_for_resolution: boolean;
+    oracle?: {
+        status: string;
+        proposed_outcome?: string;
+        confidence_score?: number;
+    };
+}
+
 interface OracleRequest {
     id: string;
     market_id: string;
@@ -113,18 +128,21 @@ export default function ResolutionDashboardPage() {
     const { toast } = useToast();
 
     const [oracleRequests, setOracleRequests] = useState<OracleRequest[]>([]);
+    const [resolvableEvents, setResolvableEvents] = useState<ResolvableEvent[]>([]);
     const [settlement, setSettlement] = useState<SettlementData>({ claims: [], batches: [], stats: null });
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('resolution');
 
     // Dialog states
     const [adminResolveDialog, setAdminResolveDialog] = useState<{ open: boolean; requestId: string; marketQuestion: string }>({ open: false, requestId: '', marketQuestion: '' });
+    const [executionDialog, setExecutionDialog] = useState<{ open: boolean; eventId: string; question: string }>({ open: false, eventId: '', question: '' });
     const [challengeDialog, setChallengeDialog] = useState<{ open: boolean; requestId: string }>({ open: false, requestId: '' });
     const [settleDialog, setSettleDialog] = useState<{ open: boolean; marketId: string; marketQuestion: string }>({ open: false, marketId: '', marketQuestion: '' });
 
     // Form state
     const [adminOutcome, setAdminOutcome] = useState('');
     const [adminReason, setAdminReason] = useState('');
+    const [winnerSelection, setWinnerSelection] = useState<number | null>(null);
     const [challengeReason, setChallengeReason] = useState('');
     const [processing, setProcessing] = useState(false);
 
@@ -141,6 +159,16 @@ export default function ResolutionDashboardPage() {
         }
     }, []);
 
+    const fetchResolvableEvents = useCallback(async () => {
+        try {
+            const res = await fetch('/api/admin/resolution/markets');
+            const json = await res.json();
+            setResolvableEvents(json.data || []);
+        } catch (err) {
+            console.error('Failed to fetch resolvable events', err);
+        }
+    }, []);
+
     const fetchSettlementData = useCallback(async () => {
         try {
             const res = await fetch('/api/admin/settlement');
@@ -152,8 +180,12 @@ export default function ResolutionDashboardPage() {
     }, []);
 
     useEffect(() => {
-        Promise.all([fetchOracleData(), fetchSettlementData()]).finally(() => setLoading(false));
-    }, [fetchOracleData, fetchSettlementData]);
+        Promise.all([
+            fetchOracleData(),
+            fetchResolvableEvents(),
+            fetchSettlementData()
+        ]).finally(() => setLoading(false));
+    }, [fetchOracleData, fetchResolvableEvents, fetchSettlementData]);
 
     // ============================================
     // ACTIONS
@@ -170,6 +202,29 @@ export default function ResolutionDashboardPage() {
             if (!res.ok) throw new Error(json.error);
             toast({ title: 'প্রস্তাব তৈরি হয়েছে', description: `প্রস্তাবিত ফলাফল: ${json.data?.proposed_outcome}` });
             fetchOracleData();
+            fetchResolvableEvents();
+        } catch (err: any) {
+            toast({ variant: 'destructive', title: 'ত্রুটি (Error)', description: err.message });
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    const handleExecuteResolution = async (eventId: string, winner: number) => {
+        setProcessing(true);
+        try {
+            const res = await fetch('/api/admin/resolution/resolve', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ eventId, winner }),
+            });
+            const json = await res.json();
+            if (!res.ok) throw new Error(json.error);
+            toast({ title: 'রেজোলিউশন সম্পন্ন', description: 'মার্কেট সফলভাবে সমাধান হয়েছে এবং পেআউট ট্রিগার হয়েছে।' });
+            setExecutionDialog({ open: false, eventId: '', question: '' });
+            setWinnerSelection(null);
+            fetchOracleData();
+            fetchResolvableEvents();
         } catch (err: any) {
             toast({ variant: 'destructive', title: 'ত্রুটি (Error)', description: err.message });
         } finally {
@@ -287,13 +342,24 @@ export default function ResolutionDashboardPage() {
                     </h1>
                     <p className="text-zinc-400 mt-1">ট্রুথ ইঞ্জিন — ওরাকল প্রস্তাব, বিতর্ক এবং পেআউট পরিচালনা করুন</p>
                 </div>
-                <Button variant="outline" size="sm" onClick={() => { fetchOracleData(); fetchSettlementData(); }}>
+                <Button variant="outline" size="sm" onClick={() => { fetchOracleData(); fetchResolvableEvents(); fetchSettlementData(); }}>
                     <RefreshCw className="w-4 h-4 mr-2" /> রিফ্রেশ
                 </Button>
             </div>
 
             {/* Stats Row */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <Card className="bg-zinc-900/50 border-zinc-800">
+                    <CardContent className="p-4 flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                            <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                        </div>
+                        <div>
+                            <p className="text-sm text-zinc-400">রেজোলিউশন যোগ্য</p>
+                            <p className="text-2xl font-bold text-white">{resolvableEvents.length}</p>
+                        </div>
+                    </CardContent>
+                </Card>
                 <Card className="bg-zinc-900/50 border-zinc-800">
                     <CardContent className="p-4 flex items-center gap-3">
                         <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
@@ -357,7 +423,99 @@ export default function ResolutionDashboardPage() {
                 {/* RESOLUTION QUEUE TAB */}
                 {/* ============================================ */}
                 <TabsContent value="resolution" className="space-y-4">
-                    {oracleRequests.length === 0 ? (
+                    {/* Ready for Resolution Section (Section 2.3.1) */}
+                    {resolvableEvents.length > 0 && (
+                        <div className="space-y-3">
+                            <h2 className="text-sm font-semibold text-zinc-400 flex items-center gap-2 px-1">
+                                <Sparkles className="w-4 h-4 text-emerald-400" /> রেজোলিউশনের জন্য প্রস্তুত (Ready for Resolution)
+                            </h2>
+                            {resolvableEvents.map((e) => (
+                                <motion.div
+                                    key={e.id}
+                                    initial={{ opacity: 0, x: -10 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                >
+                                    <Card className={cn(
+                                        "bg-zinc-900/50 border-zinc-800 hover:border-zinc-700 transition-colors",
+                                        e.is_ready_for_resolution ? "border-emerald-500/30 bg-emerald-500/5" : ""
+                                    )}>
+                                        <CardContent className="p-4">
+                                            <div className="flex items-start justify-between gap-4">
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <Badge className={cn(
+                                                            "text-[10px]",
+                                                            e.is_ready_for_resolution
+                                                                ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                                                                : "bg-zinc-500/20 text-zinc-400 border-zinc-500/30"
+                                                        )}>
+                                                            {e.is_ready_for_resolution ? 'READY' : 'WAITING'}
+                                                        </Badge>
+                                                        <span className="text-xs text-zinc-500">{e.category}</span>
+
+                                                        {/* Oracle Indicator */}
+                                                        {e.oracle?.status !== 'none' && (
+                                                            <Badge variant="outline" className="text-[10px] bg-violet-500/10 text-violet-400 border-violet-500/20">
+                                                                ORACLE: {e.oracle?.status.toUpperCase()}
+                                                            </Badge>
+                                                        )}
+                                                    </div>
+
+                                                    <h3 className="text-zinc-200 font-medium text-sm">
+                                                        {e.question}
+                                                    </h3>
+
+                                                    <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px]">
+                                                        <div className="flex items-center gap-1.5 text-zinc-500">
+                                                            <Clock className="w-3 h-3" />
+                                                            Ended: {new Date(e.ends_at).toLocaleString('bn-BD')}
+                                                        </div>
+                                                        <div className="flex items-center gap-1.5 text-amber-400/80">
+                                                            <Timer className="w-3 h-3" />
+                                                            Available after: {new Date(e.resolution_available_at).toLocaleString('bn-BD')}
+                                                        </div>
+                                                        {e.oracle?.proposed_outcome && (
+                                                            <div className="flex items-center gap-1.5 text-violet-400">
+                                                                <Eye className="w-3 h-3" />
+                                                                Proposed: {e.oracle.proposed_outcome}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex flex-col gap-2 shrink-0">
+                                                    {e.is_ready_for_resolution ? (
+                                                        <Button
+                                                            size="sm"
+                                                            className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-500/20"
+                                                            onClick={() => setExecutionDialog({ open: true, eventId: e.id, question: e.question })}
+                                                            disabled={processing}
+                                                        >
+                                                            <Gavel className="w-3.5 h-3.5 mr-1" /> রিজলভ করুন
+                                                        </Button>
+                                                    ) : (
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            className="border-blue-500/30 text-blue-400 hover:bg-blue-500/10"
+                                                            onClick={() => handlePropose(e.id)}
+                                                            disabled={processing || e.oracle?.status !== 'none'}
+                                                        >
+                                                            {processing ? <RefreshCw className="w-3.5 h-3.5 animate-spin mr-1" /> : <Zap className="w-3.5 h-3.5 mr-1" />}
+                                                            ওরাকল ইনভোক (Propose)
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                </motion.div>
+                            ))}
+                            <div className="h-4 border-b border-zinc-800/50 mb-4" />
+                        </div>
+                    )}
+
+                    {oracleRequests.length === 0 && resolvableEvents.length === 0 ? (
                         <Card className="bg-zinc-900/50 border-zinc-800">
                             <CardContent className="p-12 text-center">
                                 <Shield className="w-12 h-12 mx-auto text-zinc-600 mb-4" />
@@ -367,6 +525,11 @@ export default function ResolutionDashboardPage() {
                         </Card>
                     ) : (
                         <div className="space-y-3">
+                            {oracleRequests.length > 0 && (
+                                <h2 className="text-sm font-semibold text-zinc-400 flex items-center gap-2 px-1 mt-6">
+                                    <Activity className="w-4 h-4 text-violet-400" /> ওরাকল লাইফসাইকেল (Oracle Lifecycle)
+                                </h2>
+                            )}
                             {oracleRequests.map((req) => (
                                 <motion.div
                                     key={req.id}

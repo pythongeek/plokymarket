@@ -23,17 +23,17 @@ import type {
 const SETTLEMENT_CONFIG = {
   // Priority thresholds
   P0_VALUE_THRESHOLD: 10000, // $10k
-  
+
   // Latency targets
   P0_TARGET_SECONDS: 30,
   P1_TARGET_SECONDS: 300, // 5 minutes
   P2_TARGET_SECONDS: 3600, // 1 hour
   P3_TARGET_SECONDS: 86400, // 24 hours
-  
+
   // Batch settings
   P1_BATCH_INTERVAL_MS: 2000, // 2 seconds
   P1_BATCH_SIZE: 50,
-  
+
   // Gas settings
   DEFAULT_GAS_PRICE_GWEI: 20,
   MAX_GAS_PRICE_GWEI: 200,
@@ -184,11 +184,11 @@ export async function getUserSettlementQueue(
     .select(`
       *,
       trades!inner(
-        buyer_id,
-        seller_id
+        maker_id,
+        taker_id
       )
     `)
-    .or(`trades.buyer_id.eq.${userId},trades.seller_id.eq.${userId}`)
+    .or(`trades.maker_id.eq.${userId},trades.taker_id.eq.${userId}`)
     .order('priority', { ascending: true })
     .order('created_at', { ascending: true });
 
@@ -218,7 +218,7 @@ export async function calculateOptimalGasPrice(
 ): Promise<number> {
   // In production, this would call an external gas price oracle
   // For demo, return priority-based pricing
-  
+
   switch (priority) {
     case 'P0':
       return SETTLEMENT_CONFIG.MAX_GAS_PRICE_GWEI; // Urgent

@@ -1,10 +1,10 @@
-import type { 
-  User, 
-  Wallet, 
-  Market, 
-  Order, 
-  Trade, 
-  Position, 
+import type {
+  User,
+  Wallet,
+  Market,
+  Order,
+  Trade,
+  Position,
   Transaction
 } from '@/types';
 
@@ -22,6 +22,8 @@ export const mockUsers: User[] = [
     updated_at: '2024-01-01T00:00:00Z',
     is_admin: true,
     kyc_verified: true,
+    kyc_level: 1,
+    account_status: 'active',
   },
   {
     id: 'user-2',
@@ -32,6 +34,8 @@ export const mockUsers: User[] = [
     updated_at: '2024-01-15T00:00:00Z',
     is_admin: false,
     kyc_verified: true,
+    kyc_level: 1,
+    account_status: 'active',
   },
 ];
 
@@ -206,16 +210,16 @@ export const mockOrders: Order[] = [
   { id: 'order-1', market_id: 'market-1', user_id: 'user-2', order_type: 'limit', side: 'buy', outcome: 'YES', price: 0.60, quantity: 1000, filled_quantity: 0, status: 'open', created_at: '2024-02-01T10:00:00Z', updated_at: '2024-02-01T10:00:00Z' },
   { id: 'order-2', market_id: 'market-1', user_id: 'user-2', order_type: 'limit', side: 'buy', outcome: 'YES', price: 0.62, quantity: 500, filled_quantity: 0, status: 'open', created_at: '2024-02-01T11:00:00Z', updated_at: '2024-02-01T11:00:00Z' },
   { id: 'order-3', market_id: 'market-1', user_id: 'user-2', order_type: 'limit', side: 'buy', outcome: 'YES', price: 0.64, quantity: 750, filled_quantity: 0, status: 'open', created_at: '2024-02-01T12:00:00Z', updated_at: '2024-02-01T12:00:00Z' },
-  
+
   // YES Sell Orders
   { id: 'order-4', market_id: 'market-1', user_id: 'user-1', order_type: 'limit', side: 'sell', outcome: 'YES', price: 0.66, quantity: 800, filled_quantity: 0, status: 'open', created_at: '2024-02-01T09:00:00Z', updated_at: '2024-02-01T09:00:00Z' },
   { id: 'order-5', market_id: 'market-1', user_id: 'user-1', order_type: 'limit', side: 'sell', outcome: 'YES', price: 0.68, quantity: 1200, filled_quantity: 0, status: 'open', created_at: '2024-02-01T08:00:00Z', updated_at: '2024-02-01T08:00:00Z' },
   { id: 'order-6', market_id: 'market-1', user_id: 'user-1', order_type: 'limit', side: 'sell', outcome: 'YES', price: 0.70, quantity: 600, filled_quantity: 0, status: 'open', created_at: '2024-02-01T07:00:00Z', updated_at: '2024-02-01T07:00:00Z' },
-  
+
   // NO Buy Orders
   { id: 'order-7', market_id: 'market-1', user_id: 'user-2', order_type: 'limit', side: 'buy', outcome: 'NO', price: 0.30, quantity: 900, filled_quantity: 0, status: 'open', created_at: '2024-02-01T10:30:00Z', updated_at: '2024-02-01T10:30:00Z' },
   { id: 'order-8', market_id: 'market-1', user_id: 'user-2', order_type: 'limit', side: 'buy', outcome: 'NO', price: 0.32, quantity: 400, filled_quantity: 0, status: 'open', created_at: '2024-02-01T11:30:00Z', updated_at: '2024-02-01T11:30:00Z' },
-  
+
   // NO Sell Orders
   { id: 'order-9', market_id: 'market-1', user_id: 'user-1', order_type: 'limit', side: 'sell', outcome: 'NO', price: 0.36, quantity: 700, filled_quantity: 0, status: 'open', created_at: '2024-02-01T09:30:00Z', updated_at: '2024-02-01T09:30:00Z' },
   { id: 'order-10', market_id: 'market-1', user_id: 'user-1', order_type: 'limit', side: 'sell', outcome: 'NO', price: 0.38, quantity: 1100, filled_quantity: 0, status: 'open', created_at: '2024-02-01T08:30:00Z', updated_at: '2024-02-01T08:30:00Z' },
@@ -226,11 +230,33 @@ export const mockOrders: Order[] = [
 // ===================================
 
 export const mockTrades: Trade[] = [
-  { id: 'trade-1', market_id: 'market-1', buy_order_id: 'order-1', sell_order_id: 'order-4', outcome: 'YES', price: 0.63, quantity: 200, buyer_id: 'user-2', seller_id: 'user-1', created_at: '2024-02-01T10:30:00Z' },
-  { id: 'trade-2', market_id: 'market-1', buy_order_id: 'order-2', sell_order_id: 'order-5', outcome: 'YES', price: 0.65, quantity: 300, buyer_id: 'user-2', seller_id: 'user-1', created_at: '2024-02-01T11:30:00Z' },
-  { id: 'trade-3', market_id: 'market-1', buy_order_id: 'order-3', sell_order_id: 'order-6', outcome: 'YES', price: 0.67, quantity: 150, buyer_id: 'user-2', seller_id: 'user-1', created_at: '2024-02-01T12:30:00Z' },
-  { id: 'trade-4', market_id: 'market-1', buy_order_id: 'order-7', sell_order_id: 'order-9', outcome: 'NO', price: 0.33, quantity: 250, buyer_id: 'user-2', seller_id: 'user-1', created_at: '2024-02-01T10:45:00Z' },
-  { id: 'trade-5', market_id: 'market-1', buy_order_id: 'order-8', sell_order_id: 'order-10', outcome: 'NO', price: 0.35, quantity: 180, buyer_id: 'user-2', seller_id: 'user-1', created_at: '2024-02-01T11:45:00Z' },
+  {
+    id: "t1",
+    market_id: "m1",
+    buy_order_id: "user1",
+    sell_order_id: "user2",
+    outcome: "YES",
+    price: 0.65,
+    quantity: 100,
+    maker_id: "user1",
+    taker_id: "user2",
+    created_at: new Date(Date.now() - 3600000).toISOString()
+  },
+  {
+    id: "t2",
+    market_id: "m1",
+    buy_order_id: "user3",
+    sell_order_id: "user1",
+    outcome: "YES",
+    price: 0.64,
+    quantity: 50,
+    maker_id: "user3",
+    taker_id: "user1",
+    created_at: new Date(Date.now() - 7200000).toISOString()
+  },
+  { id: 'trade-3', market_id: 'market-1', buy_order_id: 'order-3', sell_order_id: 'order-6', outcome: 'YES', price: 0.67, quantity: 150, maker_id: 'user-2', taker_id: 'user-1', created_at: '2024-02-01T12:30:00Z' },
+  { id: 'trade-4', market_id: 'market-1', buy_order_id: 'order-7', sell_order_id: 'order-9', outcome: 'NO', price: 0.33, quantity: 250, maker_id: 'user-2', taker_id: 'user-1', created_at: '2024-02-01T10:45:00Z' },
+  { id: 'trade-5', market_id: 'market-1', buy_order_id: 'order-8', sell_order_id: 'order-10', outcome: 'NO', price: 0.35, quantity: 180, maker_id: 'user-2', taker_id: 'user-1', created_at: '2024-02-01T11:45:00Z' },
 ];
 
 // ===================================
@@ -266,7 +292,7 @@ export function getOrdersByMarket(marketId: string): Order[] {
 }
 
 export function getTradesByMarket(marketId: string): Trade[] {
-  return mockTrades.filter(t => t.market_id === marketId).sort((a, b) => 
+  return mockTrades.filter(t => t.market_id === marketId).sort((a, b) =>
     new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
 }
@@ -280,7 +306,7 @@ export function getWalletByUser(userId: string): Wallet | undefined {
 }
 
 export function getTransactionsByUser(userId: string): Transaction[] {
-  return mockTransactions.filter(t => t.user_id === userId).sort((a, b) => 
+  return mockTransactions.filter(t => t.user_id === userId).sort((a, b) =>
     new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
 }

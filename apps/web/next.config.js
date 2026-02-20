@@ -1,21 +1,12 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-  output: 'standalone',
-  pageExtensions: ['ts', 'tsx', 'js', 'jsx'],
-  images: {
-    unoptimized: true,
-  },
-  // Force fresh build
-  generateBuildId: async () => {
-    return 'build-' + Date.now();
-  },
+    // Relaxing some checks to ensure build proceeds
+    typescript: {
+        ignoreBuildErrors: true,
+    },
+    eslint: {
+        ignoreDuringBuilds: true,
+    },
 };
 
 module.exports = nextConfig;

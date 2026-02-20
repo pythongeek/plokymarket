@@ -1,6 +1,6 @@
 /**
  * Create Event API - Edge Function
- * Optimized for Vercel Free Tier + Upstash Workflow
+ * Reimplemented for 094_reimplemented_events_markets schema
  * Bangladesh Context Focus
  */
 
@@ -19,7 +19,10 @@ const getSupabase = () => createClient(
 // Trigger Upstash Workflow for async processing
 async function triggerWorkflow(eventId: string, config: any) {
   try {
-    const response = await fetch(process.env.UPSTASH_WORKFLOW_URL!, {
+    const workflowUrl = process.env.UPSTASH_WORKFLOW_URL;
+    if (!workflowUrl) return false;
+
+    const response = await fetch(workflowUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -109,138 +112,180 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Parse request body
+    // Parse request body - support both wrapped and flat formats
     const body = await request.json();
+    const eventData = body.event_data || body;
+    const resolutionConfig = body.resolution_config || {};
 
-    // Support both wrapped (frontend) and flat (direct API call) formats
-    const event_data = body.event_data || {
-      name: body.name || body.title,
-      question: body.question,
-      description: body.description,
-      category: body.category,
-      subcategory: body.subcategory,
-      tags: body.tags,
-      trading_closes_at: body.trading_closes_at || body.tradingClosesAt || body.endsAt || body.ends_at,
-      resolution_delay_hours: body.resolution_delay_hours || 24,
-      initial_liquidity: body.initial_liquidity || body.initialLiquidity || 1000,
-      image_url: body.image_url,
-      slug: body.slug,
-      answer1: body.answer1 || 'Yes',
-      answer2: body.answer2 || 'No',
-      is_featured: body.is_featured || false
-    };
-
-    const resolution_config = body.resolution_config || {
-      primary_method: body.primary_method || 'manual'
-    };
+    // Normalize field names
+    const title = eventData.title || eventData.name || eventData.question;
+    const question = eventData.question || eventData.title;
+    const tradingClosesAt = eventData.trading_closes_at || eventData.tradingClosesAt || eventData.endsAt || eventData.ends_at;
 
     // Validation
-    if (!event_data.name || event_data.name.length < 10) {
+    if (!title || title.length < 5) {
       return NextResponse.json(
-        { error: 'শিরোনাম কমপক্ষে ১০ অক্ষর হতে হবে' },
+        { error: 'শিরোনাম কমপক্ষে ৫ অক্ষর হতে হবে', field: 'title' },
         { status: 400 }
       );
     }
 
-    if (!event_data.question || event_data.question.length < 20) {
+    if (!question || question.length < 10) {
       return NextResponse.json(
-        { error: 'প্রশ্ন কমপক্ষে ২০ অক্ষর হতে হবে' },
+        { error: 'প্রশ্ন কমপক্ষে ১০ অক্ষর হতে হবে', field: 'question' },
         { status: 400 }
       );
     }
 
-    // Create event
+    if (!tradingClosesAt) {
+      return NextResponse.json(
+        { error: 'ট্রেডিং শেষের তারিখ প্রয়োজন', field: 'trading_closes_at' },
+        { status: 400 }
+      );
+    }
+
+    // Generate slug
+    const slug = eventData.slug ||
+      title.toLowerCase()
+        .replace(/[^a-z0-9\u0980-\u09FF]+/g, '-')
+        .replace(/(^-|-$)/g, '')
+        .substring(0, 80) + '-' + Date.now().toString(36);
+
+    // Build event payload for the events table
+    const eventPayload: Record<string, any> = {
+      title,
+      slug,
+      question,
+      description: eventData.description || null,
+      category: eventData.category || 'general',
+      subcategory: eventData.subcategory || null,
+      tags: eventData.tags || [],
+      image_url: eventData.image_url || null,
+      answer_type: eventData.answer_type || 'binary',
+      answer1: eventData.answer1 || 'হ্যাঁ (Yes)',
+      answer2: eventData.answer2 || 'না (No)',
+      status: eventData.status || 'active',
+      trading_closes_at: tradingClosesAt,
+      ends_at: eventData.ends_at || tradingClosesAt,
+      resolution_method: resolutionConfig.primary_method || eventData.resolution_method || 'manual_admin',
+      resolution_delay: eventData.resolution_delay || 1440,
+      resolution_source: eventData.resolution_source || resolutionConfig.resolution_source || null,
+      initial_liquidity: eventData.initial_liquidity || eventData.initialLiquidity || 1000,
+      current_liquidity: eventData.initial_liquidity || eventData.initialLiquidity || 1000,
+      is_featured: eventData.is_featured || false,
+      ai_keywords: resolutionConfig.ai_keywords || eventData.ai_keywords || [],
+      ai_sources: resolutionConfig.ai_sources || eventData.ai_sources || [],
+      ai_confidence_threshold: resolutionConfig.confidence_threshold || eventData.ai_confidence_threshold || 85,
+      created_by: user.id
+    };
+
+    // Insert into events table
     const { data: event, error: eventError } = await supabase
-      .from('markets')
-      .insert({
-        name: event_data.name,
-        question: event_data.question,
-        description: event_data.description,
-        category: event_data.category,
-        subcategory: event_data.subcategory,
-        tags: event_data.tags,
-        trading_closes_at: event_data.trading_closes_at,
-        resolution_delay_hours: event_data.resolution_delay_hours,
-        initial_liquidity: event_data.initial_liquidity,
-        liquidity: event_data.initial_liquidity,
-        image_url: event_data.image_url,
-        status: 'active',
-        created_by: user.id,
-        slug: event_data.slug,
-        answer_type: 'binary',
-        answer1: event_data.answer1,
-        answer2: event_data.answer2,
-        is_featured: event_data.is_featured
-      })
+      .from('events')
+      .insert(eventPayload)
       .select()
       .single();
 
     if (eventError) {
-      throw new Error(`Event creation failed: ${eventError.message}`);
+      console.error('Event creation error:', eventError);
+      throw eventError;
     }
 
-    // Map question to title for frontend compatibility
-    if (event) {
-      event.title = event.question;
-    }
+    // Also create a linked market for CLOB compatibility
+    let marketId = null;
+    try {
+      const { data: market, error: marketError } = await supabase
+        .from('markets')
+        .insert({
+          event_id: event.id,
+          name: title,
+          question: question,
+          description: eventData.description || null,
+          category: eventData.category || 'general',
+          subcategory: eventData.subcategory || null,
+          tags: eventData.tags || [],
+          trading_closes_at: tradingClosesAt,
+          event_date: tradingClosesAt,
+          resolution_delay: eventPayload.resolution_delay,
+          initial_liquidity: eventPayload.initial_liquidity,
+          liquidity: eventPayload.initial_liquidity,
+          status: 'active',
+          slug: slug + '-market',
+          answer_type: eventPayload.answer_type,
+          answer1: eventPayload.answer1,
+          answer2: eventPayload.answer2,
+          is_featured: eventPayload.is_featured,
+          image_url: eventPayload.image_url,
+          created_by: user.id,
+          creator_id: user.id
+        })
+        .select('id')
+        .single();
 
-    // Create resolution config (graceful fallback if table doesn't exist)
-    if (resolution_config) {
-      try {
-        const { error: configError } = await supabase
-          .from('resolution_systems')
-          .insert({
-            event_id: event.id,
-            primary_method: resolution_config.primary_method,
-            ai_keywords: resolution_config.ai_keywords || [],
-            ai_sources: resolution_config.ai_sources || [],
-            confidence_threshold: resolution_config.confidence_threshold || 85,
-            status: 'pending'
-          });
-
-        if (configError) {
-          console.error('Resolution config error:', configError);
-        }
-      } catch (error) {
-        console.warn('Resolution systems table may not exist, skipping config creation:', error);
+      if (!marketError && market) {
+        marketId = market.id;
       }
+    } catch (err) {
+      console.warn('Market creation fallback:', err);
     }
 
-    // Log admin action
-    await supabase.rpc('log_admin_action', {
+    // Create resolution config (graceful fallback)
+    try {
+      await supabase
+        .from('resolution_systems')
+        .insert({
+          event_id: marketId || event.id,
+          primary_method: eventPayload.resolution_method,
+          ai_keywords: eventPayload.ai_keywords,
+          ai_sources: eventPayload.ai_sources,
+          confidence_threshold: eventPayload.ai_confidence_threshold,
+          status: 'pending'
+        });
+    } catch (err) {
+      console.warn('Resolution config creation skipped:', err);
+    }
+
+    // Non-blocking: Log admin action
+    Promise.resolve(supabase.rpc('log_admin_action', {
       p_admin_id: user.id,
       p_action_type: 'create_event',
-      p_resource_type: 'market',
+      p_resource_type: 'event',
       p_resource_id: event.id,
       p_new_values: {
-        name: event_data.name,
-        category: event_data.category,
-        resolution_method: resolution_config?.primary_method
+        title,
+        category: eventPayload.category,
+        resolution_method: eventPayload.resolution_method
       },
-      p_reason: 'Manual event creation'
-    });
+      p_reason: 'Event creation via admin panel'
+    })).catch(() => { });
 
-    // Trigger workflow for async processing
-    await triggerWorkflow(event.id, resolution_config);
+    // Non-blocking: Trigger workflow
+    triggerWorkflow(event.id, resolutionConfig).catch(() => { });
 
-    // Send notification
-    await sendNotification(event_data.name, event.id, profile.full_name || 'Admin');
+    // Non-blocking: Send notification
+    sendNotification(title, event.id, profile.full_name || 'Admin').catch(() => { });
 
-    return NextResponse.json({
+    return Response.json({
       success: true,
       event_id: event.id,
-      message: 'ইভেন্ট সফলভাবে তৈরি হয়েছে',
+      market_id: marketId,
+      slug: event.slug,
+      message: 'Event created successfully',
       execution_time_ms: Date.now() - startTime
     });
 
   } catch (error: any) {
-    console.error('Event creation error:', error);
-    return NextResponse.json(
-      {
-        error: error.message || 'ইভেন্ট তৈরি করতে ব্যর্থ',
-        execution_time_ms: Date.now() - startTime
-      },
-      { status: 500 }
-    );
+    console.error('CRITICAL: Event creation error:', {
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      code: error.code
+    });
+    return Response.json({
+      success: false,
+      error: error.message || 'Internal Server Error',
+      details: error.details,
+      execution_time_ms: Date.now() - startTime
+    }, { status: 500 });
   }
 }

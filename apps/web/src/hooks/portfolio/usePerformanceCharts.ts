@@ -59,11 +59,11 @@ export function usePerformanceCharts(userId?: string, timeframe: '1M' | '3M' | '
       setLoading(false);
       return;
     }
-    
+
     setLoading(true);
     try {
       const supabase = createClient();
-      
+
       // Calculate date range
       const endDate = new Date();
       const startDate = new Date();
@@ -75,29 +75,29 @@ export function usePerformanceCharts(userId?: string, timeframe: '1M' | '3M' | '
         case 'ALL': startDate.setTime(0); break;
       }
 
-      // Fetch trades (both as buyer and seller)
-      const { data: buyerTrades, error: buyerError } = await supabase
+      // Fetch trades (both as maker and taker)
+      const { data: makerTrades, error: makerError } = await supabase
         .from('trades')
         .select(`
           *,
           markets:market_id (question, category, status, winning_outcome)
         `)
-        .eq('buyer_id', userId)
+        .eq('maker_id', userId)
         .gte('created_at', startDate.toISOString())
         .order('created_at', { ascending: true });
 
-      const { data: sellerTrades, error: sellerError } = await supabase
+      const { data: takerTrades, error: takerError } = await supabase
         .from('trades')
         .select(`
           *,
           markets:market_id (question, category, status, winning_outcome)
         `)
-        .eq('seller_id', userId)
+        .eq('taker_id', userId)
         .gte('created_at', startDate.toISOString())
         .order('created_at', { ascending: true });
 
-      if (buyerError) throw buyerError;
-      if (sellerError) throw sellerError;
+      if (makerError) throw makerError;
+      if (takerError) throw takerError;
 
       // Fetch positions
       const { data: positions } = await supabase
@@ -109,10 +109,16 @@ export function usePerformanceCharts(userId?: string, timeframe: '1M' | '3M' | '
         .eq('user_id', userId)
         .gte('created_at', startDate.toISOString());
 
-      // Combine all trades
+      // Combine all trades and infer buy/sell side
       const allTrades = [
-        ...(buyerTrades || []).map((t: any) => ({ ...t, userSide: 'buy' as const })),
-        ...(sellerTrades || []).map((t: any) => ({ ...t, userSide: 'sell' as const }))
+        ...(makerTrades || []).map((t: any) => {
+          const isTakerBuyer = t.taker_side === 'BUY';
+          return { ...t, userSide: isTakerBuyer ? 'sell' : 'buy' }
+        }),
+        ...(takerTrades || []).map((t: any) => {
+          const isTakerBuyer = t.taker_side === 'BUY';
+          return { ...t, userSide: isTakerBuyer ? 'buy' : 'sell' }
+        })
       ].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
       // Build equity curve from trades
@@ -120,7 +126,7 @@ export function usePerformanceCharts(userId?: string, timeframe: '1M' | '3M' | '
       let runningValue = 10000;
       let peak = runningValue;
       const equity: EquityPoint[] = [];
-      
+
       // Group trades by date
       const tradesByDate = new Map<string, typeof allTrades>();
       allTrades.forEach(trade => {
@@ -136,13 +142,13 @@ export function usePerformanceCharts(userId?: string, timeframe: '1M' | '3M' | '
       sortedDates.forEach(date => {
         const dayTrades = tradesByDate.get(date) || [];
         let dayPnl = 0;
-        
+
         dayTrades.forEach(trade => {
           // For prediction markets:
           // Buying: cost = price * quantity (negative PnL initially)
           // Selling: revenue = price * quantity (positive PnL)
           // Resolution: if won, receive 1 * quantity; if lost, receive 0
-          
+
           if (trade.userSide === 'buy') {
             dayPnl -= trade.price * trade.quantity;
           } else {
@@ -153,7 +159,7 @@ export function usePerformanceCharts(userId?: string, timeframe: '1M' | '3M' | '
         runningValue += dayPnl;
         if (runningValue > peak) peak = runningValue;
         const drawdown = peak > 0 ? ((peak - runningValue) / peak) * 100 : 0;
-        
+
         equity.push({
           date,
           value: runningValue,
@@ -180,13 +186,13 @@ export function usePerformanceCharts(userId?: string, timeframe: '1M' | '3M' | '
           if (idx === 0) return 0;
           return ((d.value - equity[i - 30 + idx - 1].value) / equity[i - 30 + idx - 1].value) * 100;
         }).slice(1);
-        
+
         if (windowReturns.length > 0) {
           const avgReturn = windowReturns.reduce((a, b) => a + b, 0) / windowReturns.length;
           const variance = windowReturns.reduce((sq, n) => sq + Math.pow(n - avgReturn, 2), 0) / windowReturns.length;
           const stdDev = Math.sqrt(variance) || 1;
           const sharpe = stdDev > 0 ? (avgReturn - 0.05) / stdDev : 0;
-          
+
           rollingSharpe.push({
             date: equity[i].date,
             value: sharpe * Math.sqrt(365)
@@ -201,11 +207,11 @@ export function usePerformanceCharts(userId?: string, timeframe: '1M' | '3M' | '
           if (idx === 0) return 0;
           return ((d.value - equity[i - 30 + idx - 1].value) / equity[i - 30 + idx - 1].value) * 100;
         }).slice(1);
-        
+
         if (windowReturns.length > 0) {
           const avgReturn = windowReturns.reduce((a, b) => a + b, 0) / windowReturns.length;
           const variance = windowReturns.reduce((sq, n) => sq + Math.pow(n - avgReturn, 2), 0) / windowReturns.length;
-          
+
           rollingVolatility.push({
             date: equity[i].date,
             value: Math.sqrt(variance) * Math.sqrt(365)
@@ -230,7 +236,7 @@ export function usePerformanceCharts(userId?: string, timeframe: '1M' | '3M' | '
           const quantity = pos.quantity || 0;
           const won = pos.markets.winning_outcome === pos.outcome;
           const pnl = won ? (1 - entryPrice) * quantity : -entryPrice * quantity;
-          
+
           const range = distribution.find(r => {
             if (r.range === '< -$500') return pnl < -500;
             if (r.range === '-$500 to -$100') return pnl >= -500 && pnl < -100;
@@ -240,7 +246,7 @@ export function usePerformanceCharts(userId?: string, timeframe: '1M' | '3M' | '
             if (r.range === '> $500') return pnl >= 500;
             return false;
           });
-          
+
           if (range) {
             if (pnl > 0) range.wins++;
             else range.losses++;
@@ -271,11 +277,11 @@ export function usePerformanceCharts(userId?: string, timeframe: '1M' | '3M' | '
       let currentLossStreak = 0;
       let maxWinStreak = 0;
       let maxLossStreak = 0;
-      
+
       const resolvedPositions = (positions || [])
         .filter((p: any) => p.markets?.status === 'resolved')
         .sort((a: any, b: any) => new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime());
-      
+
       resolvedPositions.forEach((pos: any) => {
         const won = pos.markets.winning_outcome === pos.outcome;
         if (won) {
@@ -310,7 +316,7 @@ export function usePerformanceCharts(userId?: string, timeframe: '1M' | '3M' | '
         },
         benchmarks
       });
-      
+
       setError(null);
     } catch (err) {
       console.error('Performance Charts Error:', err);
@@ -326,12 +332,12 @@ export function usePerformanceCharts(userId?: string, timeframe: '1M' | '3M' | '
 
   const stats = useMemo(() => {
     if (!data?.equity.length) return null;
-    
+
     const first = data.equity[0].value;
     const last = data.equity[data.equity.length - 1].value;
     const totalReturn = first > 0 ? ((last - first) / first) * 100 : 0;
     const maxDrawdown = data.equity.length > 0 ? Math.max(...data.equity.map(e => e.drawdown)) : 0;
-    
+
     return {
       totalReturn,
       maxDrawdown,

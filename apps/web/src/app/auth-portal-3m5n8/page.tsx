@@ -51,9 +51,15 @@ export default function SecureAuthPortal() {
   const [attempts, setAttempts] = useState(0);
   const [lockedUntil, setLockedUntil] = useState<Date | null>(null);
   const [securityCheck, setSecurityCheck] = useState(false);
+  const [sessionId, setSessionId] = useState('--------');
 
   // Use shared Supabase client
   const [supabase] = useState(() => createClient());
+
+  // Generate session ID client-side only to prevent hydration mismatch
+  useEffect(() => {
+    setSessionId(Math.random().toString(36).substring(2, 10).toUpperCase());
+  }, []);
 
   // Check for existing session
   useEffect(() => {
@@ -399,7 +405,7 @@ export default function SecureAuthPortal() {
                 Unauthorized access attempts will be prosecuted.
               </p>
               <p className="text-xs text-slate-600 mt-2">
-                Session ID: {Math.random().toString(36).substring(2, 10).toUpperCase()}
+                Session ID: {sessionId}
               </p>
             </div>
           </CardContent>

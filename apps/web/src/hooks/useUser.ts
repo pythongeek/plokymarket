@@ -29,20 +29,12 @@ export function useUser() {
         if (sessionError) throw sessionError;
 
         if (session?.user) {
-          // Fetch profile and related data
+          // Fetch profile (simple query — no joins to non-existent tables)
           const { data: profile } = await supabase
             .from('user_profiles')
-            .select(`
-              kyc_level,
-              last_login_at,
-              user_kyc_profiles (id_expiry),
-              user_status (account_status)
-            `)
+            .select('kyc_level, last_login_at')
             .eq('id', session.user.id)
             .single();
-
-          const kycProfile = (profile as any)?.user_kyc_profiles;
-          const statusRecord = (profile as any)?.user_status;
 
           setUser({
             id: session.user.id,
@@ -52,8 +44,7 @@ export function useUser() {
             created_at: session.user.created_at,
             kycLevel: profile?.kyc_level || 0,
             lastLoginAt: profile?.last_login_at,
-            idExpiry: kycProfile?.id_expiry,
-            accountStatus: statusRecord?.account_status || 'active'
+            accountStatus: 'active'
           });
         } else {
           // Demo user for development

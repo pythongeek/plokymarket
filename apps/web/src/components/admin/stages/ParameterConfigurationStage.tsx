@@ -20,8 +20,11 @@ import {
   Layers,
   Percent,
   Clock,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Shield,
+  CheckCircle2
 } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -106,6 +109,8 @@ export function ParameterConfigurationStage({
   const [verificationSources, setVerificationSources] = useState<string[]>(
     draft?.verification_method?.sources || ['admin_manual']
   );
+  const [resolvers, setResolvers] = useState<any[]>([]);
+  const [selectedResolver, setSelectedResolver] = useState<string>(draft?.resolver_reference || '');
 
   // Trading config
   const [tradingFeePercent, setTradingFeePercent] = useState(draft?.trading_fee_percent || 2.0);
@@ -124,6 +129,19 @@ export function ParameterConfigurationStage({
     ]
   );
 
+  // Load resolvers
+  useEffect(() => {
+    const fetchResolvers = async () => {
+      const { data } = await createClient()
+        .from('resolvers')
+        .select('*')
+        .eq('is_active', true)
+        .order('success_count', { ascending: false });
+      if (data) setResolvers(data);
+    };
+    fetchResolvers();
+  }, []);
+
   const handleSubmit = async () => {
     const data: Record<string, any> = {
       question,
@@ -136,6 +154,7 @@ export function ParameterConfigurationStage({
       resolution_criteria: resolutionCriteria,
       resolution_deadline: resolutionDeadline ? new Date(resolutionDeadline).toISOString() : undefined,
       oracle_type: oracleType,
+      resolver_reference: selectedResolver,
       market_type: draft?.market_type,
       // Verification config
       verification_method: {
@@ -195,6 +214,14 @@ export function ParameterConfigurationStage({
         ? prev.filter(s => s !== sourceId)
         : [...prev, sourceId]
     );
+  };
+
+  const isTrusted = (resolver: any) => {
+    const total = resolver.success_count + resolver.dispute_count;
+    if (total === 0) return false;
+    const successRate = (resolver.success_count / total) * 100;
+    const disputeRate = (resolver.dispute_count / total) * 100;
+    return successRate >= 95 && disputeRate <= 2;
   };
 
   return (
@@ -415,7 +442,7 @@ export function ParameterConfigurationStage({
           </div>
           <div className="space-y-2">
             <Label className="text-slate-300">ট্রেডিং শেষ ধরন (Trading End Type)</Label>
-            <Select value={tradingEndType} onValueChange={setTradingEndType}>
+            <Select value={tradingEndType} onValueChange={(val: any) => setTradingEndType(val)}>
               <SelectTrigger className="bg-slate-900 border-slate-700 text-white">
                 <SelectValue />
               </SelectTrigger>
@@ -435,16 +462,72 @@ export function ParameterConfigurationStage({
         </div>
       </div>
 
+      {/* ===== RESOLVERS REGISTRY ===== */}
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+          <Shield className="w-5 h-5 text-emerald-400" />
+          রেজোলিউশন অথরিটি (Resolvers Registry)
+        </h3>
+        <p className="text-sm text-slate-400">নিবন্ধিত রেজোলিউশন কর্তৃপক্ষ নির্বাচন করুন</p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {resolvers.map((resolver) => {
+            const isSelected = selectedResolver === resolver.address;
+            const trusted = isTrusted(resolver);
+            return (
+              <button
+                key={resolver.address}
+                onClick={() => {
+                  setSelectedResolver(resolver.address);
+                  // Auto-set oracle type if it matches
+                  if (resolver.type === 'AI_ORACLE') setOracleType('AI');
+                  if (resolver.type === 'MANUAL_ADMIN') setOracleType('MANUAL');
+                  if (resolver.type === 'UMA') setOracleType('UMA');
+                  if (resolver.type === 'Chainlink') setOracleType('CHAINLINK');
+                }}
+                className={cn(
+                  "flex items-start gap-3 p-4 rounded-xl border transition-all text-left relative overflow-hidden",
+                  isSelected
+                    ? "border-emerald-500 bg-emerald-500/10 text-emerald-300"
+                    : "border-slate-700 bg-slate-900/50 text-slate-400 hover:border-slate-500"
+                )}
+              >
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <p className="text-sm font-bold text-white">{resolver.name}</p>
+                    {trusted && (
+                      <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[10px] py-0">
+                        <CheckCircle2 className="w-3 h-3 mr-1" /> ট্রাস্টেড
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-[11px] opacity-70 mb-2 line-clamp-1">{resolver.description}</p>
+                  <div className="flex items-center gap-3 text-[10px] font-mono opacity-50">
+                    <span>Type: {resolver.type}</span>
+                    <span>Success: {resolver.success_count}</span>
+                  </div>
+                </div>
+                {isSelected && (
+                  <div className="absolute top-2 right-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* ===== VERIFICATION & ORACLE CONFIGURATION ===== */}
       <div className="space-y-4">
         <h3 className="text-lg font-semibold text-white flex items-center gap-2">
           <Cpu className="w-5 h-5 text-violet-400" />
-          যাচাইকরণ কনফিগারেশন (Verification Configuration)
+          উন্নত যাচাইকরণ কনফিগারেশন
         </h3>
 
         {/* Oracle Type */}
         <div className="space-y-2">
-          <Label className="text-slate-300">প্রাথমিক ওরাকল পদ্ধতি (Primary Oracle Method)</Label>
+          <Label className="text-slate-300">ওরাকল মেকানিজম (Oracle Mechanism)</Label>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {ORACLE_TYPES.map((oracle) => {
               const OIcon = oracle.icon;
@@ -492,9 +575,6 @@ export function ParameterConfigurationStage({
             <span>৩টি (স্ট্যান্ডার্ড)</span>
             <span>৫টি (সর্বাধিক নিরাপদ)</span>
           </div>
-          <p className="text-xs text-slate-500">
-            সমাধান নিশ্চিত করতে কতটি স্বতন্ত্র যাচাইকরণ প্রয়োজন তা নির্ধারণ করুন।
-          </p>
         </div>
 
         {/* Confidence Threshold (for AI oracle) */}
@@ -519,11 +599,6 @@ export function ParameterConfigurationStage({
               step={1}
               className="w-full"
             />
-            <div className="flex justify-between text-xs text-slate-500">
-              <span>৫০% (নমনীয়)</span>
-              <span>৮০% (স্ট্যান্ডার্ড)</span>
-              <span>৯৯% (কঠোর)</span>
-            </div>
           </div>
         )}
 

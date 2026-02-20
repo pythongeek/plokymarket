@@ -74,11 +74,11 @@ export function usePositionHistory(userId?: string, filters?: PositionFilters) {
       setLoading(false);
       return;
     }
-    
+
     setLoading(true);
     try {
       const supabase = createClient();
-      
+
       // Fetch positions with market data
       let query = supabase
         .from('positions')
@@ -93,7 +93,7 @@ export function usePositionHistory(userId?: string, filters?: PositionFilters) {
       if (filters?.market) {
         query = query.ilike('markets.question', `%${filters.market}%`);
       }
-      
+
       if (filters?.dateRange) {
         query = query
           .gte('created_at', filters.dateRange.from.toISOString())
@@ -101,7 +101,7 @@ export function usePositionHistory(userId?: string, filters?: PositionFilters) {
       }
 
       const { data, error: fetchError } = await query;
-      
+
       if (fetchError) throw fetchError;
 
       // Fetch related orders for position history
@@ -112,23 +112,23 @@ export function usePositionHistory(userId?: string, filters?: PositionFilters) {
         .order('created_at', { ascending: false });
 
       // Fetch trades for this user
-      const { data: buyerTrades } = await supabase
+      const { data: makerTrades } = await supabase
         .from('trades')
         .select('*')
-        .eq('buyer_id', userId)
+        .eq('maker_id', userId)
         .order('created_at', { ascending: false });
 
-      const { data: sellerTrades } = await supabase
+      const { data: takerTrades } = await supabase
         .from('trades')
         .select('*')
-        .eq('seller_id', userId)
+        .eq('taker_id', userId)
         .order('created_at', { ascending: false });
 
       const processedPositions: PositionHistory[] = (data || []).map((pos: any) => {
         const market = pos.markets;
         const entryPrice = pos.average_price || 0;
         const quantity = pos.quantity || 0;
-        
+
         // Build event history
         const events: PositionEvent[] = [
           {
@@ -144,36 +144,26 @@ export function usePositionHistory(userId?: string, filters?: PositionFilters) {
         ];
 
         // Find related orders and trades
-        const relatedOrders = ordersData?.filter((o: any) => 
+        const relatedOrders = ordersData?.filter((o: any) =>
           o.market_id === pos.market_id && o.outcome === pos.outcome
         ) || [];
 
-        const relatedBuyerTrades = buyerTrades?.filter((t: any) => 
-          t.market_id === pos.market_id && t.outcome === pos.outcome
-        ) || [];
-
-        const relatedSellerTrades = sellerTrades?.filter((t: any) => 
-          t.market_id === pos.market_id && t.outcome === pos.outcome
-        ) || [];
-
         // Add fill events from trades
-        relatedBuyerTrades.forEach((trade: any, index: number) => {
-          events.push({
-            id: `buy-fill-${trade.id}`,
-            type: 'fill',
-            timestamp: trade.created_at,
-            data: {
-              price: trade.price,
-              quantity: trade.quantity,
-              outcome: trade.outcome
-            }
-          });
-        });
+        const allRelatedTrades = [
+          ...makerTrades?.filter((t: any) => t.market_id === pos.market_id && t.outcome === pos.outcome).map((t: any) => {
+            const isTakerBuyer = t.taker_side === 'BUY';
+            return { ...t, isBuyer: !isTakerBuyer }
+          }) || [],
+          ...takerTrades?.filter((t: any) => t.market_id === pos.market_id && t.outcome === pos.outcome).map((t: any) => {
+            const isTakerBuyer = t.taker_side === 'BUY';
+            return { ...t, isBuyer: isTakerBuyer }
+          }) || []
+        ];
 
-        relatedSellerTrades.forEach((trade: any) => {
+        allRelatedTrades.forEach((trade: any) => {
           events.push({
-            id: `sell-fill-${trade.id}`,
-            type: 'exit',
+            id: `${trade.isBuyer ? 'buy' : 'sell'}-fill-${trade.id}`,
+            type: trade.isBuyer ? 'fill' : 'exit',
             timestamp: trade.created_at,
             data: {
               price: trade.price,
@@ -299,11 +289,11 @@ export function usePositionHistory(userId?: string, filters?: PositionFilters) {
 
   const exportToCSV = useCallback(() => {
     const headers = [
-      'Market', 'Category', 'Outcome', 'Entry Price', 'Exit Price', 
+      'Market', 'Category', 'Outcome', 'Entry Price', 'Exit Price',
       'Quantity', 'PnL (USD)', 'PnL (BDT)', 'Return %', 'Holding Days',
       'Status', 'Created At', 'Closed At'
     ];
-    
+
     const rows = positions.map(pos => [
       pos.marketName,
       pos.marketCategory,
@@ -319,7 +309,7 @@ export function usePositionHistory(userId?: string, filters?: PositionFilters) {
       new Date(pos.createdAt).toLocaleDateString('bn-BD'),
       pos.closedAt ? new Date(pos.closedAt).toLocaleDateString('bn-BD') : '-'
     ]);
-    
+
     const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);

@@ -22,11 +22,36 @@ export default function AnalyticsDashboard() {
     const [userData, setUserData] = useState<any>(null);
     const [financialData, setFinancialData] = useState<any>(null);
     const [riskData, setRiskData] = useState<any>(null);
+    const [marketMetrics, setMarketMetrics] = useState<any[]>([]);
+    const [marketMetricsLoading, setMarketMetricsLoading] = useState(false);
 
     // Fetch data on load and when period changes
     useEffect(() => {
         fetchAnalytics();
     }, [period]);
+
+    // Independent polling for live market metrics (Materialized View)
+    useEffect(() => {
+        const fetchMarketMetrics = async () => {
+            setMarketMetricsLoading(true);
+            try {
+                const res = await fetch('/api/admin/metrics/market');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.metrics) setMarketMetrics(data.metrics);
+                }
+            } catch (err) {
+                console.error('Error fetching live market metrics:', err);
+            } finally {
+                setMarketMetricsLoading(false);
+            }
+        };
+
+        fetchMarketMetrics();
+        // Poll every 30 seconds as per Section 2.4.1 requirement
+        const interval = setInterval(fetchMarketMetrics, 30000);
+        return () => clearInterval(interval);
+    }, []);
 
     const fetchAnalytics = async () => {
         setLoading(true);
@@ -100,7 +125,7 @@ export default function AnalyticsDashboard() {
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                         <MetricCard
                             title="Total Volume"
-                            value={`$${tradingData?.summary?.total_volume?.toLocaleString() || '0'}`}
+                            value={`৳${tradingData?.summary?.total_volume?.toLocaleString() || '0'}`}
                             trend="up"
                             trendValue="+12.5%"
                         />
@@ -118,7 +143,7 @@ export default function AnalyticsDashboard() {
                         />
                         <MetricCard
                             title="Avg Trade Size"
-                            value={`$${tradingData?.summary?.avg_volume?.toFixed(2) || '0'}`}
+                            value={`৳${tradingData?.summary?.avg_volume?.toFixed(2) || '0'}`}
                         />
                     </div>
 
@@ -175,11 +200,11 @@ export default function AnalyticsDashboard() {
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                         <MetricCard
                             title="Gross Revenue"
-                            value={`$${financialData?.summary?.gross_revenue?.toLocaleString() || '0'}`}
+                            value={`৳${financialData?.summary?.gross_revenue?.toLocaleString() || '0'}`}
                         />
                         <MetricCard
                             title="Net Revenue"
-                            value={`$${financialData?.summary?.net_revenue?.toLocaleString() || '0'}`}
+                            value={`৳${financialData?.summary?.net_revenue?.toLocaleString() || '0'}`}
                         />
                     </div>
                     <Card className="col-span-4">
@@ -208,6 +233,76 @@ export default function AnalyticsDashboard() {
                                 { risk_score: 90, position_size: 10000, leverage: 50 },
                                 { risk_score: 10, position_size: 500, leverage: 1 }
                             ]} />
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                {/* MARKET QUALITY / REALTIME METRICS TAB */}
+                <TabsContent value="quality" className="space-y-4">
+                    <Card className="col-span-4">
+                        <CardHeader>
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <CardTitle>Live Market Metrics (Materialized View)</CardTitle>
+                                    <CardDescription>Auto-refreshes every 30 seconds</CardDescription>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className="relative flex h-3 w-3">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">Live Data</span>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="rounded-md border overflow-x-auto">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="bg-slate-50 dark:bg-slate-900 border-b">
+                                        <tr>
+                                            <th className="p-3 font-medium">Market Name</th>
+                                            <th className="p-3 font-medium text-right">Volume</th>
+                                            <th className="p-3 font-medium text-right">Trades</th>
+                                            <th className="p-3 font-medium text-right">Unique Traders</th>
+                                            <th className="p-3 font-medium text-right">Avg Price</th>
+                                            <th className="p-3 font-medium text-right">Volatility</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y relative">
+                                        {marketMetricsLoading && marketMetrics.length === 0 && (
+                                            <tr>
+                                                <td colSpan={6} className="p-8 text-center text-muted-foreground">
+                                                    Loading real-time metrics...
+                                                </td>
+                                            </tr>
+                                        )}
+                                        {marketMetrics.length === 0 && !marketMetricsLoading && (
+                                            <tr>
+                                                <td colSpan={6} className="p-8 text-center text-muted-foreground">
+                                                    <p>No market metrics available</p>
+                                                    <p className="text-xs mt-1">(Run the Supabase DB migration and ensure active markets exist)</p>
+                                                </td>
+                                            </tr>
+                                        )}
+                                        {marketMetrics.map((market: any) => (
+                                            <tr key={market.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
+                                                <td className="p-3 font-medium max-w-[200px] truncate" title={market.name}>{market.name}</td>
+                                                <td className="p-3 text-right">৳{parseFloat(market.volume || 0).toLocaleString()}</td>
+                                                <td className="p-3 text-right">{market.total_trades || 0}</td>
+                                                <td className="p-3 text-right">{market.unique_traders || 0}</td>
+                                                <td className="p-3 text-right">{market.avg_trade_price ? `৳${parseFloat(market.avg_trade_price).toFixed(2)}` : '-'}</td>
+                                                <td className="p-3 text-right">
+                                                    {market.price_volatility ? (
+                                                        <span className={`px-2 py-1 rounded text-xs ${parseFloat(market.price_volatility) > 0.2 ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'}`}>
+                                                            {parseFloat(market.price_volatility).toFixed(3)}
+                                                        </span>
+                                                    ) : '-'}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
                         </CardContent>
                     </Card>
                 </TabsContent>

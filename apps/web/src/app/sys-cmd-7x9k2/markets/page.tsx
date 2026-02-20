@@ -23,10 +23,14 @@ import {
     Zap,
     Timer,
     ArrowRight,
+    Settings2,
+    DollarSign,
+    Link2,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { MarketCreationWizard } from '@/components/admin/MarketCreationWizard';
 import { marketCreationService, type MarketDraft, type LegalReviewItem } from '@/lib/market-creation/service';
+import { MarketFieldsPanel } from '@/components/admin/MarketFieldsPanel';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -338,6 +342,9 @@ export default function MarketManagementPage() {
     const [statusFilter, setStatusFilter] = useState('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [loading, setLoading] = useState(true);
+    const [liveMarkets, setLiveMarkets] = useState<any[]>([]);
+    const [liveMarketsLoading, setLiveMarketsLoading] = useState(false);
+    const [editingMarket, setEditingMarket] = useState<any | null>(null);
     const [stats, setStats] = useState({
         totalDrafts: 0,
         pendingReview: 0,
@@ -371,9 +378,29 @@ export default function MarketManagementPage() {
         }
     }, [statusFilter]);
 
+    const loadLiveMarkets = useCallback(async () => {
+        setLiveMarketsLoading(true);
+        try {
+            const { data } = await supabase
+                .from('markets')
+                .select('id, title, status, initial_liquidity, volume, condition_id, token1, token2, neg_risk, resolver_reference, created_at')
+                .order('created_at', { ascending: false })
+                .limit(50);
+            setLiveMarkets(data || []);
+        } catch (err) {
+            console.error('Error loading live markets:', err);
+        } finally {
+            setLiveMarketsLoading(false);
+        }
+    }, []);
+
     useEffect(() => {
         loadData();
     }, [loadData]);
+
+    useEffect(() => {
+        if (activeTab === 'live') loadLiveMarkets();
+    }, [activeTab, loadLiveMarkets]);
 
     const handleResume = (draftId: string) => {
         setResumeDraftId(draftId);
@@ -517,6 +544,11 @@ export default function MarketManagementPage() {
                         <FileText className="w-4 h-4 mr-2" />
                         খসড়া ও মার্কেট
                     </TabsTrigger>
+                    <TabsTrigger value="live" className="data-[state=active]:bg-slate-800">
+                        <TrendingUp className="w-4 h-4 mr-2" />
+                        লাইভ মার্কেট
+                        <Badge className="ml-2 bg-emerald-500/20 text-emerald-400 text-xs">{liveMarkets.length}</Badge>
+                    </TabsTrigger>
                     <TabsTrigger value="legal" className="data-[state=active]:bg-slate-800">
                         <Shield className="w-4 h-4 mr-2" />
                         আইনি পর্যালোচনা
@@ -592,6 +624,87 @@ export default function MarketManagementPage() {
 
                 <TabsContent value="legal">
                     <LegalReviewQueue items={legalQueue} />
+                </TabsContent>
+
+                {/* Live Markets Tab */}
+                <TabsContent value="live" className="space-y-3">
+                    <div className="flex items-center justify-between">
+                        <p className="text-sm text-slate-400">
+                            মার্কেটের আর্থিক ও ব্লকচেইন ফিল্ড সম্পাদনা করুন
+                        </p>
+                        <Button variant="outline" size="sm" onClick={loadLiveMarkets} disabled={liveMarketsLoading} className="border-slate-700">
+                            <RefreshCw className={cn('w-3.5 h-3.5', liveMarketsLoading && 'animate-spin')} />
+                        </Button>
+                    </div>
+                    {liveMarketsLoading ? (
+                        <div className="flex items-center justify-center py-16">
+                            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                        </div>
+                    ) : liveMarkets.length === 0 ? (
+                        <div className="text-center py-16 text-slate-500">
+                            <TrendingUp className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                            <p>কোনো মার্কেট পাওয়া যায়নি</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-2">
+                            {liveMarkets.map(market => (
+                                <div key={market.id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-slate-700 transition-all">
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-medium text-white truncate">{market.title || 'Untitled'}</p>
+                                        <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
+                                            <span className="flex items-center gap-1">
+                                                <DollarSign className="w-3 h-3" />
+                                                {market.initial_liquidity || 0} USDT
+                                            </span>
+                                            <span className="flex items-center gap-1">
+                                                <BarChart3 className="w-3 h-3" />
+                                                Vol: {market.volume || 0}
+                                            </span>
+                                            {market.condition_id && (
+                                                <span className="flex items-center gap-1 text-blue-400">
+                                                    <Link2 className="w-3 h-3" />
+                                                    CTF
+                                                </span>
+                                            )}
+                                            {market.neg_risk && (
+                                                <Badge className="text-xs bg-purple-500/20 text-purple-400 py-0">neg_risk</Badge>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <Badge className={cn(
+                                        'text-xs shrink-0',
+                                        market.status === 'active' ? 'bg-emerald-500/20 text-emerald-400' :
+                                            market.status === 'resolved' ? 'bg-blue-500/20 text-blue-400' :
+                                                'bg-slate-700 text-slate-300'
+                                    )}>
+                                        {market.status}
+                                    </Badge>
+                                    <Dialog>
+                                        <DialogTrigger asChild>
+                                            <Button size="sm" variant="outline" className="border-slate-700 shrink-0">
+                                                <Settings2 className="w-3.5 h-3.5 mr-1" />
+                                                সম্পাদনা
+                                            </Button>
+                                        </DialogTrigger>
+                                        <DialogContent className="bg-slate-950 border-slate-800 max-w-lg">
+                                            <DialogHeader>
+                                                <DialogTitle className="text-white">মার্কেট ফিল্ড সম্পাদনা</DialogTitle>
+                                                <DialogDescription className="text-slate-400">
+                                                    আর্থিক ও ব্লকচেইন ফিল্ড আপডেট করুন
+                                                </DialogDescription>
+                                            </DialogHeader>
+                                            <MarketFieldsPanel
+                                                market={market}
+                                                onSaved={(updated) => {
+                                                    setLiveMarkets(prev => prev.map(m => m.id === updated.id ? { ...m, ...updated } : m));
+                                                }}
+                                            />
+                                        </DialogContent>
+                                    </Dialog>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </TabsContent>
             </Tabs>
         </div>

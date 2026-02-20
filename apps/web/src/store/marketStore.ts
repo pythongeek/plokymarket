@@ -7,7 +7,11 @@
 import { create } from 'zustand';
 import { subscribeWithSelector, persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
+import { enableMapSet } from 'immer';
 import type { Event, RealtimePayload } from '@/types/database';
+
+enableMapSet();
+import { supabase } from '@/lib/supabase';
 import * as eventsService from '@/services/events';
 
 // ===================================
@@ -22,27 +26,33 @@ interface MarketState {
   featuredEventIds: string[];
   trendingEventIds: string[];
   endingSoonEventIds: string[];
-  
+
   // Filters
   selectedCategory: string | null;
   selectedStatus: string | null;
   searchQuery: string;
   sortBy: 'volume' | 'ending' | 'newest' | 'movement' | 'trending';
-  
+
   // UI State
   isLoading: boolean;
   isLoadingMore: boolean;
-  error: string | null;
+  error: any | null;
   hasMore: boolean;
-  
+  pendingCreations: string[]; // IDs of markets currently being created optimistically
+
   // Pagination
   page: number;
   limit: number;
   totalCount: number;
-  
+
   // Subscriptions
   unsubscribeEvents: (() => void) | null;
   unsubscribeFeatured: (() => void) | null;
+
+  // Emergency Settings
+  isPlatformPaused: boolean;
+  categoryPauseStatus: Map<string, { paused: boolean; reason?: string }>;
+  unsubscribeEmergency: (() => void) | null;
 }
 
 interface MarketActions {
@@ -52,13 +62,14 @@ interface MarketActions {
   updateEvent: (id: string, updates: Partial<Event>) => void;
   removeEvent: (id: string) => void;
   setSelectedEvent: (id: string | null) => void;
-  
+  createMarket: (data: any) => Promise<{ success: boolean; event?: Event; error?: any }>;
+
   // Filter Actions
   setCategory: (category: string | null) => void;
   setStatus: (status: string | null) => void;
   setSearchQuery: (query: string) => void;
   setSortBy: (sort: MarketState['sortBy']) => void;
-  
+
   // Fetch Actions
   fetchEvents: (reset?: boolean) => Promise<void>;
   fetchMoreEvents: () => Promise<void>;
@@ -68,12 +79,13 @@ interface MarketActions {
   fetchTrendingEvents: () => Promise<void>;
   fetchEndingSoonEvents: () => Promise<void>;
   refreshEvent: (id: string) => Promise<void>;
-  
+
   // Real-time Actions
   subscribeToEvents: () => void;
   subscribeToFeatured: () => void;
+  subscribeToEmergencySettings: () => void;
   unsubscribeAll: () => void;
-  
+
   // Utility Actions
   clearError: () => void;
   resetFilters: () => void;
@@ -98,11 +110,15 @@ const initialState: MarketState = {
   isLoadingMore: false,
   error: null,
   hasMore: true,
+  pendingCreations: [],
   page: 1,
   limit: 20,
   totalCount: 0,
   unsubscribeEvents: null,
   unsubscribeFeatured: null,
+  isPlatformPaused: false,
+  categoryPauseStatus: new Map(),
+  unsubscribeEmergency: null,
 };
 
 export const useMarketStore = create<MarketState & MarketActions>()(
@@ -115,7 +131,7 @@ export const useMarketStore = create<MarketState & MarketActions>()(
           // ===================================
           // DATA ACTIONS
           // ===================================
-          
+
           setEvents: (events) => {
             set((state) => {
               state.events = new Map(events.map((e) => [e.id, e]));
@@ -154,10 +170,66 @@ export const useMarketStore = create<MarketState & MarketActions>()(
             });
           },
 
+          createMarket: async (formData) => {
+            const tempId = `temp-${Date.now()}`;
+            const optimisticEvent: any = {
+              ...formData,
+              id: tempId,
+              is_pending: true,
+              created_at: new Date().toISOString(),
+              total_volume: 0,
+              current_yes_price: formData.initialPrice,
+              current_no_price: 1 - formData.initialPrice,
+            };
+
+            // 1. আশাবাদী UI আপডেট
+            set((state) => {
+              state.events.set(tempId, optimisticEvent);
+              state.pendingCreations.push(tempId);
+              state.filteredEventIds.unshift(tempId);
+            });
+
+            try {
+              // 2. সার্ভার অ্যাকশন কল
+              const { createMarketAction } = await import('@/app/sys-cmd-7x9k2/events/create/actions');
+              const result = await createMarketAction(formData);
+
+              if (result.error) {
+                // ব্যর্থ হলে রোলব্যাক
+                set((state) => {
+                  state.events.delete(tempId);
+                  state.pendingCreations = state.pendingCreations.filter((id: string) => id !== tempId);
+                  state.filteredEventIds = state.filteredEventIds.filter((id: string) => id !== tempId);
+                  state.error = result.error;
+                });
+                return { success: false, error: result.error };
+              }
+
+              // 3. আশবাদী নিশ্চিতকৃত দ্বারা প্রতিস্থাপন
+              set((state) => {
+                state.events.delete(tempId);
+                state.events.set(result.event.id, { ...result.event, is_pending: false });
+                state.pendingCreations = state.pendingCreations.filter((id: string) => id !== tempId);
+                state.filteredEventIds = state.filteredEventIds.map((id: string) => id === tempId ? result.event.id : id);
+              });
+
+              return { success: true, event: result.event };
+            } catch (err: any) {
+              // অপ্রত্যাশিত ত্রুটি
+              set((state) => {
+                state.events.delete(tempId);
+                state.pendingCreations = state.pendingCreations.filter((id: string) => id !== tempId);
+                state.filteredEventIds = state.filteredEventIds.filter((id: string) => id !== tempId);
+                state.error = err.message || 'An unexpected error occurred';
+              });
+              return { success: false, error: err };
+            }
+          },
+
           // ===================================
           // FILTER ACTIONS
           // ===================================
-          
+
           setCategory: (category) => {
             set((state) => {
               state.selectedCategory = category;
@@ -193,10 +265,10 @@ export const useMarketStore = create<MarketState & MarketActions>()(
           // ===================================
           // FETCH ACTIONS
           // ===================================
-          
+
           fetchEvents: async (reset = false) => {
             const state = get();
-            
+
             if (reset) {
               set((s) => {
                 s.page = 1;
@@ -363,7 +435,7 @@ export const useMarketStore = create<MarketState & MarketActions>()(
           // ===================================
           // REAL-TIME ACTIONS
           // ===================================
-          
+
           subscribeToEvents: () => {
             const unsubscribe = eventsService.subscribeToEvents((payload) => {
               const { eventType, new: newEvent, old: oldEvent } = payload;
@@ -401,7 +473,7 @@ export const useMarketStore = create<MarketState & MarketActions>()(
                   });
                 } else {
                   set((s) => {
-                    s.featuredEventIds = s.featuredEventIds.filter((id) => id !== event.id);
+                    s.featuredEventIds = s.featuredEventIds.filter((id: string) => id !== event.id);
                   });
                 }
               }
@@ -412,21 +484,96 @@ export const useMarketStore = create<MarketState & MarketActions>()(
             });
           },
 
+          subscribeToEmergencySettings: () => {
+            if (!supabase) return;
+
+            // 1. Initial Fetch for Platform Settings
+            supabase
+              .from('platform_settings')
+              .select('*')
+              .eq('key', 'trading_paused')
+              .single()
+              .then(({ data }: { data: any }) => {
+                if (data) {
+                  set((s) => { s.isPlatformPaused = data.value === true; });
+                }
+              });
+
+            // 2. Initial Fetch for Category Settings
+            supabase
+              .from('category_settings')
+              .select('*')
+              .then(({ data }: { data: any[] | null }) => {
+                if (data) {
+                  set((s) => {
+                    (data as any[]).forEach((cat: any) => {
+                      s.categoryPauseStatus.set(cat.category, {
+                        paused: cat.trading_status === 'paused',
+                        reason: cat.pause_reason
+                      });
+                    });
+                  });
+                }
+              });
+
+            // 3. Real-time Subscription for Platform Settings
+            const platformSub = supabase
+              .channel('platform_settings_changes')
+              .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'platform_settings',
+                filter: 'key=eq.trading_paused'
+              }, (payload: any) => {
+                const newValue = (payload.new as any).value;
+                set((s) => { s.isPlatformPaused = newValue === true; });
+              })
+              .subscribe();
+
+            // 4. Real-time Subscription for Category Settings
+            const categorySub = supabase
+              .channel('category_settings_changes')
+              .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'category_settings'
+              }, (payload: any) => {
+                const newData = payload.new as any;
+                if (!newData) return;
+                set((s) => {
+                  s.categoryPauseStatus.set(newData.category, {
+                    paused: newData.trading_status === 'paused',
+                    reason: newData.pause_reason
+                  });
+                });
+              })
+              .subscribe();
+
+            set((s) => {
+              s.unsubscribeEmergency = () => {
+                platformSub.unsubscribe();
+                categorySub.unsubscribe();
+              };
+            });
+          },
+
           unsubscribeAll: () => {
             const state = get();
             state.unsubscribeEvents?.();
             state.unsubscribeFeatured?.();
-            
+            state.unsubscribeEmergency?.();
+
             set((s) => {
               s.unsubscribeEvents = null;
               s.unsubscribeFeatured = null;
+              s.unsubscribeEmergency = null;
             });
           },
 
           // ===================================
           // UTILITY ACTIONS
           // ===================================
-          
+
           clearError: () => {
             set((s) => {
               s.error = null;
@@ -472,7 +619,7 @@ function recalculateFiltered(state: MarketState) {
 
   // Status filter
   if (state.selectedStatus) {
-    events = events.filter((e) => e.trading_status === state.selectedStatus);
+    events = events.filter((e) => (e.status || e.trading_status) === state.selectedStatus);
   }
 
   // Search filter
@@ -491,9 +638,9 @@ function recalculateFiltered(state: MarketState) {
   events.sort((a, b) => {
     switch (state.sortBy) {
       case 'volume':
-        return (b.volume || 0) - (a.volume || 0);
+        return (b.total_volume || b.volume || 0) - (a.total_volume || a.volume || 0);
       case 'ending':
-        return new Date(a.ends_at).getTime() - new Date(b.ends_at).getTime();
+        return new Date(a.trading_closes_at || a.ends_at || '').getTime() - new Date(b.trading_closes_at || b.ends_at || '').getTime();
       case 'newest':
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       case 'movement':
@@ -501,7 +648,7 @@ function recalculateFiltered(state: MarketState) {
       case 'trending':
         if (a.is_trending && !b.is_trending) return -1;
         if (!a.is_trending && b.is_trending) return 1;
-        return (b.volume || 0) - (a.volume || 0);
+        return (b.total_volume || b.volume || 0) - (a.total_volume || a.volume || 0);
       default:
         return 0;
     }
@@ -514,22 +661,22 @@ function recalculateFiltered(state: MarketState) {
 // SELECTORS
 // ===================================
 
-export const selectEvents = (state: MarketState) => 
+export const selectEvents = (state: MarketState) =>
   state.filteredEventIds.map((id) => state.events.get(id)).filter(Boolean) as Event[];
 
-export const selectEventById = (state: MarketState, id: string) => 
+export const selectEventById = (state: MarketState, id: string) =>
   state.events.get(id);
 
-export const selectSelectedEvent = (state: MarketState) => 
+export const selectSelectedEvent = (state: MarketState) =>
   state.selectedEventId ? state.events.get(state.selectedEventId) : null;
 
-export const selectFeaturedEvents = (state: MarketState) => 
+export const selectFeaturedEvents = (state: MarketState) =>
   state.featuredEventIds.map((id) => state.events.get(id)).filter(Boolean) as Event[];
 
-export const selectTrendingEvents = (state: MarketState) => 
+export const selectTrendingEvents = (state: MarketState) =>
   state.trendingEventIds.map((id) => state.events.get(id)).filter(Boolean) as Event[];
 
-export const selectEndingSoonEvents = (state: MarketState) => 
+export const selectEndingSoonEvents = (state: MarketState) =>
   state.endingSoonEventIds.map((id) => state.events.get(id)).filter(Boolean) as Event[];
 
 export const selectCategories = (state: MarketState) => {

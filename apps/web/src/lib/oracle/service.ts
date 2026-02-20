@@ -158,7 +158,15 @@ export class OracleService {
     }
 
     private async resolveMarketInDb(supabase: any, marketId: string, outcome: string) {
-        const { error } = await supabase
+        // 1. Fetch market to get event_id
+        const { data: market } = await supabase
+            .from('markets')
+            .select('event_id')
+            .eq('id', marketId)
+            .single();
+
+        // 2. Update Market
+        const { error: mError } = await supabase
             .from('markets')
             .update({
                 status: 'resolved',
@@ -167,7 +175,24 @@ export class OracleService {
             })
             .eq('id', marketId);
 
-        if (error) throw error;
+        if (mError) throw mError;
+
+        // 3. Update Event (if linked)
+        if (market?.event_id) {
+            const { error: eError } = await supabase
+                .from('events')
+                .update({
+                    status: 'resolved',
+                    resolved_outcome: outcome === 'হ্যাঁ (Yes)' || outcome === 'Yes' ? 1 : 2,
+                    resolved_at: new Date().toISOString()
+                })
+                .eq('id', market.event_id);
+
+            if (eError) {
+                console.error('Failed to update linked event status:', eError);
+                // We don't throw here to avoid failing the whole process if market updated successfully
+            }
+        }
     }
 
     // Alias for backward compatibility / API triggering
