@@ -7,12 +7,17 @@
 -- which is the industry standard for Central Limit Order Books (like Polymarket, Binance, etc.)
 -- where trades are defined by liquidity provision rather than just buying/selling.
 
--- 1. Rename the columns safely
-ALTER TABLE public.trades 
-  RENAME COLUMN buyer_id TO maker_id;
+-- 1. Rename the columns safely using a DO block for idempotency
+DO $$ 
+BEGIN
+  IF EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='trades' AND column_name='buyer_id') THEN
+      ALTER TABLE public.trades RENAME COLUMN buyer_id TO maker_id;
+  END IF;
 
-ALTER TABLE public.trades 
-  RENAME COLUMN seller_id TO taker_id;
+  IF EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='trades' AND column_name='seller_id') THEN
+      ALTER TABLE public.trades RENAME COLUMN seller_id TO taker_id;
+  END IF;
+END $$;
 
 -- 2. Due to the rename, we need to recreate the market_metrics materialized view from migration 117
 -- to use the new column names so it doesn't break.

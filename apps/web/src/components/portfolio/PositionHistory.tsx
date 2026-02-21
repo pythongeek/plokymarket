@@ -20,7 +20,11 @@ import {
   Package,
   FileSpreadsheet,
   FileJson,
-  FileText
+  FileText,
+  PlusCircle,
+  MinusCircle,
+  XSquare,
+  BellRing
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -84,6 +88,12 @@ export function PositionHistory({ userId }: PositionHistoryProps) {
     }
   };
 
+  const handleAction = (e: React.MouseEvent, action: string, positionId: string) => {
+    e.stopPropagation(); // Prevents card expansion
+    console.log(`Action: ${action} on position: ${positionId}`);
+    // Future: Open modals or dispatch actions based on the clicked button
+  };
+
   return (
     <motion.div
       variants={containerVariants}
@@ -123,25 +133,25 @@ export function PositionHistory({ userId }: PositionHistoryProps) {
             <PopoverContent className="w-48" align="end">
               <div className="space-y-2">
                 <p className="text-sm font-medium">এক্সপোর্ট ফরম্যাট</p>
-                <Button 
-                  variant="ghost" 
-                  className="w-full justify-start gap-2" 
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start gap-2"
                   onClick={() => handleExport('csv')}
                 >
                   <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
                   CSV (Excel)
                 </Button>
-                <Button 
-                  variant="ghost" 
-                  className="w-full justify-start gap-2" 
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start gap-2"
                   onClick={() => handleExport('json')}
                 >
                   <FileJson className="w-4 h-4 text-blue-600" />
                   JSON
                 </Button>
-                <Button 
-                  variant="ghost" 
-                  className="w-full justify-start gap-2" 
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start gap-2"
                   onClick={() => handleExport('pdf')}
                 >
                   <FileText className="w-4 h-4 text-rose-600" />
@@ -203,7 +213,7 @@ export function PositionHistory({ userId }: PositionHistoryProps) {
           <PopoverTrigger asChild>
             <Button variant="outline" className="gap-2">
               <Calendar className="w-4 h-4" />
-              {dateRange.from && dateRange.to 
+              {dateRange.from && dateRange.to
                 ? `${dateRange.from.toLocaleDateString('bn-BD')} - ${dateRange.to.toLocaleDateString('bn-BD')}`
                 : 'তারিখ সিলেক্ট করুন'}
             </Button>
@@ -258,7 +268,7 @@ export function PositionHistory({ userId }: PositionHistoryProps) {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
               >
-                <Card 
+                <Card
                   className={cn(
                     "overflow-hidden transition-all duration-300 cursor-pointer",
                     "hover:shadow-lg hover:border-primary/20",
@@ -275,8 +285,8 @@ export function PositionHistory({ userId }: PositionHistoryProps) {
                       <div className="flex items-center gap-3">
                         <div className={cn(
                           "w-10 h-10 rounded-lg flex items-center justify-center",
-                          position.outcome === 'YES' 
-                            ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30" 
+                          position.outcome === 'YES'
+                            ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30"
                             : "bg-rose-100 text-rose-600 dark:bg-rose-900/30"
                         )}>
                           {position.outcome === 'YES' ? <ArrowUpRight className="w-5 h-5" /> : <ArrowDownRight className="w-5 h-5" />}
@@ -287,12 +297,12 @@ export function PositionHistory({ userId }: PositionHistoryProps) {
                             <Badge variant="secondary" className="text-xs">
                               {position.marketCategory}
                             </Badge>
-                            <Badge 
-                              variant="outline" 
+                            <Badge
+                              variant="outline"
                               className={cn(
                                 "text-xs",
-                                position.outcome === 'YES' 
-                                  ? "border-emerald-300 text-emerald-700" 
+                                position.outcome === 'YES'
+                                  ? "border-emerald-300 text-emerald-700"
                                   : "border-rose-300 text-rose-700"
                               )}
                             >
@@ -304,37 +314,59 @@ export function PositionHistory({ userId }: PositionHistoryProps) {
                         </div>
                       </div>
 
-                      {/* Position Details */}
+                      {/* Position Details & Valuation */}
                       <div className="flex flex-wrap items-center gap-6 text-sm">
-                        <div>
-                          <p className="text-muted-foreground">এন্ট্রি</p>
-                          <p className="font-medium">${position.entryPrice.toFixed(3)}</p>
+                        <div className="hidden md:block">
+                          <p className="text-muted-foreground text-[10px] uppercase">পরিমাণ</p>
+                          <p className="font-medium text-base">{position.filledQuantity}</p>
                         </div>
                         <div>
-                          <p className="text-muted-foreground">
-                            {['resolved', 'redeemed', 'filled'].includes(position.status) ? 'এক্সিট' : 'বর্তমান'}
-                          </p>
-                          <p className="font-medium">
-                            ${(position.exitPrice || position.currentPrice).toFixed(3)}
-                          </p>
+                          <p className="text-muted-foreground text-[10px] uppercase">এন্ট্রি</p>
+                          <p className="font-medium">৳{position.entryPrice.toFixed(2)}</p>
                         </div>
                         <div>
-                          <p className="text-muted-foreground">পরিমাণ</p>
-                          <p className="font-medium">{position.filledQuantity}/{position.quantity}</p>
+                          <p className="text-muted-foreground text-[10px] uppercase">বর্তমান</p>
+                          <p className="font-medium">৳{(position.exitPrice || position.currentPrice).toFixed(2)}</p>
+                        </div>
+                        <div className="hidden sm:block">
+                          <p className="text-muted-foreground text-[10px] uppercase">ভ্যালু</p>
+                          <p className="font-medium text-emerald-600 dark:text-emerald-400">
+                            ৳{((position.exitPrice || position.currentPrice) * position.filledQuantity).toFixed(2)}
+                          </p>
                         </div>
                         <div className={cn(
                           "text-right",
                           position.pnl >= 0 ? "text-emerald-600" : "text-rose-600"
                         )}>
-                          <p className="text-muted-foreground">P&L</p>
-                          <p className="font-bold text-lg">
-                            {position.pnl >= 0 ? '+' : ''}{formatCurrency(position.pnlBDT, 'BDT')}
-                          </p>
-                          <p className="text-xs">
-                            {position.returnPercentage >= 0 ? '+' : ''}{position.returnPercentage.toFixed(2)}%
-                          </p>
+                          <p className="text-muted-foreground text-[10px] uppercase">P&L / ROI</p>
+                          <div className="flex items-baseline gap-1">
+                            <p className="font-bold text-base">
+                              {position.pnl >= 0 ? '+' : ''}৳{position.pnlBDT.toFixed(2)}
+                            </p>
+                            <p className="text-xs opacity-80">
+                              ({position.returnPercentage >= 0 ? '+' : ''}{position.returnPercentage.toFixed(2)}%)
+                            </p>
+                          </div>
                         </div>
-                        <div>
+
+                        {/* Action Buttons */}
+                        <div className="flex items-center gap-1 border-l border-border/50 pl-4 ml-2">
+                          <Button size="icon" variant="ghost" className="h-8 w-8 text-blue-500 hover:text-blue-600 hover:bg-blue-500/10 rounded-full" onClick={(e) => handleAction(e, 'add', position.id)} title="Add to Position">
+                            <PlusCircle className="h-4 w-4" />
+                          </Button>
+                          <Button size="icon" variant="ghost" className="h-8 w-8 text-amber-500 hover:text-amber-600 hover:bg-amber-500/10 rounded-full" onClick={(e) => handleAction(e, 'reduce', position.id)} title="Reduce Position">
+                            <MinusCircle className="h-4 w-4" />
+                          </Button>
+                          <Button size="icon" variant="ghost" className="h-8 w-8 text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 rounded-full" onClick={(e) => handleAction(e, 'close', position.id)} title="Close Position">
+                            <XSquare className="h-4 w-4" />
+                          </Button>
+                          <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-500 hover:text-slate-600 hover:bg-slate-500/10 rounded-full" onClick={(e) => handleAction(e, 'alert', position.id)} title="Set Price Alert">
+                            <BellRing className="h-4 w-4" />
+                          </Button>
+                        </div>
+
+                        {/* Expand Icon */}
+                        <div className="ml-2">
                           {expandedPosition === position.id ? (
                             <ChevronUp className="w-5 h-5 text-muted-foreground" />
                           ) : (
@@ -360,15 +392,15 @@ export function PositionHistory({ userId }: PositionHistoryProps) {
                             <History className="w-4 h-4" />
                             ট্রানজেকশন টাইমলাইন
                           </h5>
-                          
+
                           <div className="relative pl-8 space-y-6">
                             {/* Timeline Line */}
                             <div className="absolute left-3 top-2 bottom-2 w-0.5 bg-border" />
-                            
+
                             {position.events.map((event, index) => {
                               const config = eventTypeConfig[event.type];
                               const Icon = config.icon;
-                              
+
                               return (
                                 <motion.div
                                   key={event.id}
@@ -386,7 +418,7 @@ export function PositionHistory({ userId }: PositionHistoryProps) {
                                     config.color === 'purple' && "bg-purple-500",
                                     config.color === 'amber' && "bg-amber-500"
                                   )} />
-                                  
+
                                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-lg bg-background border">
                                     <div className="flex items-center gap-3">
                                       <div className={cn(
@@ -406,7 +438,7 @@ export function PositionHistory({ userId }: PositionHistoryProps) {
                                         </p>
                                       </div>
                                     </div>
-                                    
+
                                     {event.data.price && (
                                       <div className="text-right">
                                         <p className="font-medium">${event.data.price.toFixed(3)}</p>

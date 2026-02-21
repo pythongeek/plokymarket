@@ -101,6 +101,7 @@ export function ParameterConfigurationStage({
   const [resolutionSourceUrl, setResolutionSourceUrl] = useState(draft?.resolution_source_url || '');
   const [resolutionCriteria, setResolutionCriteria] = useState(draft?.resolution_criteria || '');
   const [resolutionDeadline, setResolutionDeadline] = useState(draft?.resolution_deadline?.slice(0, 16) || '');
+  const [resolutionConfig, setResolutionConfig] = useState<Record<string, any>>(draft?.resolution_config || { method: 'AI Oracle' });
 
   // Oracle & Verification
   const [oracleType, setOracleType] = useState(draft?.oracle_type || 'MANUAL');
@@ -153,6 +154,7 @@ export function ParameterConfigurationStage({
       resolution_source_url: resolutionSourceUrl,
       resolution_criteria: resolutionCriteria,
       resolution_deadline: resolutionDeadline ? new Date(resolutionDeadline).toISOString() : undefined,
+      resolution_config: resolutionConfig,
       oracle_type: oracleType,
       resolver_reference: selectedResolver,
       market_type: draft?.market_type,
@@ -397,6 +399,26 @@ export function ParameterConfigurationStage({
           <Eye className="w-5 h-5 text-cyan-400" />
           সমাধানের মানদণ্ড (Resolution Criteria)
         </h3>
+
+        <div className="space-y-2">
+          <Label className="text-slate-300">সমাধানের পদ্ধতি (Resolution Method) *</Label>
+          <Select
+            value={resolutionConfig.method}
+            onValueChange={(val: any) => setResolutionConfig(prev => ({ ...prev, method: val }))}
+          >
+            <SelectTrigger className="bg-slate-900 border-slate-700 text-white">
+              <SelectValue placeholder="পদ্ধতি নির্বাচন করুন" />
+            </SelectTrigger>
+            <SelectContent className="bg-slate-900 border-slate-700">
+              <SelectItem value="AI Oracle" className="text-white hover:bg-slate-800">
+                <span className="flex items-center gap-2"><Cpu className="w-3 h-3" /> এআই ওরাকল (AI Oracle)</span>
+              </SelectItem>
+              <SelectItem value="Expert Panel" className="text-white hover:bg-slate-800">
+                <span className="flex items-center gap-2"><Users className="w-3 h-3" /> বিশেষজ্ঞ প্যানেল (Expert Panel)</span>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">

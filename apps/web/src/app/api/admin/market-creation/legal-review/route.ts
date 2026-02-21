@@ -1,34 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { MarketCreationService } from '@/lib/market-creation/service';
 
 // GET /api/admin/market-creation/legal-review - Get review queue
 export async function GET() {
   try {
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
+
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Check admin status
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('is_admin, is_senior_counsel')
-      .eq('id', user.id)
-      .single();
+    const { data: profile } = await supabase.from('user_profiles').select('is_admin').eq('id', user.id).single();
+    if (!profile?.is_admin) return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
 
-    if (!profile?.is_admin) {
-      return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
-    }
-
-    // Get review queue
-    const { data, error } = await supabase.rpc('get_legal_review_queue', {
-      p_assignee_id: user.id
-    });
-
-    if (error) throw error;
-
+    const data = await MarketCreationService.getLegalReviewQueue(supabase, user.id);
     return NextResponse.json({ data });
   } catch (error: any) {
     console.error('Error fetching legal review queue:', error);
@@ -45,7 +32,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
+
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -59,14 +46,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { data, error } = await supabase.rpc('submit_for_legal_review', {
-      p_draft_id: draft_id,
-      p_submitter_notes: notes
-    });
-
-    if (error) throw error;
-
-    return NextResponse.json({ success: data });
+    const success = await MarketCreationService.submitForLegalReview(supabase, draft_id, notes);
+    return NextResponse.json({ success });
   } catch (error: any) {
     console.error('Error submitting for review:', error);
     return NextResponse.json(
@@ -82,7 +63,7 @@ export async function PATCH(req: NextRequest) {
     const body = await req.json();
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
+
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -123,16 +104,14 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
-    const { data, error } = await supabase.rpc('complete_legal_review', {
-      p_draft_id: draft_id,
-      p_reviewer_id: user.id,
-      p_status: status,
-      p_notes: notes
+    const success = await MarketCreationService.completeLegalReview(supabase, user.id, {
+      draft_id,
+      status,
+      notes,
+      is_senior_counsel: !!profile.is_senior_counsel
     });
 
-    if (error) throw error;
-
-    return NextResponse.json({ success: data });
+    return NextResponse.json({ success });
   } catch (error: any) {
     console.error('Error completing review:', error);
     return NextResponse.json(

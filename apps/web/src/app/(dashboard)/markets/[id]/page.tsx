@@ -11,6 +11,7 @@ import { CommentSection } from '@/components/social/CommentSection';
 import { TradingPanel } from '@/components/trading/TradingPanel';
 import { PriceChart } from '@/components/trading/PriceChart';
 import { PauseBanner } from '@/components/trading/PauseBanner';
+import { MarketInfoPanel } from '@/components/market/MarketInfoPanel';
 import { useMarketStore } from '@/store/marketStore';
 import { Market } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -324,6 +325,11 @@ export default function MarketDetailPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* New Market Information Panel */}
+          <div className="mt-6">
+            <MarketInfoPanel market={market} />
+          </div>
 
           {/* Comments Section - Enhanced with Threading & Social Features */}
           <div className="mt-10 pt-10 border-t border-primary/10">

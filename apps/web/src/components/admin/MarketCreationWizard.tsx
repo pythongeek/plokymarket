@@ -175,6 +175,8 @@ export function MarketCreationWizard({
         admin_bypass_simulation: adminBypass.simulation
       };
 
+      console.log("[MarketCreationWizard] Submitting Stage Data Payload to API:", mergedData);
+
       // Validate stage data
       const validationErrors = marketCreationService.validateStage(currentStage, mergedData);
       if (validationErrors.length > 0) {

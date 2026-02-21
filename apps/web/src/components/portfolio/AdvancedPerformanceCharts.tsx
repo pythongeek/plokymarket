@@ -19,14 +19,17 @@ import {
   Cell,
   Scatter,
   ScatterChart,
-  ZAxis
+  ZAxis,
+  PieChart as RechartsPieChart,
+  Pie,
+  Legend
 } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
-import { 
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -220,11 +223,11 @@ interface EquityCurveProps {
   }>;
 }
 
-function EquityCurve({ 
-  data, 
-  showBenchmark, 
+function EquityCurve({
+  data,
+  showBenchmark,
   activeBenchmarks,
-  showBDT, 
+  showBDT,
   currency,
   annotations = []
 }: EquityCurveProps) {
@@ -277,7 +280,7 @@ function EquityCurve({
               <p className="text-sm text-muted-foreground">কিউমুলেটিভ P&L উইথ ড্রয়ডাউন</p>
             </div>
           </div>
-          
+
           <div className="flex flex-wrap items-center gap-2">
             {/* Zoom Controls */}
             <div className="flex items-center bg-muted rounded-lg p-1">
@@ -306,7 +309,7 @@ function EquityCurve({
         {showBenchmark && (
           <div className="flex flex-wrap gap-2 mt-3">
             {BENCHMARKS.filter(b => activeBenchmarks.includes(b.id)).map(benchmark => (
-              <Badge 
+              <Badge
                 key={benchmark.id}
                 variant="outline"
                 className="text-xs"
@@ -318,41 +321,41 @@ function EquityCurve({
           </div>
         )}
       </CardHeader>
-      
+
       <CardContent className="p-0">
         <div className="h-[450px] relative">
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={displayData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
               <defs>
                 <linearGradient id="equityGradient2" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id="drawdownGradient2" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#ef4444" stopOpacity={0.2}/>
-                  <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                  <stop offset="5%" stopColor="#ef4444" stopOpacity={0.2} />
+                  <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              
+
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" opacity={0.4} />
-              
+
               <XAxis
                 dataKey="date"
-                tickFormatter={(date) => new Date(date).toLocaleDateString('bn-BD', { 
+                tickFormatter={(date) => new Date(date).toLocaleDateString('bn-BD', {
                   month: 'short',
                   day: 'numeric'
                 })}
                 stroke="#6b7280"
                 fontSize={12}
               />
-              
+
               <YAxis
                 yAxisId="left"
                 tickFormatter={(val) => formatCurrency(val * multiplier, currency, 0)}
                 stroke="#10b981"
                 fontSize={12}
               />
-              
+
               {showDrawdown && (
                 <YAxis
                   yAxisId="right"
@@ -362,7 +365,7 @@ function EquityCurve({
                   fontSize={12}
                 />
               )}
-              
+
               <Tooltip
                 content={({ active, payload, label }) => {
                   if (active && payload && payload.length) {
@@ -477,8 +480,8 @@ function BenchmarkComparison({ data, showBDT, currency }: BenchmarkComparisonPro
   const multiplier = showBDT ? 110 : 1;
 
   const toggleBenchmark = (id: BenchmarkType) => {
-    setActiveBenchmarks(prev => 
-      prev.includes(id) 
+    setActiveBenchmarks(prev =>
+      prev.includes(id)
         ? prev.filter(b => b !== id)
         : [...prev, id]
     );
@@ -489,10 +492,10 @@ function BenchmarkComparison({ data, showBDT, currency }: BenchmarkComparisonPro
     if (data.length > 0) {
       const correlations = activeBenchmarks.map(bm => {
         const bmKey = `${bm}Value`;
-        const portfolioReturns = data.slice(1).map((d, i) => 
+        const portfolioReturns = data.slice(1).map((d, i) =>
           (d.value - data[i].value) / data[i].value
         );
-        const benchmarkReturns = data.slice(1).map((d, i) => 
+        const benchmarkReturns = data.slice(1).map((d, i) =>
           ((d[bmKey] || d.value) - (data[i][bmKey] || data[i].value)) / (data[i][bmKey] || data[i].value)
         ).filter(r => !isNaN(r));
 
@@ -501,7 +504,7 @@ function BenchmarkComparison({ data, showBDT, currency }: BenchmarkComparisonPro
         const avgPort = portfolioReturns.reduce((a, b) => a + b, 0) / portfolioReturns.length;
         const avgBench = benchmarkReturns.reduce((a, b) => a + b, 0) / benchmarkReturns.length;
 
-        const numerator = portfolioReturns.reduce((sum, p, i) => 
+        const numerator = portfolioReturns.reduce((sum, p, i) =>
           sum + (p - avgPort) * (benchmarkReturns[i] - avgBench), 0
         );
         const denomPort = Math.sqrt(portfolioReturns.reduce((sum, p) => sum + Math.pow(p - avgPort, 2), 0));
@@ -535,7 +538,7 @@ function BenchmarkComparison({ data, showBDT, currency }: BenchmarkComparisonPro
           </div>
         </div>
       </CardHeader>
-      
+
       <CardContent className="space-y-6">
         {/* Benchmark Toggles */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
@@ -573,8 +576,8 @@ function BenchmarkComparison({ data, showBDT, currency }: BenchmarkComparisonPro
               {correlationData.map((item: any) => (
                 <div key={item.benchmark.id} className="bg-background rounded-lg p-4 border">
                   <div className="flex items-center gap-2 mb-2">
-                    <div 
-                      className="w-3 h-3 rounded-full" 
+                    <div
+                      className="w-3 h-3 rounded-full"
                       style={{ backgroundColor: item.benchmark.color }}
                     />
                     <span className="font-medium">{item.benchmark.nameBn}</span>
@@ -585,7 +588,7 @@ function BenchmarkComparison({ data, showBDT, currency }: BenchmarkComparisonPro
                       <p className={cn(
                         "text-lg font-bold",
                         Math.abs(item.correlation) > 0.7 ? "text-emerald-600" :
-                        Math.abs(item.correlation) > 0.4 ? "text-amber-600" : "text-rose-600"
+                          Math.abs(item.correlation) > 0.4 ? "text-amber-600" : "text-rose-600"
                       )}>
                         {item.correlation.toFixed(2)}
                       </p>
@@ -624,14 +627,14 @@ function RollingSharpe({ data, showBDT, currency }: RollingSharpeProps) {
       const newData = [];
       for (let i = windowSize; i < data.length; i++) {
         const windowData = data.slice(i - windowSize, i);
-        const returns = windowData.slice(1).map((d, idx) => 
+        const returns = windowData.slice(1).map((d, idx) =>
           (d.value - windowData[idx].value) / windowData[idx].value
         );
-        
+
         const avgReturn = returns.reduce((a, b) => a + b, 0) / returns.length;
         const stdDev = Math.sqrt(returns.reduce((sq, n) => sq + Math.pow(n - avgReturn, 2), 0) / returns.length);
         const sharpe = stdDev > 0 ? (avgReturn * 365 - 0.05) / (stdDev * Math.sqrt(365)) : 0;
-        
+
         newData.push({
           date: data[i].date,
           value: sharpe,
@@ -655,7 +658,7 @@ function RollingSharpe({ data, showBDT, currency }: RollingSharpeProps) {
               <p className="text-sm text-muted-foreground">রিস্ক-অ্যাডজাস্টেড রিটার্ন</p>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-4 bg-muted/50 rounded-lg px-4 py-2">
             <span className="text-sm text-muted-foreground">উইন্ডো:</span>
             <Slider
@@ -670,7 +673,7 @@ function RollingSharpe({ data, showBDT, currency }: RollingSharpeProps) {
           </div>
         </div>
       </CardHeader>
-      
+
       <CardContent>
         <div className="h-[300px]">
           <ResponsiveContainer width="100%" height="100%">
@@ -714,7 +717,7 @@ function RollingSharpe({ data, showBDT, currency }: RollingSharpeProps) {
             </ComposedChart>
           </ResponsiveContainer>
         </div>
-        
+
         <div className="flex justify-between items-center mt-4 text-sm text-muted-foreground">
           <span>📊 শার্প রেশিও &gt; 1 = ভালো পারফরম্যান্স</span>
           <span>বর্তমান উইন্ডো: {windowSize} দিন</span>
@@ -739,12 +742,12 @@ function WinLossDistribution({ data, positions }: WinLossDistributionProps) {
 
   const filteredData = useMemo(() => {
     let filtered = [...data];
-    
+
     if (marketTypeFilter !== 'all') {
       // Filter by market category
       filtered = filtered.filter((item: any) => item.category === marketTypeFilter);
     }
-    
+
     if (sizeFilter !== 'all') {
       // Filter by trade size
       filtered = filtered.filter((item: any) => {
@@ -755,7 +758,7 @@ function WinLossDistribution({ data, positions }: WinLossDistributionProps) {
         return true;
       });
     }
-    
+
     return filtered;
   }, [data, marketTypeFilter, sizeFilter]);
 
@@ -764,7 +767,7 @@ function WinLossDistribution({ data, positions }: WinLossDistributionProps) {
     let currentLossStreak = 0;
     let maxWinStreak = 0;
     let maxLossStreak = 0;
-    
+
     positions.forEach((pos: any) => {
       if (pos.pnl > 0) {
         currentWinStreak++;
@@ -776,7 +779,7 @@ function WinLossDistribution({ data, positions }: WinLossDistributionProps) {
         maxLossStreak = Math.max(maxLossStreak, currentLossStreak);
       }
     });
-    
+
     return { currentWinStreak, currentLossStreak, maxWinStreak, maxLossStreak };
   }, [positions]);
 
@@ -793,7 +796,7 @@ function WinLossDistribution({ data, positions }: WinLossDistributionProps) {
               <p className="text-sm text-muted-foreground">প্রফিট/লস হিস্টোগ্রাম উইথ স্ট্রীক অ্যানালাইসিস</p>
             </div>
           </div>
-          
+
           <div className="flex flex-wrap gap-2">
             <Select value={marketTypeFilter} onValueChange={setMarketTypeFilter}>
               <SelectTrigger className="w-[140px]">
@@ -809,7 +812,7 @@ function WinLossDistribution({ data, positions }: WinLossDistributionProps) {
                 <SelectItem value="entertainment">বিনোদন</SelectItem>
               </SelectContent>
             </Select>
-            
+
             <Select value={sizeFilter} onValueChange={setSizeFilter}>
               <SelectTrigger className="w-[130px]">
                 <SelectValue placeholder="ট্রেড সাইজ" />
@@ -824,7 +827,7 @@ function WinLossDistribution({ data, positions }: WinLossDistributionProps) {
           </div>
         </div>
       </CardHeader>
-      
+
       <CardContent className="space-y-6">
         {/* Streak Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -835,7 +838,7 @@ function WinLossDistribution({ data, positions }: WinLossDistributionProps) {
             </div>
             <p className="text-3xl font-bold text-emerald-600">{streakData.currentWinStreak}W</p>
           </div>
-          
+
           <div className="bg-rose-50 rounded-xl p-4 border border-rose-200">
             <div className="flex items-center gap-2 mb-2">
               <TrendingDown className="w-5 h-5 text-rose-600" />
@@ -843,7 +846,7 @@ function WinLossDistribution({ data, positions }: WinLossDistributionProps) {
             </div>
             <p className="text-3xl font-bold text-rose-600">{streakData.currentLossStreak}L</p>
           </div>
-          
+
           <div className="bg-amber-50 rounded-xl p-4 border border-amber-200">
             <div className="flex items-center gap-2 mb-2">
               <Target className="w-5 h-5 text-amber-600" />
@@ -851,7 +854,7 @@ function WinLossDistribution({ data, positions }: WinLossDistributionProps) {
             </div>
             <p className="text-3xl font-bold text-amber-600">{streakData.maxWinStreak}W</p>
           </div>
-          
+
           <div className="bg-purple-50 rounded-xl p-4 border border-purple-200">
             <div className="flex items-center gap-2 mb-2">
               <Activity className="w-5 h-5 text-purple-600" />
@@ -955,10 +958,10 @@ function CalendarHeatmapAdvanced({ data, currency, multiplier }: CalendarHeatmap
               <p className="text-sm text-muted-foreground">ক্লিক করে ডিটেল দেখুন</p>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-2">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               size="sm"
               onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1))}
             >
@@ -967,8 +970,8 @@ function CalendarHeatmapAdvanced({ data, currency, multiplier }: CalendarHeatmap
             <span className="font-medium min-w-[120px] text-center">
               {months[currentMonth.getMonth()]} {currentMonth.getFullYear()}
             </span>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               size="sm"
               onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1))}
             >
@@ -977,7 +980,7 @@ function CalendarHeatmapAdvanced({ data, currency, multiplier }: CalendarHeatmap
           </div>
         </div>
       </CardHeader>
-      
+
       <CardContent>
         {/* Legend */}
         <div className="flex items-center gap-4 mb-4 flex-wrap">
@@ -1001,7 +1004,7 @@ function CalendarHeatmapAdvanced({ data, currency, multiplier }: CalendarHeatmap
               {day}
             </div>
           ))}
-          
+
           {currentData.map((day) => (
             <Dialog key={day.date}>
               <DialogTrigger asChild>
@@ -1049,6 +1052,91 @@ function CalendarHeatmapAdvanced({ data, currency, multiplier }: CalendarHeatmap
 }
 
 // ============================================
+// CATEGORY PERFORMANCE COMPONENT
+// ============================================
+
+interface CategoryPerformanceProps {
+  data: any[];
+  showBDT: boolean;
+  currency: string;
+}
+
+const CATEGORY_COLORS: Record<string, string> = {
+  'Sports': '#3b82f6',
+  'Politics': '#ef4444',
+  'Crypto': '#f59e0b',
+  'Economy': '#10b981',
+  'Entertainment': '#8b5cf6',
+  'Other': '#6b7280'
+};
+
+function CategoryPerformanceChart({ data, showBDT, currency }: CategoryPerformanceProps) {
+  const multiplier = showBDT ? 110 : 1;
+
+  if (!data || data.length === 0) return null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-indigo-100 rounded-lg">
+            <PieChart className="w-5 h-5 text-indigo-600" />
+          </div>
+          <div>
+            <CardTitle className="text-lg">ক্যাটাগরি অনুযায়ী পারফরম্যান্স</CardTitle>
+            <p className="text-sm text-muted-foreground">কোন ক্যাটাগরিতে কেমন লাভ/ক্ষতি</p>
+          </div>
+        </div>
+      </CardHeader>
+
+      <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+        <div className="h-[250px] w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <RechartsPieChart>
+              <Pie
+                data={data}
+                dataKey="pnl"
+                nameKey="category"
+                cx="50%"
+                cy="50%"
+                innerRadius={60}
+                outerRadius={80}
+                paddingAngle={5}
+              >
+                {data.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={CATEGORY_COLORS[entry.category] || CATEGORY_COLORS['Other']} />
+                ))}
+              </Pie>
+              <Tooltip
+                formatter={(value: number) => formatCurrency(value * multiplier, currency)}
+                contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0' }}
+              />
+            </RechartsPieChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="space-y-3">
+          {data.map((cat, i) => (
+            <div key={i} className="flex justify-between items-center bg-muted/30 p-3 rounded-lg border">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full" style={{ background: CATEGORY_COLORS[cat.category] || CATEGORY_COLORS['Other'] }} />
+                <div>
+                  <p className="font-semibold text-sm">{cat.category}</p>
+                  <p className="text-xs text-muted-foreground">{cat.totalTrades}টি ট্রেড ({cat.winRate.toFixed(1)}% উইন রেট)</p>
+                </div>
+              </div>
+              <div className={cn("font-bold text-right", cat.pnl >= 0 ? "text-emerald-600" : "text-rose-600")}>
+                {cat.pnl >= 0 ? '+' : ''}{formatCurrency(cat.pnl * multiplier, currency)}
+              </div>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ============================================
 // MAIN COMPONENT
 // ============================================
 
@@ -1059,7 +1147,7 @@ export function AdvancedPerformanceCharts({ userId }: AdvancedPerformanceChartsP
   const [activeBenchmarks, setActiveBenchmarks] = useState<BenchmarkType[]>(['sp500', 'crypto']);
   const [isCapturing, setIsCapturing] = useState(false);
   const chartContainerRef = useRef<HTMLDivElement>(null);
-  
+
   const { data, stats, loading, error } = usePerformanceCharts(userId, timeframe);
   const { getCachedData } = useOfflineCache(`perf_${userId}_${timeframe}`, data);
 
@@ -1078,11 +1166,11 @@ export function AdvancedPerformanceCharts({ userId }: AdvancedPerformanceChartsP
 
   const handleShare = async () => {
     if (!chartContainerRef.current) return;
-    
+
     setIsCapturing(true);
     try {
       const imageUrl = await captureChartWithWatermark(chartContainerRef.current, userId || 'Trader');
-      
+
       // Copy to clipboard or download
       if (navigator.share) {
         const blob = await (await fetch(imageUrl)).blob();
@@ -1108,7 +1196,7 @@ export function AdvancedPerformanceCharts({ userId }: AdvancedPerformanceChartsP
 
   const handleDownload = async () => {
     if (!chartContainerRef.current) return;
-    
+
     setIsCapturing(true);
     try {
       const imageUrl = await captureChartWithWatermark(chartContainerRef.current, userId || 'Trader');
@@ -1205,17 +1293,17 @@ export function AdvancedPerformanceCharts({ userId }: AdvancedPerformanceChartsP
           </div>
 
           {/* Share & Download */}
-          <Button 
-            variant="outline" 
-            size="icon" 
+          <Button
+            variant="outline"
+            size="icon"
             onClick={handleShare}
             disabled={isCapturing}
           >
             <Share2 className="w-4 h-4" />
           </Button>
-          <Button 
-            variant="outline" 
-            size="icon" 
+          <Button
+            variant="outline"
+            size="icon"
             onClick={handleDownload}
             disabled={isCapturing}
           >
@@ -1286,37 +1374,44 @@ export function AdvancedPerformanceCharts({ userId }: AdvancedPerformanceChartsP
 
       {/* Charts */}
       <div className="space-y-6">
-        <EquityCurve 
-          data={data.equity} 
+        <EquityCurve
+          data={data.equity}
           showBenchmark={showBenchmark}
           activeBenchmarks={activeBenchmarks}
           showBDT={showBDT}
           currency={currency}
         />
-        
-        <BenchmarkComparison 
+
+        <BenchmarkComparison
           data={data.equity}
           showBDT={showBDT}
           currency={currency}
         />
-        
-        <RollingSharpe 
+
+        <RollingSharpe
           data={data.equity}
           showBDT={showBDT}
           currency={currency}
         />
-        
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <WinLossDistribution 
+          <WinLossDistribution
             data={data.winLossDistribution}
             positions={[]}
           />
-          <CalendarHeatmapAdvanced 
+          <CalendarHeatmapAdvanced
             data={data.calendar}
             currency={currency}
             multiplier={multiplier}
           />
         </div>
+
+        {/* Category Performance Breakdown */}
+        <CategoryPerformanceChart
+          data={data.categoryBreakdown}
+          showBDT={showBDT}
+          currency={currency}
+        />
       </div>
     </div>
   );

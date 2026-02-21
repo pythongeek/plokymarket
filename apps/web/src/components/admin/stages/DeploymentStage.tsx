@@ -41,9 +41,9 @@ interface DeploymentStageProps {
 type DeployStatus = 'idle' | 'validating' | 'creating' | 'indexing' | 'complete' | 'error';
 
 const DEPLOY_STEPS = [
-  { id: 'validate', label: 'যাচাইকরণ', labelEn: 'Validating', icon: Shield },
-  { id: 'create', label: 'মার্কেট তৈরি', labelEn: 'Creating Market', icon: Globe },
-  { id: 'index', label: 'ইনডেক্সিং', labelEn: 'Indexing', icon: Eye },
+  { id: 'EVENT_CREATED', label: 'ইভেন্ট সিঙ্ক', labelEn: 'Event Sync', icon: Globe },
+  { id: 'MARKET_DEPLOYED', label: 'মার্কেট তৈরি', labelEn: 'Creating Market', icon: Shield },
+  { id: 'LIQUIDITY_ADDED', label: 'প্রাথমিক তারল্য', labelEn: 'Adding Liquidity', icon: Wallet },
   { id: 'complete', label: 'সম্পন্ন', labelEn: 'Complete', icon: Check }
 ];
 
@@ -64,30 +64,38 @@ export function DeploymentStage({
   const [currentStep, setCurrentStep] = useState(0);
 
   const handleDeploy = async () => {
-    setDeployStatus('validating');
+    setDeployStatus('creating');
     setDeployError(null);
     setCurrentStep(0);
 
     try {
-      // Step 1: Validate
-      await new Promise(resolve => setTimeout(resolve, 800));
-      setCurrentStep(1);
-      setDeployStatus('creating');
-
-      // Step 2: Deploy via API
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Execute the "One Shot" unified flow via single API call to the service layer
       const result = await marketCreationService.deployMarket(draft.id, {
         verification_method: draft.verification_method,
         required_confirmations: draft.required_confirmations,
         admin_bypasses: adminBypass
       });
 
-      setCurrentStep(2);
-      setDeployStatus('indexing');
+      // The backend fulfilled the steps atomically. We process the returned interface array to animate the UI.
+      const returnedSteps = result.steps || [];
 
-      // Step 3: Index
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      setCurrentStep(3);
+      for (let i = 0; i < returnedSteps.length; i++) {
+        const step = returnedSteps[i];
+        if (step.status === 'SUCCESS' || step.status === 'PENDING') {
+          // Find correlating index in DEPLOY_STEPS
+          const stepIndex = DEPLOY_STEPS.findIndex(s => s.id === step.stage);
+          if (stepIndex >= 0) {
+            setCurrentStep(stepIndex);
+
+            // Artificial delay for UX so user can see progress stages visually
+            await new Promise(resolve => setTimeout(resolve, 800));
+          }
+        } else if (step.status === 'FAILED') {
+          throw new Error(step.error || `Failed at stage ${step.stage}`);
+        }
+      }
+
+      setCurrentStep(DEPLOY_STEPS.length - 1); // target complete step
       setDeployStatus('complete');
       setDeployedMarketId(result.market_id);
 

@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { Activity, ChevronRight, BarChart2, ArrowUpRight } from 'lucide-react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
+import { useMarketsRealtime } from '@/hooks/useMarketsRealtime';
+import { useMarketStore, selectEvents } from '@/store/marketStore';
 
 interface MarketCardProps {
     id: string;
@@ -78,8 +80,22 @@ export function MarketCard({ market }: { market: MarketCardProps }) {
     );
 }
 
-export default function MarketGrid({ title, icon: Icon, markets, tag }: { title: string, icon: any, markets: any[], tag?: string }) {
+export default function MarketGrid({ title, icon: Icon, markets: propMarkets, tag }: { title: string, icon: any, markets: any[], tag?: string }) {
     const { t } = useTranslation();
+
+    // 1. Initialize Real-time Subscriptions
+    useMarketsRealtime();
+
+    // 2. Select reactive data from store
+    const storeEvents = useMarketStore(selectEvents);
+
+    // 3. Filter store events based on tag/category if provided
+    const displayMarkets = tag
+        ? storeEvents.filter((e: any) => e.category?.toLowerCase() === tag.toLowerCase()).slice(0, 3)
+        : propMarkets;
+
+    // Use store data if available, otherwise fallback to props (for initial load/SSR)
+    const marketsToRender = (displayMarkets && displayMarkets.length > 0) ? displayMarkets : propMarkets;
 
     return (
         <section className="py-2">
@@ -94,7 +110,7 @@ export default function MarketGrid({ title, icon: Icon, markets, tag }: { title:
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {markets.map((market) => (
+                {marketsToRender.map((market: any) => (
                     <MarketCard key={market.id} market={{ ...market, category: market.category_label || market.category }} />
                 ))}
             </div>

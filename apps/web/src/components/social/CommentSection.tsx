@@ -16,41 +16,26 @@ import { socialService, type Comment } from '@/lib/social/service';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/components/ui/use-toast';
 import { createClient } from '@/lib/supabase/client';
+import { useComments } from '@/hooks/social/useComments';
 
 interface CommentSectionProps {
     eventId: string;
 }
 
 export function CommentSection({ eventId }: CommentSectionProps) {
-    const [comments, setComments] = useState<Comment[]>([]);
+    const { comments, loading, fetchComments, addOptimisticComment } = useComments(eventId);
     const [newComment, setNewComment] = useState('');
     const [replyTo, setReplyTo] = useState<string | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editContent, setEditContent] = useState('');
-    const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
-    const [userId, setUserId] = useState<string | null>(null);
+    const [user, setUser] = useState<any>(null);
     const { toast } = useToast();
     const supabase = createClient();
 
     useEffect(() => {
-        supabase.auth.getUser().then(({ data }: { data: { user: any } }) => setUserId(data.user?.id || null));
-    }, []);
-
-    const fetchComments = useCallback(async () => {
-        try {
-            const data = await socialService.getComments(eventId);
-            setComments(data);
-        } catch (err) {
-            console.error('Failed to fetch comments', err);
-        } finally {
-            setLoading(false);
-        }
-    }, [eventId]);
-
-    useEffect(() => {
-        fetchComments();
-    }, [fetchComments]);
+        supabase.auth.getUser().then(({ data }: any) => setUser(data.user));
+    }, [supabase.auth]);
 
     const handlePost = async (parentId: string | null = null) => {
         const content = parentId ? editContent : newComment;
@@ -61,12 +46,35 @@ export function CommentSection({ eventId }: CommentSectionProps) {
 
         setSubmitting(true);
         try {
-            await socialService.postComment(eventId, content, parentId);
+            // Optimistic addition before the server roundtrip
+            const optimisticTempId = `temp-${Date.now()}`;
+            const optimisticComment: Comment = {
+                id: optimisticTempId,
+                event_id: eventId,
+                user_id: user?.id || '',
+                content,
+                parent_id: parentId,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+                is_deleted: false,
+                user: {
+                    full_name: user?.user_metadata?.full_name || user?.email || 'You',
+                    avatar_url: user?.user_metadata?.avatar_url
+                },
+                replies: []
+            };
+
+            addOptimisticComment(optimisticComment);
             setNewComment('');
             setReplyTo(null);
             setEditContent('');
-            fetchComments();
+
+            // Send to DB
+            await socialService.postComment(eventId, content, parentId);
             toast({ title: 'সাফল্য', description: 'আপনার কমেন্ট যোগ করা হয়েছে।' });
+
+            // Channel handles the refetch normally, but just to be safe
+            fetchComments();
         } catch (err: any) {
             toast({ title: 'ত্রুটি', description: err.message, variant: 'destructive' });
         } finally {
@@ -107,8 +115,8 @@ export function CommentSection({ eventId }: CommentSectionProps) {
         return d.toLocaleDateString('bn-BD');
     };
 
-    const CommentItem = ({ comment, isReply = false }: { comment: Comment; isReply?: boolean }) => {
-        const isOwner = userId === comment.user_id;
+    const CommentItem = ({ comment, isReply = false, level = 0 }: { comment: Comment; isReply?: boolean; level?: number }) => {
+        const isOwner = user?.id === comment.user_id;
         const canEdit = isOwner && (new Date().getTime() - new Date(comment.created_at).getTime() < 5 * 60 * 1000);
 
         return (
@@ -175,7 +183,7 @@ export function CommentSection({ eventId }: CommentSectionProps) {
                         )}
                     </div>
 
-                    {!comment.is_deleted && !isReply && (
+                    {!comment.is_deleted && level < 2 && (
                         <div className="flex items-center gap-4 mt-2">
                             <button
                                 onClick={() => { setReplyTo(comment.id); setEditContent(''); }}
@@ -207,7 +215,7 @@ export function CommentSection({ eventId }: CommentSectionProps) {
                     {comment.replies && comment.replies.length > 0 && (
                         <div className="mt-2 space-y-3">
                             {comment.replies.map(reply => (
-                                <CommentItem key={reply.id} comment={reply} isReply />
+                                <CommentItem key={reply.id} comment={reply} isReply level={level + 1} />
                             ))}
                         </div>
                     )}

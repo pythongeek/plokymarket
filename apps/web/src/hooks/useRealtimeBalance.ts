@@ -1,1 +1,82 @@
-'use client';\n\nimport { useState, useEffect, useCallback } from 'react';\nimport { createClient } from '@/lib/supabase/client';\n\ninterface WalletBalance {\n  usdt_balance: number;\n  locked_usdt: number;\n  total_deposited: number;\n  total_withdrawn: number;\n}\n\nexport function useRealtimeBalance() {\n  const [balance, setBalance] = useState<WalletBalance | null>(null);\n  const [loading, setLoading] = useState(true);\n  const [error, setError] = useState<string | null>(null);\n  const supabase = createClient();\n\n  const fetchBalance = useCallback(async () => {\n    try {\n      setLoading(true);\n      const { data: { user } } = await supabase.auth.getUser();\n      if (!user) {\n        setBalance(null);\n        return;\n      }\n\n      const { data, error: fetchError } = await supabase\n        .from('wallets')\n        .select('*')\n        .eq('user_id', user.id)\n        .single();\n\n      if (fetchError) throw fetchError;\n      setBalance(data);\n      setError(null);\n    } catch (err: any) {\n      setError(err.message);\n      console.error('ব্যালেন্স লোডে সমস্যা:', err);\n    } finally {\n      setLoading(false);\n    }\n  }, []);\n\n  useEffect(() => {\n    fetchBalance();\n\n    // Real-time subscription for balance updates\n    const channel = supabase\n      .channel('wallet_balance_changes')\n      .on(\n        'postgres_changes',\n        {\n          event: '*',\n          schema: 'public',\n          table: 'wallets',\n        },\n        (payload) => {\n          if (payload.new) {\n            setBalance(payload.new as WalletBalance);\n          }\n        }\n      )\n      .subscribe();\n\n    return () => {\n      supabase.removeChannel(channel);\n    };\n  }, [fetchBalance]);\n\n  const refreshBalance = useCallback(async () => {\n    await fetchBalance();\n  }, [fetchBalance]);\n\n  return {\n    balance,\n    loading,\n    error,\n    refreshBalance,\n    availableBalance: (balance?.usdt_balance || 0) - (balance?.locked_usdt || 0),\n  };\n}
+'use client';
+
+import { useState, useEffect, useCallback } from 'react';
+import { createClient } from '@/lib/supabase/client';
+
+interface WalletBalance {
+    usdt_balance: number;
+    locked_usdt: number;
+    total_deposited: number;
+    total_withdrawn: number;
+}
+
+export function useRealtimeBalance() {
+    const [balance, setBalance] = useState<WalletBalance | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const supabase = createClient();
+
+    const fetchBalance = useCallback(async () => {
+        try {
+            setLoading(true);
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                setBalance(null);
+                return;
+            }
+
+            const { data, error: fetchError } = await supabase
+                .from('wallets')
+                .select('*')
+                .eq('user_id', user.id)
+                .single();
+
+            if (fetchError) throw fetchError;
+            setBalance(data);
+            setError(null);
+        } catch (err: any) {
+            setError(err.message);
+            console.error('ব্যালেন্স লোডে সমস্যা:', err);
+        } finally {
+            setLoading(false);
+        }
+    }, [supabase]);
+
+    useEffect(() => {
+        fetchBalance();
+
+        // Real-time subscription for balance updates
+        const channel = supabase
+            .channel('wallet_balance_changes')
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'wallets',
+                },
+                (payload: any) => {
+                    if (payload.new) {
+                        setBalance(payload.new as WalletBalance);
+                    }
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [fetchBalance, supabase]);
+
+    const refreshBalance = useCallback(async () => {
+        await fetchBalance();
+    }, [fetchBalance]);
+
+    return {
+        balance,
+        loading,
+        error,
+        refreshBalance,
+        availableBalance: (balance?.usdt_balance || 0) - (balance?.locked_usdt || 0),
+    };
+}

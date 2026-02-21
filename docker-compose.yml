@@ -1,6 +1,22 @@
 version: '3.8'
 
 services:
+  # 0. Local Supabase
+  supabase:
+    image: supabase/supabase-local:latest
+    container_name: polymarket-supabase
+    ports:
+      - "54321:54321" # PostgreSQL
+      - "54322:54322" # Supabase Studio
+      - "54323:54323" # Realtime
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+    volumes:
+      - supabase-data:/var/lib/postgresql/data
+    networks:
+      - polymarket_net
+
   # 1. Main n8n Instance (General Logic)
   n8n:
     image: docker.n8n.io/n8nio/n8n
@@ -66,6 +82,7 @@ services:
       - polymarket_net
 
 volumes:
+  supabase-data:
   n8n_data:
   n8n_p2p_data:
 

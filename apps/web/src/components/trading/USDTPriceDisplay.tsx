@@ -1,18 +1,18 @@
-"'use client';
+'use client';
 
 import { useState } from 'react';
 import { useBinancePrice } from '@/hooks/useBinancePrice';
 import { cn } from '@/lib/utils';
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  RefreshCw, 
-  Wifi, 
+import {
+  TrendingUp,
+  TrendingDown,
+  RefreshCw,
+  Wifi,
   WifiOff,
   DollarSign,
   Activity
 } from 'lucide-react';
-import { 
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -38,13 +38,13 @@ export function USDTPriceDisplay({
   className,
   onPriceClick,
 }: USDTPriceDisplayProps) {
-  const { 
-    price, 
-    priceValue, 
-    loading, 
-    error, 
-    isConnected, 
-    refresh, 
+  const {
+    price,
+    priceValue,
+    loading,
+    error,
+    isConnected,
+    refresh,
     change24h,
     lastUpdated,
   } = useBinancePrice({
@@ -61,8 +61,8 @@ export function USDTPriceDisplay({
 
   const formatTime = (date: Date | null) => {
     if (!date) return '--:--';
-    return date.toLocaleTimeString('en-US', { 
-      hour: '2-digit', 
+    return date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
       minute: '2-digit',
       second: '2-digit',
     });
@@ -72,17 +72,17 @@ export function USDTPriceDisplay({
 
   if (compact) {
     return (
-      <div 
+      <div
         className={cn(
           'flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50 cursor-pointer hover:bg-muted transition-colors',
           className
         )}
         onClick={onPriceClick}
       >
-        <DollarSign className=\"h-4 w-4 text-muted-foreground\" />
-        <span className=\"font-medium\">
+        <DollarSign className="h-4 w-4 text-muted-foreground" />
+        <span className="font-medium">
           {loading ? (
-            <span className=\"text-muted-foreground\">--</span>
+            <span className="text-muted-foreground">--</span>
           ) : (
             <span>৳{priceValue?.toFixed(2)}</span>
           )}
@@ -100,9 +100,9 @@ export function USDTPriceDisplay({
             <Tooltip>
               <TooltipTrigger>
                 {isConnected ? (
-                  <Wifi className=\"h-3 w-3 text-green-500\" />
+                  <Wifi className="h-3 w-3 text-green-500" />
                 ) : (
-                  <WifiOff className=\"h-3 w-3 text-yellow-500\" />
+                  <WifiOff className="h-3 w-3 text-yellow-500" />
                 )}
               </TooltipTrigger>
               <TooltipContent>
@@ -120,45 +120,45 @@ export function USDTPriceDisplay({
       'rounded-xl border bg-card p-4 shadow-sm',
       className
     )}>
-      <div className=\"flex items-center justify-between mb-3\">
-        <div className=\"flex items-center gap-2\">
-          <div className=\"p-2 rounded-lg bg-primary/10\">
-            <DollarSign className=\"h-5 w-5 text-primary\" />
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <div className="p-2 rounded-lg bg-primary/10">
+            <DollarSign className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h3 className=\"font-semibold\">USDT/BDT Rate</h3>
-            <p className=\"text-xs text-muted-foreground\">
-              {price?.source === 'p2p' ? 'Binance P2P' : 
-               price?.source === 'websocket' ? 'Live Stream' : 
-               price?.source === 'spot' ? 'Spot Market' : 'Loading...'}
+            <h3 className="font-semibold">USDT/BDT Rate</h3>
+            <p className="text-xs text-muted-foreground">
+              {price?.source === 'p2p' ? 'Binance P2P' :
+                price?.source === 'websocket' ? 'Live Stream' :
+                  price?.source === 'spot' ? 'Spot Market' : 'Loading...'}
             </p>
           </div>
         </div>
-        
-        <div className=\"flex items-center gap-2\">
+
+        <div className="flex items-center gap-2">
           {showConnection && (
-            <Badge 
+            <Badge
               variant={isConnected ? 'default' : 'secondary'}
-              className=\"gap-1\"
+              className="gap-1"
             >
               {isConnected ? (
                 <>
-                  <Activity className=\"h-3 w-3 animate-pulse\" />
+                  <Activity className="h-3 w-3 animate-pulse" />
                   Live
                 </>
               ) : (
                 <>
-                  <WifiOff className=\"h-3 w-3\" />
+                  <WifiOff className="h-3 w-3" />
                   Offline
                 </>
               )}
             </Badge>
           )}
-          
+
           {showRefresh && (
             <Button
-              variant=\"ghost\"
-              size=\"icon\"
+              variant="ghost"
+              size="icon"
               onClick={handleRefresh}
               disabled={loading || isRefreshing}
             >
@@ -171,29 +171,29 @@ export function USDTPriceDisplay({
         </div>
       </div>
 
-      <div className=\"space-y-2\">
-        <div className=\"flex items-end gap-3\">
-          <span className=\"text-4xl font-bold tracking-tight\">
+      <div className="space-y-2">
+        <div className="flex items-end gap-3">
+          <span className="text-4xl font-bold tracking-tight">
             {loading ? (
-              <span className=\"text-muted-foreground animate-pulse\">---.--</span>
+              <span className="text-muted-foreground animate-pulse">---.--</span>
             ) : error ? (
-              <span className=\"text-destructive\">Error</span>
+              <span className="text-destructive">Error</span>
             ) : (
               <>৳{priceValue?.toFixed(2)}</>
             )}
           </span>
-          
+
           {change24h !== null && (
             <div className={cn(
               'flex items-center gap-1 px-2 py-1 rounded-full text-sm font-medium',
-              isPositiveChange 
-                ? 'bg-green-500/10 text-green-600 dark:text-green-400' 
+              isPositiveChange
+                ? 'bg-green-500/10 text-green-600 dark:text-green-400'
                 : 'bg-red-500/10 text-red-600 dark:text-red-400'
             )}>
               {isPositiveChange ? (
-                <TrendingUp className=\"h-4 w-4\" />
+                <TrendingUp className="h-4 w-4" />
               ) : (
-                <TrendingDown className=\"h-4 w-4\" />
+                <TrendingDown className="h-4 w-4" />
               )}
               <span>{isPositiveChange ? '+' : ''}{change24h.toFixed(2)}%</span>
             </div>
@@ -201,33 +201,33 @@ export function USDTPriceDisplay({
         </div>
 
         {detailed && price && (
-          <div className=\"grid grid-cols-2 gap-4 pt-3 border-t\">
+          <div className="grid grid-cols-2 gap-4 pt-3 border-t">
             <div>
-              <p className=\"text-xs text-muted-foreground\">24h High</p>
-              <p className=\"font-medium\">৳{price.high24h?.toFixed(2) ?? '--'}</p>
+              <p className="text-xs text-muted-foreground">24h High</p>
+              <p className="font-medium">৳{price.high24h?.toFixed(2) ?? '--'}</p>
             </div>
             <div>
-              <p className=\"text-xs text-muted-foreground\">24h Low</p>
-              <p className=\"font-medium\">৳{price.low24h?.toFixed(2) ?? '--'}</p>
+              <p className="text-xs text-muted-foreground">24h Low</p>
+              <p className="font-medium">৳{price.low24h?.toFixed(2) ?? '--'}</p>
             </div>
             <div>
-              <p className=\"text-xs text-muted-foreground\">Volume (24h)</p>
-              <p className=\"font-medium\">
-                {price.volume24h 
+              <p className="text-xs text-muted-foreground">Volume (24h)</p>
+              <p className="font-medium">
+                {price.volume24h
                   ? `$${(price.volume24h / 1e9).toFixed(2)}B`
                   : '--'}
               </p>
             </div>
             <div>
-              <p className=\"text-xs text-muted-foreground\">Last Updated</p>
-              <p className=\"font-medium\">{formatTime(lastUpdated)}</p>
+              <p className="text-xs text-muted-foreground">Last Updated</p>
+              <p className="font-medium">{formatTime(lastUpdated)}</p>
             </div>
           </div>
         )}
       </div>
 
       {error && (
-        <div className=\"mt-3 p-2 rounded-lg bg-destructive/10 text-destructive text-sm\">
+        <div className="mt-3 p-2 rounded-lg bg-destructive/10 text-destructive text-sm">
           {error}
         </div>
       )}
@@ -247,8 +247,8 @@ export function USDTPriceTicker({ className }: { className?: string }) {
       'flex items-center gap-2 text-sm',
       className
     )}>
-      <span className=\"font-medium\">USDT</span>
-      <span className=\"font-bold\">৳{priceValue?.toFixed(2) ?? '--.--'}</span>
+      <span className="font-medium">USDT</span>
+      <span className="font-bold">৳{priceValue?.toFixed(2) ?? '--.--'}</span>
       {change24h !== null && (
         <span className={cn(
           'text-xs',
@@ -265,4 +265,4 @@ export function USDTPriceTicker({ className }: { className?: string }) {
   );
 }
 
-export default USDTPriceDisplay;"
+export default USDTPriceDisplay;

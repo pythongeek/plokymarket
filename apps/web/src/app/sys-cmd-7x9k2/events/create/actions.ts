@@ -43,54 +43,36 @@ export async function createMarketAction(data: MarketFormData) {
             return { error: { slug: ['এই Slug টি ইতিমধ্যে ব্যবহৃত হচ্ছে। অন্য একটি চেষ্টা করুন।'] } };
         }
 
-        // 4. Database Insertion
-        const eventId = crypto.randomUUID();
+        // 4. Create Event & Market via Services
+        const { eventService } = await import('@/lib/services/EventService');
+        const { marketService } = await import('@/lib/services/MarketService');
 
-        // Use service client if database RLS is too restrictive for direct inserts or if we need to bypass some checks
-        // However, the user's RLS policy should ideally allow admins to insert. 
-        // We'll use the regular client first to respect RLS unless explicitly needed.
-        const { data: event, error: insertError } = await supabase
-            .from('events')
-            .insert({
-                id: eventId,
-                name: formData.name,
-                title: formData.name, // Sync title with name
-                question: formData.question,
-                slug: formData.slug,
-                category: formData.category,
-                answer1: formData.answer1,
-                answer2: formData.answer2,
-                answer_type: 'binary',
-                starts_at: new Date(formData.startsAt).toISOString(),
-                ends_at: new Date(formData.endsAt).toISOString(),
-                trading_closes_at: new Date(formData.endsAt).toISOString(),
-                resolution_delay: formData.resolutionDelay,
-                initial_liquidity: formData.initialLiquidity,
-                current_liquidity: formData.initialLiquidity,
-                current_yes_price: formData.initialPrice,
-                current_no_price: 1 - formData.initialPrice,
-                image_url: formData.imageUrl || null,
-                resolver_reference: formData.resolverAddress,
-                description: formData.description || null,
-                neg_risk: formData.negRisk,
-                status: 'active', // Default to active for manually created markets
-                is_verified: false, // Manual review required as per snippet
-                is_featured: false,
-                is_trending: false,
-                total_volume: 0,
-                total_trades: 0,
-                unique_traders: 0,
-                created_by: user.id,
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-            })
-            .select()
-            .single();
+        const event = await eventService.createEvent({
+            title: formData.name,
+            question: formData.question,
+            slug: formData.slug,
+            category: formData.category.toLowerCase(),
+            starts_at: new Date(formData.startsAt).toISOString(),
+            ends_at: new Date(formData.endsAt).toISOString(),
+            description: formData.description || undefined,
+            image_url: formData.imageUrl || undefined,
+            created_by: user.id,
+            status: 'active'
+        });
 
-        if (insertError) {
-            console.error('Database Insertion Error:', insertError);
-            return { error: { database: [insertError.message] } };
-        }
+        const market = await marketService.createMarketWithLiquidity(
+            event.id,
+            {
+                question: event.question,
+                description: event.description,
+                category: event.category,
+                status: 'active',
+                trading_closes_at: event.ends_at,
+                event_date: event.ends_at,
+                creator_id: user.id
+            } as any,
+            formData.initialLiquidity
+        );
 
         // 5. Trigger n8n Webhook for Image Optimization (Optional but recommended)
         if (formData.imageUrl && process.env.N8N_WEBHOOK_URL) {
@@ -98,7 +80,7 @@ export async function createMarketAction(data: MarketFormData) {
                 await fetch(`${process.env.N8N_WEBHOOK_URL}/optimize-image`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ eventId: eventId, imageUrl: formData.imageUrl }),
+                    body: JSON.stringify({ eventId: event.id, imageUrl: formData.imageUrl }),
                 });
             } catch (webhookErr) {
                 console.warn('Webhook trigger failed:', webhookErr);
@@ -107,11 +89,15 @@ export async function createMarketAction(data: MarketFormData) {
         }
 
         // 6. Log Admin Activity
-        await supabase.rpc('log_admin_access', {
-            p_admin_id: user.id,
-            p_action: 'create_market',
-            p_success: true,
-        });
+        try {
+            await supabase.rpc('log_admin_access', {
+                p_admin_id: user.id,
+                p_action: 'create_market',
+                p_success: true,
+            });
+        } catch (logErr) {
+            console.warn('Log admin access failed:', logErr);
+        }
 
         // Revalidate paths to update UI
         revalidatePath('/sys-cmd-7x9k2/events');
@@ -121,6 +107,6 @@ export async function createMarketAction(data: MarketFormData) {
 
     } catch (error: any) {
         console.error('Unexpected Server Action Error:', error);
-        return { error: { server: [error.message || 'An unexpected error occurred.'] } };
+        return { error: error.message || 'An unexpected error occurred.' };
     }
 }

@@ -27,6 +27,13 @@ export interface CalendarDay {
   trades: number;
 }
 
+export interface CategoryPerformance {
+  category: string;
+  pnl: number;
+  winRate: number;
+  totalTrades: number;
+}
+
 export interface PerformanceData {
   equity: EquityPoint[];
   rollingSharpe: RollingMetricPoint[];
@@ -44,6 +51,7 @@ export interface PerformanceData {
     cryptoIndex: number;
     predictionMarketAvg: number;
   };
+  categoryBreakdown: CategoryPerformance[];
 }
 
 // Exchange rate
@@ -295,6 +303,33 @@ export function usePerformanceCharts(userId?: string, timeframe: '1M' | '3M' | '
         }
       });
 
+      // Calculate category breakdown from resolved positions
+      const categoryMap = new Map<string, { pnl: number; wins: number; total: number }>();
+
+      resolvedPositions.forEach((pos: any) => {
+        const category = pos.markets?.category || 'Unknown';
+        const won = pos.markets.winning_outcome === pos.outcome;
+        const entryPrice = pos.average_price || 0;
+        const quantity = pos.quantity || 0;
+        const pnl = won ? (1 - entryPrice) * quantity : -entryPrice * quantity;
+
+        if (!categoryMap.has(category)) {
+          categoryMap.set(category, { pnl: 0, wins: 0, total: 0 });
+        }
+
+        const catStats = categoryMap.get(category)!;
+        catStats.pnl += pnl;
+        catStats.total += 1;
+        if (won) catStats.wins += 1;
+      });
+
+      const categoryBreakdown: CategoryPerformance[] = Array.from(categoryMap.entries()).map(([category, catStats]) => ({
+        category,
+        pnl: catStats.pnl,
+        winRate: (catStats.wins / catStats.total) * 100,
+        totalTrades: catStats.total
+      })).sort((a, b) => b.pnl - a.pnl);
+
       // Mock benchmark data (would fetch from external APIs in production)
       const benchmarks = {
         sp500: 12.5,
@@ -314,7 +349,8 @@ export function usePerformanceCharts(userId?: string, timeframe: '1M' | '3M' | '
           maxWinStreak,
           maxLossStreak
         },
-        benchmarks
+        benchmarks,
+        categoryBreakdown
       });
 
       setError(null);

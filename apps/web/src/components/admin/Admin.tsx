@@ -117,7 +117,7 @@ export default function AdminMarketForm() {
             answer2: 'No',
             resolutionDelay: 60,
             initialPrice: 0.5,
-            initialLiquidity: 1000,
+            initialLiquidity: 100,
             negRisk: false,
             description: '',
             imageUrl: '',
@@ -231,7 +231,9 @@ export default function AdminMarketForm() {
                     <AlertCircle className="h-4 w-4" />
                     <AlertTitle>Submission Error</AlertTitle>
                     <AlertDescription>
-                        {submitError || storeError}
+                        {typeof (submitError || storeError) === 'object'
+                            ? JSON.stringify(submitError || storeError)
+                            : (submitError || storeError)}
                     </AlertDescription>
                 </Alert>
             )}

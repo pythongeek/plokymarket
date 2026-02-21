@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
-import { createBrowserClient } from '@supabase/ssr';
-import { 
+import { createClient as createBrowserClient } from '@/lib/supabase/client';
+import {
   Activity,
   ActivityAggregation,
   FeedPreferences,
@@ -141,7 +141,7 @@ class FeedAlgorithmEngine {
 
   private isMuted(activity: Activity): boolean {
     const data = activity.data as any;
-    
+
     // Check muted users
     const userId = this.extractUserId(activity);
     if (userId && this.mutedUsers.has(userId)) return true;
@@ -209,15 +209,15 @@ class AggregationEngine {
 
   private getAggregationKey(activity: ScoredActivity): string {
     const data = activity.data as any;
-    
+
     if (activity.type === 'market_movement') {
       return `market:${data?.marketId}:movement`;
     }
-    
+
     if (activity.type === 'trader_activity') {
       return `trader:${data?.traderId}:activity`;
     }
-    
+
     if (activity.type === 'social_interaction') {
       return `social:${activity.user_id}:${data?.interactionType}`;
     }
@@ -228,7 +228,7 @@ class AggregationEngine {
   private createAggregation(group: ScoredActivity[], key: string): ActivityAggregation {
     const first = group[0];
     const type = first.type;
-    
+
     // Determine aggregation type
     let aggType: ActivityAggregation['aggregation_type'] = 'daily';
     if (type === 'market_movement') aggType = 'market_update';
@@ -299,11 +299,11 @@ export class FeedService {
     } = {}
   ): Promise<GetFeedResponse> {
     const supabase = await createClient();
-    const { 
-      limit = 50, 
+    const {
+      limit = 50,
       cursor,
       includeAggregated = true,
-      filterTypes 
+      filterTypes
     } = options;
 
     // Get user preferences
@@ -383,7 +383,7 @@ export class FeedService {
       .eq('is_read', false);
 
     // Get next cursor
-    const nextCursor = scoredActivities.length >= limit 
+    const nextCursor = scoredActivities.length >= limit
       ? scoredActivities[scoredActivities.length - 1]?.created_at
       : undefined;
 
@@ -447,7 +447,7 @@ export class FeedService {
 
   async getPreferences(userId: string): Promise<FeedPreferences> {
     const supabase = await createClient();
-    
+
     const { data, error } = await supabase
       .from('feed_preferences')
       .select('*')
@@ -546,9 +546,7 @@ export class FeedService {
     userId: string,
     onUpdate: (payload: any) => void
   ) {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-    const supabase = createBrowserClient(supabaseUrl, supabaseKey);
+    const supabase = createBrowserClient();
 
     return supabase
       .channel(`user-feed:${userId}`)

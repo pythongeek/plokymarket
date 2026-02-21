@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { MarketCreationService } from '@/lib/market-creation/service';
 
 // GET /api/admin/market-creation - List drafts or get single draft
 export async function GET(req: NextRequest) {
@@ -16,47 +17,13 @@ export async function GET(req: NextRequest) {
     const status = searchParams.get('status');
 
     if (draftId) {
-      // Get single draft
-      const { data, error } = await supabase
-        .from('market_creation_drafts')
-        .select('*')
-        .eq('id', draftId)
-        .single();
-
-      if (error) throw error;
-
-      // Check permissions
-      if (data.creator_id !== user.id) {
-        // Check if admin
-        const { data: profile } = await supabase
-          .from('user_profiles')
-          .select('is_admin')
-          .eq('id', user.id)
-          .single();
-
-        if (!profile?.is_admin) {
-          return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-        }
-      }
-
-      return NextResponse.json({ data });
+      const { data: profile } = await supabase.from('user_profiles').select('is_admin').eq('id', user.id).single();
+      const draft = await MarketCreationService.getDraft(supabase, user.id, draftId, profile?.is_admin);
+      return NextResponse.json({ data: draft });
     }
 
-    // List drafts
-    let query = supabase
-      .from('market_creation_drafts')
-      .select('*')
-      .eq('creator_id', user.id)
-      .order('updated_at', { ascending: false });
-
-    if (status) {
-      query = query.eq('status', status);
-    }
-
-    const { data, error } = await query;
-    if (error) throw error;
-
-    return NextResponse.json({ data });
+    const drafts = await MarketCreationService.getDrafts(supabase, user.id, status || undefined);
+    return NextResponse.json({ data: drafts });
   } catch (error: any) {
     console.error('Error fetching market drafts:', error);
     return NextResponse.json(
@@ -90,16 +57,14 @@ export async function POST(req: NextRequest) {
 
     const { market_type, template_id, event_id } = body;
 
-    const { data, error } = await supabase.rpc('create_market_draft', {
-      p_creator_id: user.id,
-      p_market_type: market_type,
-      p_template_id: template_id,
-      p_event_id: event_id
+    const draftId = await MarketCreationService.createDraft(supabase, {
+      user_id: user.id,
+      market_type,
+      template_id,
+      event_id
     });
 
-    if (error) throw error;
-
-    return NextResponse.json({ data });
+    return NextResponse.json({ data: draftId });
   } catch (error: any) {
     console.error('Error creating market draft:', error);
     return NextResponse.json(
@@ -123,21 +88,16 @@ export async function PATCH(req: NextRequest) {
     const { draft_id, stage, stage_data } = body;
 
     if (!draft_id || !stage) {
-      return NextResponse.json(
-        { error: 'Missing required fields' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    const { data, error } = await supabase.rpc('update_draft_stage', {
-      p_draft_id: draft_id,
-      p_stage: stage,
-      p_stage_data: stage_data || {}
+    const success = await MarketCreationService.updateDraftStage(supabase, {
+      draft_id,
+      stage,
+      stage_data
     });
 
-    if (error) throw error;
-
-    return NextResponse.json({ success: data });
+    return NextResponse.json({ success });
   } catch (error: any) {
     console.error('Error updating draft stage:', error);
     return NextResponse.json(
@@ -154,10 +114,7 @@ export async function DELETE(req: NextRequest) {
     const draftId = searchParams.get('id');
 
     if (!draftId) {
-      return NextResponse.json(
-        { error: 'Draft ID required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Draft ID required' }, { status: 400 });
     }
 
     const supabase = await createClient();
@@ -167,37 +124,11 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Check ownership or admin status
-    const { data: draft } = await supabase
-      .from('market_creation_drafts')
-      .select('creator_id')
-      .eq('id', draftId)
-      .single();
+    const { data: profile } = await supabase.from('user_profiles').select('is_admin').eq('id', user.id).single();
 
-    if (!draft) {
-      return NextResponse.json({ error: 'Draft not found' }, { status: 404 });
-    }
+    const success = await MarketCreationService.deleteDraft(supabase, draftId, user.id, profile?.is_admin);
 
-    if (draft.creator_id !== user.id) {
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('is_admin')
-        .eq('id', user.id)
-        .single();
-
-      if (!profile?.is_admin) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-      }
-    }
-
-    const { error } = await supabase
-      .from('market_creation_drafts')
-      .delete()
-      .eq('id', draftId);
-
-    if (error) throw error;
-
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success });
   } catch (error: any) {
     console.error('Error deleting draft:', error);
     return NextResponse.json(

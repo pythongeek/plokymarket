@@ -29,7 +29,8 @@ import { format } from 'date-fns';
 import { bn } from 'date-fns/locale';
 import { useTranslation } from 'react-i18next';
 
-import BinanceP2PSelector from '@/components/deposit/BinanceP2PSelector';
+import { DepositForm } from '@/components/wallet/DepositForm';
+import { WithdrawalForm } from '@/components/wallet/WithdrawalForm';
 import { P2PRateDisplay } from '@/components/wallet/P2PRateDisplay';
 
 
@@ -128,9 +129,7 @@ export default function WalletPage() {
     remaining?: number;
     override_type?: string;
   } | null>(null);
-  const [depositMethod, setDepositMethod] = useState<'bkash' | 'nagad' | 'bank' | null>(null);
-  const [showP2P, setShowP2P] = useState(false);
-  const [depositAmount, setDepositAmount] = useState(5000);
+  const [activeView, setActiveView] = useState<'overview' | 'deposit' | 'withdraw'>('overview');
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -192,7 +191,7 @@ export default function WalletPage() {
 
   return (
     <div className="space-y-6">
-            {/* Header */}
+      {/* Header */}
       <div>
         <h1 className="text-3xl font-bold">{t('wallet.title')}</h1>
         <p className="text-muted-foreground">{t('wallet.subtitle')}</p>
@@ -343,7 +342,12 @@ export default function WalletPage() {
 
       {/* Action Buttons */}
       <div className="flex flex-wrap gap-4">
-        <Button size="lg" className="gap-2">
+        <Button
+          size="lg"
+          className="gap-2"
+          variant={activeView === 'deposit' ? 'default' : 'outline'}
+          onClick={() => setActiveView(activeView === 'deposit' ? 'overview' : 'deposit')}
+        >
           <ArrowDownLeft className="h-5 w-5" />
           {t('wallet.deposit')}
         </Button>
@@ -355,7 +359,12 @@ export default function WalletPage() {
             </Button>
           </Link>
         ) : (
-          <Button size="lg" variant="outline" className="gap-2">
+          <Button
+            size="lg"
+            variant={activeView === 'withdraw' ? 'default' : 'outline'}
+            className="gap-2"
+            onClick={() => setActiveView(activeView === 'withdraw' ? 'overview' : 'withdraw')}
+          >
             <ArrowUpRight className="h-5 w-5" />
             {t('wallet.withdraw')}
           </Button>
@@ -368,17 +377,38 @@ export default function WalletPage() {
         </Link>
       </div>
 
-      {/* Payment Methods */}
-      <Card>
-        <CardHeader>
-          <CardTitle>{t('wallet.payment_methods')}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {!showP2P ? (
+      {/* Dynamic View Area: Deposit / Withdraw Forms */}
+      {activeView === 'deposit' && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mt-6"
+        >
+          <DepositForm onSuccess={() => setActiveView('overview')} />
+        </motion.div>
+      )}
+
+      {activeView === 'withdraw' && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mt-6"
+        >
+          <WithdrawalForm onSuccess={() => setActiveView('overview')} />
+        </motion.div>
+      )}
+
+      {/* Payment Methods (Hidden when form active) */}
+      {activeView === 'overview' && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{t('wallet.payment_methods')}</CardTitle>
+          </CardHeader>
+          <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div
                 className="flex items-center gap-4 p-4 rounded-lg border hover:border-primary transition-colors cursor-pointer"
-                onClick={() => { setDepositMethod('bkash'); setShowP2P(true); }}
+                onClick={() => setActiveView('deposit')}
               >
                 <div className="h-12 w-12 rounded-lg bg-pink-500/10 flex items-center justify-center">
                   <Smartphone className="h-6 w-6 text-pink-500" />
@@ -391,7 +421,7 @@ export default function WalletPage() {
 
               <div
                 className="flex items-center gap-4 p-4 rounded-lg border hover:border-primary transition-colors cursor-pointer"
-                onClick={() => { setDepositMethod('nagad'); setShowP2P(true); }}
+                onClick={() => setActiveView('deposit')}
               >
                 <div className="h-12 w-12 rounded-lg bg-orange-500/10 flex items-center justify-center">
                   <CreditCard className="h-6 w-6 text-orange-500" />
@@ -412,36 +442,9 @@ export default function WalletPage() {
                 </div>
               </div>
             </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <Button variant="ghost" size="sm" onClick={() => setShowP2P(false)}>
-                  ← {t('common.back')}
-                </Button>
-                <div className="text-sm font-medium">
-                  ডিপোজিট পরিমাণ / Deposit Amount:
-                  <input
-                    type="number"
-                    value={depositAmount}
-                    onChange={(e) => setDepositAmount(Number(e.target.value))}
-                    className="ml-2 w-24 p-1 border rounded bg-background"
-                    placeholder="5000"
-                    title="Deposit Amount"
-                  /> ৳
-                </div>
-              </div>
-              <BinanceP2PSelector
-                method={depositMethod as 'bkash' | 'nagad'}
-                amount={depositAmount}
-                onSelectSeller={(seller) => {
-                  alert(`Selected ${seller.nickname}. Redirecting to Binance with affiliate...`);
-                  window.open(`https://accounts.binance.com/en/register?ref=RBA4A5YZ`, '_blank');
-                }}
-              />
-            </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Transaction History */}
       <Tabs defaultValue="all">

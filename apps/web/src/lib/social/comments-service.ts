@@ -1,10 +1,10 @@
 import { createClient } from '@/lib/supabase/server';
-import { createBrowserClient } from '@supabase/ssr';
-import { 
-  Comment, 
-  CommentVote, 
-  CommentFlag, 
-  PostCommentRequest, 
+import { createClient as createBrowserClient } from '@/lib/supabase/client';
+import {
+  Comment,
+  CommentVote,
+  CommentFlag,
+  PostCommentRequest,
   VoteCommentRequest,
   FlagCommentRequest,
   GetCommentsResponse,
@@ -34,14 +34,14 @@ class ContentModerationService {
   async analyzeContent(content: string): Promise<ToxicityResult> {
     // In production, this would call an AI service (Perspective API, Azure Content Safety, etc.)
     // For now, we'll simulate with keyword-based detection
-    
+
     const toxicityKeywords = ['hate', 'kill', 'die', 'stupid idiot', 'scam fraud'];
     const spamKeywords = ['buy now', 'click here', 'free money', 'crypto giveaway', 'telegram dm'];
     const positiveWords = ['agree', 'bullish', 'win', 'good', 'great', 'buy', 'yes', 'correct'];
     const negativeWords = ['disagree', 'bearish', 'lose', 'bad', 'sell', 'no', 'wrong', 'scam'];
 
     const lowerContent = content.toLowerCase();
-    
+
     // Calculate toxicity
     let toxicityHits = 0;
     toxicityKeywords.forEach(keyword => {
@@ -80,8 +80,8 @@ class ContentModerationService {
   }
 
   shouldAutoFlag(result: ToxicityResult): boolean {
-    return result.toxicity_score > this.TOXICITY_THRESHOLD || 
-           result.spam_score > this.SPAM_THRESHOLD;
+    return result.toxicity_score > this.TOXICITY_THRESHOLD ||
+      result.spam_score > this.SPAM_THRESHOLD;
   }
 }
 
@@ -119,7 +119,7 @@ class ContentProcessor {
     html = html.replace(this.URL_REGEX, (match, url) => {
       // Skip if already processed as image
       if (attachments.some(a => a.url === url)) return match;
-      
+
       attachments.push({
         type: 'link',
         url: url
@@ -154,7 +154,7 @@ class ContentProcessor {
     html = html.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
     // Line breaks
     html = html.replace(/\n/g, '<br />');
-    
+
     return html;
   }
 
@@ -188,11 +188,11 @@ class RateLimiter {
   isRateLimited(userId: string): boolean {
     const now = Date.now();
     const userPosts = this.posts.get(userId) || [];
-    
+
     // Clean old posts
     const recentPosts = userPosts.filter(time => now - time < this.RATE_LIMIT_WINDOW);
     this.posts.set(userId, recentPosts);
-    
+
     return recentPosts.length >= this.MAX_POSTS_PER_WINDOW;
   }
 
@@ -205,7 +205,7 @@ class RateLimiter {
   getRemainingTime(userId: string): number {
     const userPosts = this.posts.get(userId) || [];
     if (userPosts.length === 0) return 0;
-    
+
     const oldestPost = Math.min(...userPosts);
     const remaining = this.RATE_LIMIT_WINDOW - (Date.now() - oldestPost);
     return Math.max(0, Math.ceil(remaining / 1000));
@@ -234,9 +234,9 @@ export class CommentsService {
   // ===================================
 
   async postComment(
-    marketId: string, 
-    userId: string, 
-    content: string, 
+    marketId: string,
+    userId: string,
+    content: string,
     parentId?: string,
     marketQuestion?: string
   ): Promise<Comment> {
@@ -271,7 +271,7 @@ export class CommentsService {
 
     // Content moderation
     const moderationResult = await this.moderationService.analyzeContent(content);
-    
+
     // Process content (markdown, links, mentions)
     const { html, attachments, mentions } = this.contentProcessor.processContent(content);
 
@@ -360,7 +360,7 @@ export class CommentsService {
   }
 
   async getMarketComments(
-    marketId: string, 
+    marketId: string,
     currentUserId?: string,
     options: {
       limit?: number;
@@ -416,7 +416,7 @@ export class CommentsService {
         .select('comment_id, vote_type')
         .eq('user_id', currentUserId)
         .in('comment_id', rawComments.map(c => c.id));
-      
+
       votes?.forEach(v => userVotes.set(v.comment_id, v.vote_type));
     }
 
@@ -465,7 +465,7 @@ export class CommentsService {
   }
 
   private buildThreadTree(
-    rawComments: any[], 
+    rawComments: any[],
     userVotes: Map<string, VoteType>,
     reputationMap: Map<string, UserReputation>,
     badgesMap: Map<string, any[]>
@@ -522,8 +522,8 @@ export class CommentsService {
   // ===================================
 
   async voteComment(
-    commentId: string, 
-    userId: string, 
+    commentId: string,
+    userId: string,
     voteType: VoteType
   ): Promise<{ success: boolean; newScore: number }> {
     const supabase = await createClient();
@@ -556,7 +556,7 @@ export class CommentsService {
         // Change vote
         await supabase
           .from('comment_votes')
-          .update({ 
+          .update({
             vote_type: voteType,
             user_reputation_at_vote: reputation?.reputation_score || 0
           })
@@ -579,9 +579,9 @@ export class CommentsService {
       p_comment_id: commentId
     });
 
-    return { 
-      success: true, 
-      newScore: updatedComment?.[0]?.score || 0 
+    return {
+      success: true,
+      newScore: updatedComment?.[0]?.score || 0
     };
   }
 
@@ -720,9 +720,7 @@ export class CommentsService {
     marketId: string,
     onUpdate: (payload: any) => void
   ) {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-    const supabase = createBrowserClient(supabaseUrl, supabaseKey);
+    const supabase = createBrowserClient();
 
     return supabase
       .channel(`market-comments:${marketId}`)

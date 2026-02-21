@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -183,6 +184,7 @@ export function EventCreationPanel({ onEventCreated }: EventCreationPanelProps) 
         throw new Error(result.error || 'ইভেন্ট তৈরি করতে ব্যর্থ');
       }
 
+      toast.success('ইভেন্ট এবং মার্কেট সফলভাবে তৈরি হয়েছে!');
       setSuccess(true);
       setEventData({
         name: '',
@@ -212,7 +214,9 @@ export function EventCreationPanel({ onEventCreated }: EventCreationPanelProps) 
       }
 
     } catch (error: any) {
-      setErrors([error.message]);
+      console.error('Error creating event:', error);
+      toast.error(error.message || 'ইভেন্ট তৈরি করতে ব্যর্থ হয়েছে');
+      setErrors([error.message || 'ইভেন্ট তৈরি করতে ব্যর্থ']);
     } finally {
       setIsCreating(false);
     }

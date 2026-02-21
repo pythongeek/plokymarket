@@ -1,107 +1,169 @@
 'use client';
 
-import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { useState, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useToast } from '@/components/ui/use-toast';
+import { Loader2 } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
 import { useStore } from '@/store/useStore';
-import { Loader2, ArrowDownLeft, Wallet } from 'lucide-react';
-import { toast } from 'sonner';
 
-export function DepositForm() {
-    const { submitDeposit } = useStore();
-    const [amount, setAmount] = useState('');
-    const [method, setMethod] = useState('Bkash');
-    const [trxId, setTrxId] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
+const depositSchema = z.object({
+    mfs_provider: z.enum(['bkash', 'nagad', 'rocket', 'upay']),
+    bdt_amount: z.number().min(500, 'Minimum deposit is 500 BDT'),
+    txn_id: z.string().min(6, 'Valid Transaction ID is required'),
+    sender_number: z.string().regex(/^(?:\+88|88)?(01[3-9]\d{8})$/, 'Invalid Bangladeshi phone number'),
+});
 
-    const handleSubmit = async () => {
-        if (!amount || !trxId) return;
+type DepositFormValues = z.infer<typeof depositSchema>;
 
-        setIsLoading(true);
-        const result = await submitDeposit(parseFloat(amount), method, trxId);
+interface DepositFormProps {
+    onSuccess?: () => void;
+}
 
-        if (result.success) {
-            toast.success(result.message);
-            setAmount('');
-            setTrxId('');
-        } else {
-            toast.error(result.message);
+export function DepositForm({ onSuccess }: DepositFormProps) {
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [currentRate, setCurrentRate] = useState<number>(100);
+    const { toast } = useToast();
+    const { fetchTransactions } = useStore();
+    const supabase = createClient();
+
+    const form = useForm<DepositFormValues>({
+        resolver: zodResolver(depositSchema),
+        defaultValues: {
+            bdt_amount: 500,
+            txn_id: '',
+            sender_number: '',
+        },
+    });
+
+    const watchAmount = form.watch('bdt_amount');
+    const watchProvider = form.watch('mfs_provider');
+
+    useEffect(() => {
+        // Fetch live rate
+        const fetchRate = async () => {
+            const { data } = await supabase
+                .from('exchange_rates')
+                .select('bdt_to_usdt')
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .single();
+            if (data) setCurrentRate(data.bdt_to_usdt);
+        };
+        fetchRate();
+    }, [supabase]);
+
+    const onSubmit = async (data: DepositFormValues) => {
+        setIsSubmitting(true);
+        try {
+            const res = await fetch('/api/wallet/deposit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+
+            const result = await res.json();
+
+            if (!res.ok) throw new Error(result.error || 'Deposit submission failed');
+
+            toast({
+                title: 'Deposit Request Submitted',
+                description: `Successfully queued ${Number((data.bdt_amount / currentRate).toFixed(2))} USDT for verification.`,
+            });
+
+            form.reset();
+            fetchTransactions(); // Refresh UI queues
+            if (onSuccess) onSuccess();
+        } catch (err: any) {
+            toast({
+                title: 'Error',
+                description: err.message,
+                variant: 'destructive',
+            });
+        } finally {
+            setIsSubmitting(false);
         }
-        setIsLoading(false);
     };
 
     return (
-        <Card className="bg-slate-900/40 border-slate-800 backdrop-blur-md h-full">
+        <Card className="w-full max-w-md mx-auto">
             <CardHeader>
-                <div className="flex items-center justify-between">
-                    <div>
-                        <CardTitle>Deposit Funds</CardTitle>
-                        <CardDescription>Add funds via Mobile Banking</CardDescription>
-                    </div>
-                </div>
+                <CardTitle>MFS Deposit (bKash/Nagad)</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-6">
-                <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Payment Method</label>
-                    <Select value={method} onValueChange={setMethod}>
-                        <SelectTrigger className="bg-black/40 border-slate-700 h-12">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="Bkash">bKash</SelectItem>
-                            <SelectItem value="Nagad">Nagad</SelectItem>
-                            <SelectItem value="Rocket">Rocket</SelectItem>
-                            <SelectItem value="Upay">Upay</SelectItem>
-                        </SelectContent>
-                    </Select>
+            <CardContent>
+                <div className="bg-muted/50 p-4 rounded-lg mb-6 text-sm">
+                    <p className="font-semibold mb-2">Instructions:</p>
+                    <ol className="list-decimal pl-4 space-y-1">
+                        <li>Send BDT to our Merchant Agent Number: <strong>01712345678</strong></li>
+                        <li>Copy the Transaction ID from the MFS App.</li>
+                        <li>Fill out this form and submit.</li>
+                    </ol>
                 </div>
 
-                <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Amount (BDT)</label>
-                    <div className="relative">
-                        <Input
-                            type="number"
-                            placeholder="Min: 100"
-                            value={amount}
-                            onChange={(e) => setAmount(e.target.value)}
-                            className="bg-black/40 border-slate-700 font-mono text-lg"
-                        />
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                    <div className="space-y-2">
+                        <Label>MFS Provider</Label>
+                        <Select onValueChange={(val) => form.setValue('mfs_provider', val as any)}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Select Provider" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="bkash">bKash</SelectItem>
+                                <SelectItem value="nagad">Nagad</SelectItem>
+                                <SelectItem value="rocket">Rocket</SelectItem>
+                                <SelectItem value="upay">Upay</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        {form.formState.errors.mfs_provider && (
+                            <p className="text-sm text-destructive">{form.formState.errors.mfs_provider.message}</p>
+                        )}
                     </div>
-                </div>
 
-                <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Transaction ID (TrxID)</label>
-                    <Input
-                        placeholder="e.g. 9H76T..."
-                        value={trxId}
-                        onChange={(e) => setTrxId(e.target.value)}
-                        className="bg-black/40 border-slate-700 font-mono uppercase"
-                    />
-                    <p className="text-[10px] text-slate-500">
-                        * Please send money to <strong>01700000000</strong> (Personal) and enter TrxID here.
-                    </p>
-                </div>
+                    <div className="space-y-2">
+                        <Label>Amount (BDT)</Label>
+                        <Input type="number" {...form.register('bdt_amount', { valueAsNumber: true })} />
+                        {form.formState.errors.bdt_amount && (
+                            <p className="text-sm text-destructive">{form.formState.errors.bdt_amount.message}</p>
+                        )}
+                        <p className="text-xs text-muted-foreground">
+                            You will receive approximately ≈ <strong>{watchAmount ? (watchAmount / currentRate).toFixed(2) : 0} USDT</strong>
+                        </p>
+                    </div>
 
-                <div className="pt-4">
-                    <Button
-                        className="w-full h-12 text-md font-bold bg-emerald-600 hover:bg-emerald-500"
-                        onClick={handleSubmit}
-                        disabled={isLoading || !amount || !trxId || parseFloat(amount) < 100}
-                    >
-                        {isLoading ? (
+                    <div className="space-y-2">
+                        <Label>Sender Phone Number</Label>
+                        <Input placeholder="017xxxxxxxx" {...form.register('sender_number')} />
+                        {form.formState.errors.sender_number && (
+                            <p className="text-sm text-destructive">{form.formState.errors.sender_number.message}</p>
+                        )}
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label>Transaction ID (TrxID)</Label>
+                        <Input placeholder="9A7B6C5D4E" {...form.register('txn_id')} />
+                        {form.formState.errors.txn_id && (
+                            <p className="text-sm text-destructive">{form.formState.errors.txn_id.message}</p>
+                        )}
+                    </div>
+
+                    <Button type="submit" className="w-full" disabled={isSubmitting || !watchProvider}>
+                        {isSubmitting ? (
                             <>
                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Submitting...
+                                Submitting Request...
                             </>
                         ) : (
-                            <>
-                                Deposit Funds <ArrowDownLeft className="ml-2 h-4 w-4" />
-                            </>
+                            'Verify Deposit'
                         )}
                     </Button>
-                </div>
+                </form>
             </CardContent>
         </Card>
     );

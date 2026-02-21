@@ -1,146 +1,162 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useToast } from '@/components/ui/use-toast';
+import { Loader2, AlertCircle } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
 import { useStore } from '@/store/useStore';
-import { AlertCircle, ArrowUpRight, ShieldAlert, Loader2 } from 'lucide-react';
-import Link from 'next/link';
-import { cn } from '@/lib/utils';
-import { toast } from 'sonner';
 
-export function WithdrawalForm() {
-    const { wallet, withdrawFunds } = useStore();
-    const [amount, setAmount] = useState('');
-    const [address, setAddress] = useState('');
-    const [network, setNetwork] = useState('TRC20');
-    const [isLoading, setIsLoading] = useState(false);
-    const [kycError, setKycError] = useState(false);
+const withdrawSchema = z.object({
+    mfs_provider: z.enum(['bkash', 'nagad', 'rocket', 'upay']),
+    usdt_amount: z.number().min(5, 'Minimum withdrawal is 5 USDT'),
+    recipient_number: z.string().regex(/^(?:\+88|88)?(01[3-9]\d{8})$/, 'Invalid Bangladeshi phone number'),
+});
 
-    const handleMax = () => {
-        if (wallet) {
-            setAmount(wallet.balance.toString());
+type WithdrawFormValues = z.infer<typeof withdrawSchema>;
+
+interface WithdrawalFormProps {
+    onSuccess?: () => void;
+}
+
+export function WithdrawalForm({ onSuccess }: WithdrawalFormProps) {
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [currentRate, setCurrentRate] = useState<number>(100);
+    const { toast } = useToast();
+    const { wallet, fetchWallet, fetchTransactions } = useStore();
+
+    const supabase = createClient();
+
+    const availableBalance = wallet?.balance || 0;
+
+    const form = useForm<WithdrawFormValues>({
+        resolver: zodResolver(withdrawSchema),
+        defaultValues: {
+            usdt_amount: 5,
+            recipient_number: '',
+        },
+    });
+
+    const watchAmount = form.watch('usdt_amount');
+
+    useEffect(() => {
+        const fetchRate = async () => {
+            const { data } = await supabase
+                .from('exchange_rates')
+                .select('usdt_to_bdt')
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .single();
+            if (data) setCurrentRate(data.usdt_to_bdt);
+        };
+        fetchRate();
+    }, [supabase]);
+
+    const onSubmit = async (data: WithdrawFormValues) => {
+        if (data.usdt_amount > availableBalance) {
+            form.setError('usdt_amount', { type: 'manual', message: 'Insufficient Available Balance' });
+            return;
         }
-    };
 
-    const handleWithdraw = async () => {
-        if (!amount || !address) return;
+        setIsSubmitting(true);
+        try {
+            const res = await fetch('/api/wallet/withdraw', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
 
-        setIsLoading(true);
-        setKycError(false);
+            const result = await res.json();
 
-        const result = await withdrawFunds(parseFloat(amount), address, network);
+            if (!res.ok) throw new Error(result.error || 'Withdrawal request failed');
 
-        if (result.success) {
-            toast.success('Withdrawal request submitted successfully');
-            setAmount('');
-            setAddress('');
-        } else {
-            if (result.message === 'LIMIT_EXCEEDED_KYC_REQUIRED') {
-                setKycError(true);
-            } else {
-                toast.error(result.message);
-            }
+            toast({
+                title: 'Withdrawal Initiated',
+                description: `Funds locked. You will receive ${Number((data.usdt_amount * currentRate).toFixed(2))} BDT to your MFS address shortly.`,
+            });
+
+            form.reset();
+            fetchWallet(); // Refresh balance (Available -> Locked)
+            fetchTransactions(); // Refresh UI queues
+            if (onSuccess) onSuccess();
+        } catch (err: any) {
+            toast({
+                title: 'Error',
+                description: err.message,
+                variant: 'destructive',
+            });
+        } finally {
+            setIsSubmitting(false);
         }
-        setIsLoading(false);
     };
 
     return (
-        <Card className="bg-slate-900/40 border-slate-800 backdrop-blur-md h-full">
+        <Card className="w-full max-w-md mx-auto">
             <CardHeader>
-                <div className="flex items-center justify-between">
-                    <div>
-                        <CardTitle>Withdraw Funds</CardTitle>
-                        <CardDescription>Transfer funds to your external wallet</CardDescription>
-                    </div>
-                    <div className="flex gap-2">
-                        {['TRC20', 'ERC20', 'BEP20'].map(n => (
-                            <button
-                                key={n}
-                                onClick={() => setNetwork(n)}
-                                className={cn(
-                                    "px-3 py-1 text-xs rounded-full font-bold transition-all",
-                                    network === n ? "bg-indigo-500 text-white" : "bg-slate-800 text-slate-500 hover:text-slate-300"
-                                )}
-                            >
-                                {n}
-                            </button>
-                        ))}
-                    </div>
-                </div>
+                <CardTitle>Withdraw to MFS</CardTitle>
+                <CardDescription>Available Balance: {availableBalance.toFixed(2)} USDT</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-                {kycError && (
-                    <Alert variant="destructive" className="bg-red-900/20 border-red-900/50">
-                        <ShieldAlert className="h-4 w-4" />
-                        <AlertTitle>KYC Verification Required</AlertTitle>
-                        <AlertDescription className="text-xs mt-2">
-                            Withdrawals over 5,000 BDT require Level 1 Identity Verification.
-                            <Link href="/kyc" className="block mt-2 font-bold underline hover:text-red-200">
-                                Verify Identity Now &rarr;
-                            </Link>
-                        </AlertDescription>
-                    </Alert>
-                )}
-
-                <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Withdrawal Address</label>
-                    <Input
-                        placeholder={`Enter ${network} Address`}
-                        value={address}
-                        onChange={(e) => setAddress(e.target.value)}
-                        className="bg-black/40 border-slate-700 font-mono"
-                    />
-                </div>
-
-                <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Amount (BDT)</label>
-                    <div className="relative">
-                        <Input
-                            type="number"
-                            placeholder="0.00"
-                            value={amount}
-                            onChange={(e) => setAmount(e.target.value)}
-                            className="bg-black/40 border-slate-700 pr-16"
-                        />
-                        <button
-                            onClick={handleMax}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-indigo-400 hover:text-indigo-300 px-2 py-1 rounded hover:bg-indigo-500/10"
-                        >
-                            MAX
-                        </button>
+            <CardContent>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                    <div className="space-y-2">
+                        <Label>MFS Provider</Label>
+                        <Select onValueChange={(val) => form.setValue('mfs_provider', val as any)}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Select Destination" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="bkash">bKash</SelectItem>
+                                <SelectItem value="nagad">Nagad</SelectItem>
+                                <SelectItem value="rocket">Rocket</SelectItem>
+                                <SelectItem value="upay">Upay</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        {form.formState.errors.mfs_provider && (
+                            <p className="text-sm text-destructive">{form.formState.errors.mfs_provider.message}</p>
+                        )}
                     </div>
-                    <div className="flex justify-between text-xs text-slate-500">
-                        <span>Available: ৳{wallet?.balance.toLocaleString()}</span>
-                        <span>Limit: {wallet?.balance && wallet.balance > 5000 ? 'Requires KYC > 5k' : 'No Limit'}</span>
-                    </div>
-                </div>
 
-                <div className="pt-4">
-                    <Button
-                        className="w-full h-12 text-md font-bold bg-indigo-600 hover:bg-indigo-500"
-                        onClick={handleWithdraw}
-                        disabled={isLoading || !amount || !address || parseFloat(amount) <= 0}
-                    >
-                        {isLoading ? (
+                    <div className="space-y-2">
+                        <Label>Amount (USDT)</Label>
+                        <div className="flex gap-2">
+                            <Input type="number" step="0.01" {...form.register('usdt_amount', { valueAsNumber: true })} />
+                            <Button type="button" variant="outline" onClick={() => form.setValue('usdt_amount', Number(availableBalance.toFixed(2)))}>MAX</Button>
+                        </div>
+                        {form.formState.errors.usdt_amount && (
+                            <p className="text-sm text-destructive">{form.formState.errors.usdt_amount.message}</p>
+                        )}
+                        <p className="text-xs text-muted-foreground flex items-center gap-1">
+                            <AlertCircle className="w-3 h-3" />
+                            You will receive exactly: <strong>{watchAmount ? (watchAmount * currentRate).toFixed(2) : 0} BDT</strong>
+                        </p>
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label>Recipient Phone Number</Label>
+                        <Input placeholder="017xxxxxxxx" {...form.register('recipient_number')} />
+                        {form.formState.errors.recipient_number && (
+                            <p className="text-sm text-destructive">{form.formState.errors.recipient_number.message}</p>
+                        )}
+                    </div>
+
+                    <Button type="submit" className="w-full" disabled={isSubmitting || availableBalance < 5}>
+                        {isSubmitting ? (
                             <>
                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Processing Request...
+                                Processing...
                             </>
                         ) : (
-                            <>
-                                Withdraw {amount ? `৳${parseFloat(amount).toLocaleString()}` : ''}
-                                <ArrowUpRight className="ml-2 h-4 w-4" />
-                            </>
+                            'Confirm Withdrawal'
                         )}
                     </Button>
-                    <p className="text-center text-[10px] text-slate-500 mt-4">
-                        Withdrawals are processed within 24 hours. Ensure the network matches your address.
-                    </p>
-                </div>
+                </form>
             </CardContent>
         </Card>
     );
