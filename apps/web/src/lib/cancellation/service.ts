@@ -30,11 +30,11 @@ const CANCELLATION_CONFIG = {
   HARD_CANCEL_CONFIRM_TIMEOUT_MS: 50,
   INFLIGHT_WAIT_TIMEOUT_MS: 5000,
   RECONCILIATION_TIMEOUT_MS: 500,
-  
+
   // Retry
   MAX_RETRY_ATTEMPTS: 3,
   RETRY_DELAY_MS: 100,
-  
+
   // State reconciliation
   MAX_RECONCILIATION_BATCH_SIZE: 100,
 };
@@ -97,7 +97,7 @@ function generateSignaturePayload(
   sequenceNumber: number
 ): string {
   const payload = `${orderId}:${timestamp}:${filledQty}:${remainingQty}:${avgPrice}:${releasedCollateral}:${sequenceNumber}`;
-  
+
   // In production, this would be: return ed25519Sign(payload, privateKey)
   // For demo, we return a hash-like string
   return btoa(payload).substring(0, 128);
@@ -119,7 +119,7 @@ export async function softCancel(
 ): Promise<CancelResult> {
   const startTime = performance.now();
   const clientRequestId = generateClientRequestId();
-  
+
   try {
     if (!supabase) {
       return {
@@ -147,7 +147,7 @@ export async function softCancel(
     }
 
     const elapsed = performance.now() - startTime;
-    
+
     if (data && data.length > 0) {
       const result = data[0];
       return {
@@ -184,7 +184,7 @@ export async function hardCancel(
   userId: string
 ): Promise<CancelResult> {
   const startTime = performance.now();
-  
+
   try {
     if (!supabase) {
       return {
@@ -257,17 +257,17 @@ export async function cancelWithInflightHandling(
   userId: string
 ): Promise<CancelResult> {
   const overallStartTime = performance.now();
-  
+
   // Step 1: Attempt optimistic soft cancel
   const softResult = await softCancel(orderId, userId);
-  
+
   if (!softResult.success) {
     // Soft cancel failed - order might already be filled or in invalid state
     return softResult;
   }
 
   // Check if we got the lock and order is now CANCELLING
-  if (softResult.currentStatus !== 'cancelling' && softResult.currentStatus !== 'CANCELLING') {
+  if (softResult.currentStatus?.toLowerCase() !== 'cancelling') {
     // Order state changed during soft cancel attempt
     return {
       ...softResult,
@@ -294,9 +294,9 @@ export async function cancelWithInflightHandling(
 
   // Step 3: Execute hard cancel
   const hardResult = await hardCancel(orderId, userId);
-  
+
   const overallElapsed = performance.now() - overallStartTime;
-  
+
   return {
     ...hardResult,
     message: `${hardResult.message} | Total: ${overallElapsed.toFixed(2)}ms (wait: ${waitElapsed.toFixed(2)}ms)`,
@@ -333,9 +333,12 @@ async function waitForMatchingComplete(
     }
 
     // Check if order is in terminal state
-    if (['FILLED', 'CANCELLED', 'EXPIRED'].includes(order.status)) {
-      return { 
-        complete: true, 
+    const normalizedStatus = order.status?.toLowerCase();
+    const terminalStatuses = ['filled', 'cancelled', 'expired'];
+
+    if (terminalStatuses.includes(normalizedStatus)) {
+      return {
+        complete: true,
         order,
         fillOccurred: order.filled > (lastFilled || 0)
       };
@@ -346,8 +349,8 @@ async function waitForMatchingComplete(
       stableCount++;
       if (stableCount >= STABILITY_THRESHOLD) {
         // Order appears stable, safe to proceed
-        return { 
-          complete: true, 
+        return {
+          complete: true,
           order,
           fillOccurred: order.filled > 0
         };
@@ -427,7 +430,7 @@ export async function reconcileOrderStates(
   clientLastSequence: number = 0
 ): Promise<ReconcileOrderState[]> {
   const startTime = performance.now();
-  
+
   if (!supabase) {
     return [];
   }
@@ -447,7 +450,7 @@ export async function reconcileOrderStates(
   }
 
   const elapsed = performance.now() - startTime;
-  
+
   if (elapsed > CANCELLATION_CONFIG.RECONCILIATION_TIMEOUT_MS) {
     console.warn(`Reconciliation took ${elapsed.toFixed(2)}ms, exceeding target of ${CANCELLATION_CONFIG.RECONCILIATION_TIMEOUT_MS}ms`);
   }
@@ -477,14 +480,14 @@ export function applyReconciliation(
 
   for (const serverState of reconciliationResults) {
     const localOrder = currentOrders.get(serverState.orderId);
-    
+
     if (!localOrder) {
       // Order not found locally, might be new or was removed
       continue;
     }
 
     // Check for conflicts
-    const hasConflict = 
+    const hasConflict =
       localOrder.status !== serverState.currentStatus ||
       localOrder.filled_quantity !== serverState.filledQuantity;
 
@@ -533,7 +536,7 @@ export async function getCancellationConfirmation(
 
   const result = data[0];
   const confirmationData: CancellationConfirmation = result.confirmation_data;
-  
+
   // Generate signature payload
   const signature = generateSignaturePayload(
     confirmationData.orderId,
@@ -596,7 +599,7 @@ export function subscribeToCancellationEvents(
   onUpdate: (update: { status: OrderStatus; filled: number; sequenceNumber: number }) => void
 ) {
   if (!supabase) {
-    return { unsubscribe: () => {} };
+    return { unsubscribe: () => { } };
   }
 
   const channel = supabase
@@ -652,7 +655,7 @@ export function recordCancellationMetrics(
   raceCondition?: boolean
 ) {
   metrics.totalCancellations++;
-  
+
   if (type === 'SOFT') {
     metrics.softCancelLatencies.push(latencyMs);
   } else if (type === 'HARD') {
@@ -660,7 +663,7 @@ export function recordCancellationMetrics(
   } else if (type === 'RECONCILE') {
     metrics.reconciliationTimes.push(latencyMs);
   }
-  
+
   if (raceCondition) {
     metrics.raceConditions++;
   }

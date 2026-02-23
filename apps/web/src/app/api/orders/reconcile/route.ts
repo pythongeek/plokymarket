@@ -24,11 +24,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createServiceClient } from '@/lib/supabase/server';
 
 export async function POST(request: NextRequest) {
   const startTime = performance.now();
-  
+
   try {
     const body = await request.json();
     const { orderIds, lastSequence = 0 } = body;
@@ -44,9 +44,7 @@ export async function POST(request: NextRequest) {
     const MAX_BATCH_SIZE = 100;
     const batch = orderIds.slice(0, MAX_BATCH_SIZE);
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const supabaseKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_ANON_KEY!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabase = await createServiceClient();
 
     // Call the reconciliation function
     const { data, error } = await supabase.rpc('reconcile_order_state', {
@@ -114,27 +112,27 @@ export async function POST(request: NextRequest) {
 function getSuggestedAction(status: string, changes: any[]): string {
   const hasFill = changes.some((c: any) => c.filled_before > 0);
   const hasCancel = changes.some((c: any) => c.type === 'CANCEL');
-  
+
   if (status === 'FILLED') {
-    return hasCancel 
+    return hasCancel
       ? 'Order was filled during cancellation attempt - fill takes precedence'
       : 'Order fully filled';
   }
-  
+
   if (status === 'CANCELLED') {
     return hasFill
       ? 'Order partially filled then cancelled'
       : 'Order successfully cancelled';
   }
-  
+
   if (status === 'CANCELLING') {
     return 'Cancellation in progress - wait for hard cancel confirmation';
   }
-  
+
   if (status === 'EXPIRED') {
     return 'Order expired (GTD)';
   }
-  
+
   return 'No action required';
 }
 
@@ -154,9 +152,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const supabaseKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_ANON_KEY!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabase = await createServiceClient();
 
     const { data, error } = await supabase.rpc('generate_cancellation_confirmation', {
       p_cancel_record_id: cancelRecordId,
@@ -208,17 +204,17 @@ function generateMockSignature(payload: string): string {
   // This is a placeholder that creates a deterministic-looking signature
   const encoder = new TextEncoder();
   const data = encoder.encode(payload);
-  
+
   // Simple hash-like function for demo
   let hash = 0;
   for (let i = 0; i < data.length; i++) {
     const byte = data[i];
     hash = ((hash << 5) - hash + byte) | 0;
   }
-  
+
   // Create hex-like signature
-  const signature = Math.abs(hash).toString(16).padStart(64, '0') + 
+  const signature = Math.abs(hash).toString(16).padStart(64, '0') +
     Array(64).fill(0).map(() => Math.floor(Math.random() * 16).toString(16)).join('');
-  
+
   return signature.substring(0, 128);
 }

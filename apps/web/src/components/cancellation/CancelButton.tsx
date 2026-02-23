@@ -120,7 +120,6 @@ export function CancelButton({
   const getStatusBadge = () => {
     switch (order.status) {
       case 'cancelling':
-      case 'CANCELLING':
         return (
           <Badge variant="outline" className="bg-yellow-500/10 text-yellow-600 border-yellow-500/20">
             <Clock className="h-3 w-3 mr-1" />
@@ -128,7 +127,6 @@ export function CancelButton({
           </Badge>
         );
       case 'cancelled':
-      case 'CANCELLED':
         return (
           <Badge variant="outline" className="bg-gray-500/10 text-gray-600">
             Cancelled
@@ -139,7 +137,7 @@ export function CancelButton({
     }
   };
 
-  if (!canCancel && order.status !== 'cancelling' && order.status !== 'CANCELLING') {
+  if (!canCancel && order.status !== 'cancelling') {
     return getStatusBadge();
   }
 
@@ -149,7 +147,7 @@ export function CancelButton({
         variant={variant}
         size={size}
         onClick={handleCancel}
-        disabled={isCancelling || order.status === 'cancelling' || order.status === 'CANCELLING'}
+        disabled={isCancelling || order.status === 'cancelling'}
         className="relative"
       >
         {isCancelling ? (
@@ -231,7 +229,7 @@ export function CancelButton({
                 Keep Order
               </Button>
             )}
-            
+
             {isCancelling ? (
               <Button disabled>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -278,13 +276,13 @@ export function CancelButton({
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <span className="text-muted-foreground">Final Status:</span>
                 <Badge>{cancellationState.result?.finalStatus || order.status}</Badge>
-                
+
                 <span className="text-muted-foreground">Filled During Cancel:</span>
                 <span>{cancellationState.result?.filledDuringCancel || 0} units</span>
-                
+
                 <span className="text-muted-foreground">Released Collateral:</span>
                 <span>৳{cancellationState.result?.releasedCollateral?.toFixed(2) || '0.00'}</span>
-                
+
                 <span className="text-muted-foreground">Sequence Number:</span>
                 <span className="font-mono">#{cancellationState.result?.sequenceNumber || 0}</span>
               </div>

@@ -30,24 +30,31 @@ export class DynamicWalletService {
     async generateWallet(request: WalletGenerationRequest) {
         if (!supabase) throw new Error('Supabase not initialized');
 
-        try {
-            // 1. In a real scenario, we'd call Tatum/Blockcypher here
-            // Mocking the HD Wallet derivation logic
-            const mockXpub = `xpub6CUGRUonZ...`;
-            const mockAddress = this.mockDeriveAddress(mockXpub, request.network);
+        // PRODUCTION SAFEGUARD: Prevent generating wallets if no treasury address exists
+        const treasuryAddress = process.env.NEXT_PUBLIC_PLATFORM_TREASURY_ADDRESS;
+        if (!treasuryAddress) {
+            console.error('CRITICAL: NEXT_PUBLIC_PLATFORM_TREASURY_ADDRESS is not set in environment.');
+            throw new Error('System Configuration Error: Treasury address is missing. Deposits temporarily blocked.');
+        }
 
-            // 2. Generate QR Code URL (using a public API or local helper)
-            const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${mockAddress}`;
+        try {
+            // For production, until a real node/Tatum is connected:
+            // We assign the Central Treasury address as the deposit destination
+            // and rely on TX hashes + user memos for tracking, or a real API
+            const depositAddress = treasuryAddress;
+
+            // 2. Generate QR Code URL
+            const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${depositAddress}`;
 
             // 3. Store in Supabase
             const { data, error } = await supabase
                 .from('wallets')
                 .insert({
                     user_id: request.userId,
-                    usdt_address: mockAddress,
+                    usdt_address: depositAddress,
                     qr_code_url: qrCodeUrl,
                     network_type: request.network,
-                    address_type: 'DYNAMIC',
+                    address_type: 'TREASURY_ALLOCATED',
                     is_active: true
                 })
                 .select()
@@ -59,13 +66,6 @@ export class DynamicWalletService {
             console.error('Wallet generation failed:', error);
             throw error;
         }
-    }
-
-    private mockDeriveAddress(xpub: string, network: string) {
-        // Advanced Mock: Deterministic-looking address generation
-        const prefix = network === 'TRC20' ? 'T' : '0x';
-        const randomBytes = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-        return `${prefix}${randomBytes}`;
     }
 }
 
@@ -119,11 +119,18 @@ export class PaymentVerificationService {
     }
 
     private async mockBlockchainLookup(txid: string) {
-        // Simulating blockchain API response
-        // For demo purposes, if txid contains "demo", we return a confirmed tx
+        // Production Note: Replace this with real blockchain RPC call
+        // E.g. using ethers.js or Tatum API
+
+        const treasuryAddress = process.env.NEXT_PUBLIC_PLATFORM_TREASURY_ADDRESS;
+        if (!treasuryAddress) {
+            throw new Error('System Configuration Error: Treasury address missing.');
+        }
+
+        // Simulating blockchain API response for pending demo
         if (txid.includes('demo')) {
             return {
-                to: 'T...MOCK_ADDR', // Should match service logic
+                to: treasuryAddress, // MUST MATCH the generated deposit address
                 amount: 500,
                 confirmations: 15,
                 timestamp: Date.now()

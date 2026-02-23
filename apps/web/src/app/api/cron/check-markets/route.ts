@@ -5,7 +5,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createServiceClient } from '@/lib/supabase/server';
 import { setLock, checkLock } from '@/lib/upstash/redis';
 import { resolveMarketWithVerification, processResolutionResult } from '@/lib/oracle/enhancedResolution';
 
@@ -15,33 +15,29 @@ export const preferredRegion = 'iad1';
 // Verify QStash signature
 async function verifyQStashSignature(request: Request): Promise<boolean> {
   const signature = request.headers.get('upstash-signature');
-  
+
   if (process.env.NODE_ENV === 'development' && !signature) {
     return true;
   }
-  
+
   if (!signature) {
     console.warn('[Cron] Missing QStash signature');
     return false;
   }
-  
+
   return true;
 }
 
 export async function GET(request: Request) {
   const startTime = Date.now();
-  
+
   // Verify QStash signature
   const isValid = await verifyQStashSignature(request);
   if (!isValid) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { persistSession: false, autoRefreshToken: false } }
-  );
+  const supabase = await createServiceClient();
 
   const results = {
     processed: 0,
@@ -64,8 +60,8 @@ export async function GET(request: Request) {
     if (marketError) throw marketError;
 
     if (!markets || markets.length === 0) {
-      return NextResponse.json({ 
-        message: 'No markets to process', 
+      return NextResponse.json({
+        message: 'No markets to process',
         processed: 0,
         executionTimeMs: Date.now() - startTime
       });
@@ -77,7 +73,7 @@ export async function GET(request: Request) {
         // Check if already being processed (global lock)
         const globalLockKey = `market:resolution:${market.id}`;
         const isLocked = await checkLock(globalLockKey);
-        
+
         if (isLocked) {
           console.log(`[Cron] Market ${market.id} already being processed`);
           continue;
@@ -122,7 +118,7 @@ export async function GET(request: Request) {
 
         // Step 3: Perform enhanced resolution with multi-step verification
         console.log(`[Cron] Starting resolution for market ${market.id}`);
-        
+
         const resolutionResult = await resolveMarketWithVerification(
           market.id,
           market.question,
@@ -144,7 +140,7 @@ export async function GET(request: Request) {
         console.error(`[Cron] Error processing market ${market.id}:`, marketError);
         results.failed++;
         results.errors.push(`Market ${market.id}: ${marketError.message}`);
-        
+
         // Update market with error status
         await supabase.from('resolution_systems').update({
           resolution_status: 'failed',
@@ -163,7 +159,7 @@ export async function GET(request: Request) {
   } catch (error: any) {
     console.error('[Cron] Fatal error:', error);
     return NextResponse.json(
-      { 
+      {
         error: error.message,
         ...results,
         executionTimeMs: Date.now() - startTime

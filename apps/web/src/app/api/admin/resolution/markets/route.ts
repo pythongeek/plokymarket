@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,8 +26,10 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
         }
 
+        const service = await createServiceClient();
+
         // 2. Fetch resolvable events from the new view
-        const { data, error } = await supabase
+        const { data, error } = await service
             .from('view_resolvable_events')
             .select('*')
             .order('ends_at', { ascending: true });
@@ -42,7 +44,7 @@ export async function GET(request: NextRequest) {
         const marketIds = data?.map(e => e.id) || [];
 
         if (marketIds.length > 0) {
-            const { data: oracleReqs } = await supabase
+            const { data: oracleReqs } = await service
                 .from('oracle_requests')
                 .select('market_id, status, proposed_outcome, confidence_score')
                 .in('market_id', marketIds);

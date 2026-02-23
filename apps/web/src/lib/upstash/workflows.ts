@@ -17,15 +17,15 @@ const getQStashClient = () => {
 
 // Base URL for API routes
 const getBaseUrl = () => {
-  return process.env.NEXT_PUBLIC_APP_URL || 
-    process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 
+  return process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` :
     'http://localhost:3000';
 };
 
 /**
  * Workflow Types
  */
-export type WorkflowType = 
+export type WorkflowType =
   | 'deposit_notification'
   | 'withdrawal_processing'
   | 'daily_report'
@@ -67,7 +67,7 @@ export async function triggerDepositNotification(
 ): Promise<{ messageId: string; workflowExecutionId?: string }> {
   const client = getQStashClient();
   const baseUrl = getBaseUrl();
-  
+
   const response = await client.publishJSON({
     url: `${baseUrl}/api/workflows/deposit`,
     body: {
@@ -79,7 +79,7 @@ export async function triggerDepositNotification(
       'Content-Type': 'application/json',
     },
   });
-  
+
   return { messageId: response.messageId };
 }
 
@@ -91,7 +91,7 @@ export async function triggerWithdrawalProcessing(
 ): Promise<{ messageId: string }> {
   const client = getQStashClient();
   const baseUrl = getBaseUrl();
-  
+
   const response = await client.publishJSON({
     url: `${baseUrl}/api/workflows/withdrawal`,
     body: {
@@ -103,7 +103,7 @@ export async function triggerWithdrawalProcessing(
       'Content-Type': 'application/json',
     },
   });
-  
+
   return { messageId: response.messageId };
 }
 
@@ -113,7 +113,7 @@ export async function triggerWithdrawalProcessing(
 export async function scheduleDailyReport(): Promise<void> {
   const client = getQStashClient();
   const baseUrl = getBaseUrl();
-  
+
   await client.schedules.create({
     destination: `${baseUrl}/api/workflows/daily-report`,
     cron: '0 9 * * *', // Every day at 9 AM
@@ -128,9 +128,9 @@ export async function scheduleDailyReport(): Promise<void> {
 export async function scheduleExchangeRateUpdate(): Promise<void> {
   const client = getQStashClient();
   const baseUrl = getBaseUrl();
-  
+
   await client.schedules.create({
-    destination: `${baseUrl}/api/workflows/exchange-rate`,
+    destination: `${baseUrl}/api/workflows/update-exchange-rate`,
     cron: '*/5 * * * *', // Every 5 minutes
     retries: 3,
   });
@@ -142,7 +142,7 @@ export async function scheduleExchangeRateUpdate(): Promise<void> {
 export async function scheduleAutoVerification(): Promise<void> {
   const client = getQStashClient();
   const baseUrl = getBaseUrl();
-  
+
   await client.schedules.create({
     destination: `${baseUrl}/api/workflows/auto-verify`,
     cron: '*/10 * * * *', // Every 10 minutes
@@ -164,7 +164,7 @@ export function verifyQStashSignature(
     console.warn('QSTASH_CURRENT_SIGNING_KEY not set, skipping verification');
     return true;
   }
-  
+
   // TODO: Implement proper signature verification
   // For now, return true for development
   return true;
@@ -179,7 +179,7 @@ export function formatBanglaCurrency(amount: number, currency: 'BDT' | 'USDT'): 
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
-  
+
   const banglaAmount = amountStr
     .split('')
     .map(char => {
@@ -189,7 +189,7 @@ export function formatBanglaCurrency(amount: number, currency: 'BDT' | 'USDT'): 
       return char;
     })
     .join('');
-  
+
   const symbol = currency === 'BDT' ? '৳' : 'USDT';
   return `${symbol} ${banglaAmount}`;
 }
@@ -212,19 +212,19 @@ export function formatBanglaDate(date: Date): string {
  * Bangla notification templates
  */
 export const banglaTemplates = {
-  depositReceived: (amount: number, provider: string) => 
+  depositReceived: (amount: number, provider: string) =>
     `✅ নতুন ডিপোজিট রিকোয়েস্ট!\n\nপরিমাণ: ${formatBanglaCurrency(amount, 'BDT')}\nMFS: ${provider}\n\nভেরিফাই করতে অ্যাডমিন প্যানেলে লগইন করুন।`,
-  
-  depositVerified: (amount: number) => 
+
+  depositVerified: (amount: number) =>
     `🎉 আপনার ডিপোজিট সম্পন্ন হয়েছে!\n\n${formatBanglaCurrency(amount, 'USDT')} ক্রেডিট করা হয়েছে আপনার ওয়ালেটে।`,
-  
-  withdrawalRequested: (amount: number) => 
+
+  withdrawalRequested: (amount: number) =>
     `⏳ উইথড্র রিকোয়েস্ট গ্রহণ করা হয়েছে।\n\nপরিমাণ: ${formatBanglaCurrency(amount, 'USDT')}\n\nপ্রক্রিয়াকরণের জন্য অপেক্ষা করুন।`,
-  
-  withdrawalProcessed: (amount: number) => 
+
+  withdrawalProcessed: (amount: number) =>
     `✅ উইথড্র সম্পন্ন!\n\n${formatBanglaCurrency(amount, 'BDT')} আপনার অ্যাকাউন্টে পাঠানো হয়েছে।`,
-  
-  dailyReport: (stats: { users: number; deposits: number; withdrawals: number }) => 
+
+  dailyReport: (stats: { users: number; deposits: number; withdrawals: number }) =>
     `📊 দৈনিক রিপোর্ট - ${formatBanglaDate(new Date())}\n\n👥 সক্রিয় ইউজার: ${stats.users}\n💰 মোট ডিপোজিট: ${stats.deposits}\n💸 মোট উইথড্র: ${stats.withdrawals}`,
 };
 
@@ -238,13 +238,13 @@ export async function createWorkflowExecution(
   try {
     const { createClient } = await import('@/lib/supabase/server');
     const supabase = await createClient();
-    
+
     const { data, error } = await supabase.rpc('create_workflow_execution', {
       p_workflow_type: workflowType,
       p_payload: payload,
       p_max_retries: 3,
     });
-    
+
     if (error) throw error;
     return data;
   } catch (error) {
@@ -264,14 +264,14 @@ export async function updateWorkflowStatus(
   try {
     const { createClient } = await import('@/lib/supabase/server');
     const supabase = await createClient();
-    
+
     const { error } = await supabase.rpc('update_workflow_status', {
       p_execution_id: executionId,
       p_status: status,
       p_error_message: errorMessage,
       p_increment_retry: status === 'retrying',
     });
-    
+
     if (error) throw error;
     return true;
   } catch (error) {
@@ -293,7 +293,7 @@ export async function logWorkflowStep(
   try {
     const { createClient } = await import('@/lib/supabase/server');
     const supabase = await createClient();
-    
+
     const { data, error } = await supabase.rpc('log_workflow_step', {
       p_execution_id: executionId,
       p_step_name: stepName,
@@ -301,7 +301,7 @@ export async function logWorkflowStep(
       p_step_data: stepData || {},
       p_error_details: errorDetails,
     });
-    
+
     if (error) throw error;
     return data;
   } catch (error) {

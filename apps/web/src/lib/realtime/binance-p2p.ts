@@ -89,19 +89,29 @@ export async function fetchBinanceP2PRates(): Promise<ExchangeRate | null> {
     let sellPrices: number[] = [];
 
     if (buyData.success && buyData.data) {
-      buyPrices = buyData.data.slice(0, 5).map(d => parseFloat(d.advDetail.price || d.price));
+      buyPrices = buyData.data.slice(0, 5).map(d => {
+        // Handle new nested adv structure or fallback
+        const adv = (d as any).adv || d;
+        const detail = adv.advDetail || adv;
+        return parseFloat(detail.price || (d as any).price);
+      }).filter(p => !isNaN(p));
     }
 
     if (sellData.success && sellData.data) {
-      sellPrices = sellData.data.slice(0, 5).map(d => parseFloat(d.advDetail.price || d.price));
+      sellPrices = sellData.data.slice(0, 5).map(d => {
+        // Handle new nested adv structure or fallback
+        const adv = (d as any).adv || d;
+        const detail = adv.advDetail || adv;
+        return parseFloat(detail.price || (d as any).price);
+      }).filter(p => !isNaN(p));
     }
 
-    const avgBuyRate = buyPrices.length > 0 
-      ? buyPrices.reduce((a, b) => a + b, 0) / buyPrices.length 
+    const avgBuyRate = buyPrices.length > 0
+      ? buyPrices.reduce((a, b) => a + b, 0) / buyPrices.length
       : 0;
 
-    const avgSellRate = sellPrices.length > 0 
-      ? sellPrices.reduce((a, b) => a + b, 0) / sellPrices.length 
+    const avgSellRate = sellPrices.length > 0
+      ? sellPrices.reduce((a, b) => a + b, 0) / sellPrices.length
       : 0;
 
     // Use mid-rate for calculation (average of buy and sell)
@@ -150,7 +160,10 @@ export async function fetchBestBinanceP2PRate(): Promise<number | null> {
     const data: BinanceP2PResponse = await response.json();
 
     if (data.success && data.data && data.data.length > 0) {
-      return parseFloat(data.data[0].advDetail.price || data.data[0].price);
+      const first = data.data[0] as any;
+      const adv = first.adv || first;
+      const detail = adv.advDetail || adv;
+      return parseFloat(detail.price || first.price);
     }
 
     return null;
@@ -167,7 +180,7 @@ export async function fetchBinanceSpotPrice(): Promise<number | null> {
       'https://api.binance.com/api/v3/ticker/price?symbol=USDTBUSD'
     );
     const data = await response.json();
-    
+
     // Convert USDT to BDT using approximate rate (120 BDT per USDT as fallback)
     // This is a rough estimate - P2P rates are more accurate for BDT
     const usdtPrice = parseFloat(data.price);
@@ -178,22 +191,21 @@ export async function fetchBinanceSpotPrice(): Promise<number | null> {
   }
 }
 
-// Main function to get exchange rate with fallback
 export async function getExchangeRate(): Promise<ExchangeRate> {
   // Try Binance P2P first
   let rate = await fetchBinanceP2PRates();
-  
+
   if (rate) {
     return rate;
   }
 
   // Fallback to spot price
   const spotRate = await fetchBinanceSpotPrice();
-  
+
   if (spotRate) {
     return {
-      usdt_to_bdt: spotRate,
-      bdt_to_usdt: 1 / spotRate,
+      usdt_to_bdt: Math.round(spotRate * 100) / 100,
+      bdt_to_usdt: Math.round((1 / spotRate) * 1000000) / 1000000,
       source: 'binance_spot',
       fetched_at: new Date().toISOString()
     };
@@ -201,10 +213,12 @@ export async function getExchangeRate(): Promise<ExchangeRate> {
 
   // Final fallback
   return {
-    usdt_to_bdt: 120,
-    bdt_to_usdt: 0.00833,
+    usdt_to_bdt: 120.00,
+    bdt_to_usdt: 0.008333,
     source: 'manual',
-    fetched_at: new Date().toISOString()
+    fetched_at: new Date().toISOString(),
+    buy_rate: 120.00,
+    sell_rate: 118.80
   };
 }
 

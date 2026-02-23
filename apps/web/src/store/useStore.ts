@@ -33,8 +33,6 @@ import {
   fetchMarketSuggestions,
   updateSuggestionStatus,
   deleteSuggestion,
-  subscribeToMarket,
-  subscribeToTrades,
 } from '@/lib/supabase';
 import { loginRateLimiter } from '@/lib/security';
 
@@ -116,7 +114,7 @@ interface StoreState {
   fetchPaymentTransactions: () => Promise<void>;
 
   // Real-time
-  subscribeToMarket: (marketId: string) => () => void;
+  // Channel subscriptions now handled by custom hooks in components
 
   // Trading UI Slice
   tradingState: {
@@ -174,8 +172,8 @@ export const useStore = create<StoreState>()(
 
       login: async (email: string, password: string): Promise<boolean | string> => {
         // Rate limiting check
-        if (loginRateLimiter.isRateLimited(email)) {
-          const remainingTime = loginRateLimiter.getRemainingTime(email);
+        if (await loginRateLimiter.isRateLimited(email)) {
+          const remainingTime = await loginRateLimiter.getRemainingTime(email);
           return `Too many login attempts. Please try again in ${remainingTime} seconds.`;
         }
 
@@ -185,7 +183,7 @@ export const useStore = create<StoreState>()(
             console.error('Login error:', error);
 
             // Record attempt on failure
-            loginRateLimiter.recordAttempt(email);
+            await loginRateLimiter.recordAttempt(email);
 
             // Return specific error message
             if (error.message.includes('Invalid login credentials')) {
@@ -228,7 +226,7 @@ export const useStore = create<StoreState>()(
           }
 
           // Reset rate limiter on success
-          loginRateLimiter.reset(email);
+          await loginRateLimiter.reset(email);
 
           return 'Login failed. Please try again.';
         } catch (error: any) {
@@ -373,7 +371,7 @@ export const useStore = create<StoreState>()(
             });
 
             // Track user activity (graceful)
-            supabase.rpc('track_user_activity', { p_user_id: session.user.id }).then(({ error }) => {
+            supabase.rpc('track_user_activity', { p_user_id: session.user.id }).then(({ error }: { error: any }) => {
               if (error) console.warn('Activity tracking failed:', error);
             });
 
@@ -696,14 +694,18 @@ export const useStore = create<StoreState>()(
 
         // Logic handled by service or RPC in production
         // For now, let's assume we insert a new one if not exists
-        const mockAddress = network === 'TRC20' ? 'T' + Math.random().toString(36).substring(7) : '0x' + Math.random().toString(36).substring(7);
+        const treasuryAddress = process.env.NEXT_PUBLIC_PLATFORM_TREASURY_ADDRESS;
+        if (!treasuryAddress) {
+          throw new Error('System Configuration Error: Treasury address missing.');
+        }
+
         const { data: newWallet } = await supabase!
           .from('wallets')
           .insert({
             user_id: currentUser.id,
             network_type: network,
-            usdt_address: mockAddress,
-            qr_code_url: `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${mockAddress}`
+            usdt_address: treasuryAddress,
+            qr_code_url: `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${treasuryAddress}`
           })
           .select()
           .single();
@@ -862,26 +864,9 @@ export const useStore = create<StoreState>()(
         }
       },
 
-      subscribeToMarket: (marketId: string) => {
-        const { fetchOrders, fetchTrades } = get();
+      // Realtime channel subscriptions removed from store,
+      // now handled directly using custom hooks in components
 
-        if (!supabase) return () => { };
-
-        const channel = subscribeToMarket(marketId, () => {
-          fetchOrders(marketId);
-        });
-
-        const tradeChannel = subscribeToTrades(marketId, () => {
-          fetchTrades(marketId);
-        });
-
-        return () => {
-          if (supabase) {
-            supabase.removeChannel(channel as any);
-            supabase.removeChannel(tradeChannel as any);
-          }
-        };
-      },
 
       // ===================================
       // TRADING UI ACTIONS

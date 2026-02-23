@@ -5,23 +5,19 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import { 
-  verifyQStashSignature, 
+import { createServiceClient } from '@/lib/supabase/server';
+import {
+  verifyQStashSignature,
   createWorkflowExecution,
   updateWorkflowStatus,
   logWorkflowStep,
-  formatBanglaDate 
+  formatBanglaDate
 } from '@/lib/upstash/workflows';
 
 export const runtime = 'edge';
 export const preferredRegion = 'iad1';
 
-const getSupabase = () => createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { persistSession: false, autoRefreshToken: false } }
-);
+// Initialize Supabase admin client is managed via createServiceClient
 
 interface WithdrawalWorkflowPayload {
   workflowType: 'withdrawal_processing';
@@ -40,30 +36,30 @@ interface WithdrawalWorkflowPayload {
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
   let executionId: string | null = null;
-  
+
   try {
     // Verify QStash signature
     const signature = request.headers.get('upstash-signature') || '';
     const body = await request.text();
-    
+
     if (!verifyQStashSignature(signature, body)) {
       return NextResponse.json(
         { error: 'Invalid signature' },
         { status: 401 }
       );
     }
-    
+
     const data: WithdrawalWorkflowPayload = JSON.parse(body);
     const { payload } = data;
-    
+
     // Create workflow execution record
     executionId = await createWorkflowExecution('withdrawal_processing', payload);
     if (executionId) {
       await updateWorkflowStatus(executionId, 'running');
     }
-    
-    const supabase = getSupabase();
-    
+
+    const supabase = await createServiceClient();
+
     // Step 1: Check user balance
     await logWorkflowStep(executionId!, 'check_balance', 'started');
     const { data: profile, error: profileError } = await supabase
@@ -71,15 +67,15 @@ export async function POST(request: NextRequest) {
       .select('balance, email, full_name')
       .eq('id', payload.userId)
       .single();
-    
+
     if (profileError) {
       await logWorkflowStep(executionId!, 'check_balance', 'failed', {}, profileError.message);
       throw profileError;
     }
-    
+
     if (!profile || parseFloat(profile.balance.toString()) < payload.usdtAmount) {
       await logWorkflowStep(executionId!, 'check_balance', 'failed', {}, 'Insufficient balance');
-      
+
       // Reject withdrawal
       await supabase
         .from('withdrawal_requests')
@@ -89,7 +85,7 @@ export async function POST(request: NextRequest) {
           processed_at: new Date().toISOString(),
         })
         .eq('id', payload.withdrawalId);
-      
+
       // Notify user
       await supabase.from('notifications').insert({
         user_id: payload.userId,
@@ -97,20 +93,20 @@ export async function POST(request: NextRequest) {
         title: 'উইথড্র বাতিল হয়েছে',
         message: `আপনার ৳${payload.bdtAmount} উইথড্র রিকোয়েস্ট অপর্যাপ্ত ব্যালেন্সের কারণে বাতিল হয়েছে।`,
       });
-      
+
       await updateWorkflowStatus(executionId!, 'completed');
-      
+
       return NextResponse.json({
         success: false,
         reason: 'insufficient_balance',
         executionId,
       });
     }
-    
-    await logWorkflowStep(executionId!, 'check_balance', 'completed', { 
-      currentBalance: profile.balance 
+
+    await logWorkflowStep(executionId!, 'check_balance', 'completed', {
+      currentBalance: profile.balance
     });
-    
+
     // Step 2: Create balance hold
     await logWorkflowStep(executionId!, 'create_hold', 'started');
     const { data: hold, error: holdError } = await supabase
@@ -123,26 +119,26 @@ export async function POST(request: NextRequest) {
       })
       .select()
       .single();
-    
+
     if (holdError) {
       await logWorkflowStep(executionId!, 'create_hold', 'failed', {}, holdError.message);
       throw holdError;
     }
     await logWorkflowStep(executionId!, 'create_hold', 'completed', { holdId: hold?.id });
-    
+
     // Step 3: Deduct balance
     await logWorkflowStep(executionId!, 'deduct_balance', 'started');
     const { error: deductError } = await supabase.rpc('hold_balance_for_withdrawal', {
       p_user_id: payload.userId,
       p_amount: payload.usdtAmount,
     });
-    
+
     if (deductError) {
       await logWorkflowStep(executionId!, 'deduct_balance', 'failed', {}, deductError.message);
       throw deductError;
     }
     await logWorkflowStep(executionId!, 'deduct_balance', 'completed');
-    
+
     // Step 4: Update withdrawal status
     await logWorkflowStep(executionId!, 'update_withdrawal', 'started');
     await supabase
@@ -154,10 +150,10 @@ export async function POST(request: NextRequest) {
       })
       .eq('id', payload.withdrawalId);
     await logWorkflowStep(executionId!, 'update_withdrawal', 'completed');
-    
+
     // Step 5: Notify admin
     await logWorkflowStep(executionId!, 'notify_admin', 'started');
-    
+
     const date = formatBanglaDate(new Date());
     const adminMessage = `💸 নতুন উইথড্র রিকোয়েস্ট!
 
@@ -170,14 +166,14 @@ MFS: ${payload.mfsProvider}
 সময়: ${date}
 
 অনুমোদন করুন: ${process.env.NEXT_PUBLIC_APP_URL}/admin/withdrawals/${payload.withdrawalId}`;
-    
+
     // Get admins
     const { data: admins } = await supabase
       .from('admin_roles')
       .select('user_id');
-    
+
     // Send notifications
-    const notificationPromises = (admins || []).map(admin =>
+    const notificationPromises = (admins || []).map((admin: any) =>
       supabase.from('notifications').insert({
         user_id: admin.user_id,
         type: 'admin_withdrawal_alert',
@@ -191,27 +187,26 @@ MFS: ${payload.mfsProvider}
         },
       })
     );
-    
+
     // Telegram notification
     if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID) {
-      notificationPromises.push(
-        fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: process.env.TELEGRAM_CHAT_ID,
-            text: adminMessage,
-            parse_mode: 'HTML',
-          }),
-        })
-      );
+      const telegramPromise = fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: process.env.TELEGRAM_CHAT_ID,
+          text: adminMessage,
+          parse_mode: 'HTML',
+        }),
+      });
+      (notificationPromises as any[]).push(telegramPromise);
     }
-    
+
     await Promise.allSettled(notificationPromises);
     await logWorkflowStep(executionId!, 'notify_admin', 'completed', {
       notificationCount: notificationPromises.length,
     });
-    
+
     // Step 6: Notify user
     await supabase.from('notifications').insert({
       user_id: payload.userId,
@@ -219,13 +214,13 @@ MFS: ${payload.mfsProvider}
       title: 'উইথড্র প্রক্রিয়াধীন',
       message: `আপনার ৳${payload.bdtAmount} উইথড্র রিকোয়েস্ট প্রক্রিয়াধীন। অনুমোদনের পর BDT পাঠানো হবে।`,
     });
-    
+
     // Mark workflow as completed
     const duration = Date.now() - startTime;
     if (executionId) {
       await updateWorkflowStatus(executionId, 'completed');
     }
-    
+
     return NextResponse.json({
       success: true,
       message: 'Withdrawal processing workflow completed',
@@ -233,11 +228,11 @@ MFS: ${payload.mfsProvider}
       duration: `${duration}ms`,
       holdId: hold?.id,
     });
-    
+
   } catch (error) {
     const duration = Date.now() - startTime;
     console.error('Withdrawal workflow error:', error);
-    
+
     if (executionId) {
       await updateWorkflowStatus(
         executionId,
@@ -245,7 +240,7 @@ MFS: ${payload.mfsProvider}
         error instanceof Error ? error.message : 'Unknown error'
       );
     }
-    
+
     return NextResponse.json(
       {
         success: false,

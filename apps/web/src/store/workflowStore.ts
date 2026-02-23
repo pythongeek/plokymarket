@@ -6,12 +6,12 @@
 import { create } from 'zustand';
 import { subscribeWithSelector, persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
-import type { 
-  VerificationWorkflow, 
+import type {
+  VerificationWorkflow,
   WorkflowExecution,
   WorkflowSchedule,
   WorkflowStats,
-  RealtimePayload 
+  RealtimePayload
 } from '@/types/database';
 import * as workflowService from '@/services/workflows';
 
@@ -24,7 +24,7 @@ interface WorkflowState {
   workflows: Map<string, VerificationWorkflow>;
   workflowIds: string[];
   selectedWorkflowId: string | null;
-  
+
   // Executions
   executions: Map<string, WorkflowExecution>;
   executionIds: string[];
@@ -32,22 +32,22 @@ interface WorkflowState {
   runningExecutionIds: string[];
   failedExecutionIds: string[];
   escalatedExecutionIds: string[];
-  
+
   // Schedules
   schedules: WorkflowSchedule[];
-  
+
   // Stats
   stats: WorkflowStats | null;
-  
+
   // Filters
   selectedCategory: string | null;
   selectedStatus: string | null;
-  
+
   // UI State
   isLoading: boolean;
   isLoadingExecutions: boolean;
   error: string | null;
-  
+
   // Subscriptions
   unsubscribeExecutions: (() => void) | null;
 }
@@ -59,25 +59,25 @@ interface WorkflowActions {
   updateWorkflow: (id: string, updates: Partial<VerificationWorkflow>) => void;
   removeWorkflow: (id: string) => void;
   setSelectedWorkflow: (id: string | null) => void;
-  
+
   // Execution Actions
   setExecutions: (executions: WorkflowExecution[]) => void;
   addExecution: (execution: WorkflowExecution) => void;
   updateExecution: (id: string, updates: Partial<WorkflowExecution>) => void;
   removeExecution: (id: string) => void;
-  
+
   // Schedule Actions
   setSchedules: (schedules: WorkflowSchedule[]) => void;
   addSchedule: (schedule: WorkflowSchedule) => void;
   removeSchedule: (id: string) => void;
-  
+
   // Stats Actions
   setStats: (stats: WorkflowStats) => void;
-  
+
   // Filter Actions
   setCategory: (category: string | null) => void;
   setStatus: (status: string | null) => void;
-  
+
   // Fetch Actions
   fetchWorkflows: () => Promise<void>;
   fetchWorkflowById: (id: string) => Promise<VerificationWorkflow | null>;
@@ -88,11 +88,11 @@ interface WorkflowActions {
   fetchEscalatedExecutions: () => Promise<void>;
   fetchSchedules: () => Promise<void>;
   fetchStats: () => Promise<void>;
-  
+
   // Real-time Actions
   subscribeToExecutions: () => void;
   unsubscribeAll: () => void;
-  
+
   // Operation Actions
   createWorkflow: (data: Partial<VerificationWorkflow>) => Promise<boolean>;
   updateWorkflowData: (id: string, updates: Partial<VerificationWorkflow>) => Promise<boolean>;
@@ -102,7 +102,7 @@ interface WorkflowActions {
   escalateExecution: (executionId: string, reason: string, escalatedTo: string) => Promise<boolean>;
   createSchedule: (schedule: { name: string; description: string; cron: string; endpoint: string }) => Promise<boolean>;
   deleteSchedule: (scheduleId: string) => Promise<boolean>;
-  
+
   // Utility Actions
   clearError: () => void;
   resetFilters: () => void;
@@ -142,7 +142,7 @@ export const useWorkflowStore = create<WorkflowState & WorkflowActions>()(
           // ===================================
           // WORKFLOW ACTIONS
           // ===================================
-          
+
           setWorkflows: (workflows) => {
             set((state) => {
               state.workflows = new Map(workflows.map((w) => [w.id, w]));
@@ -184,7 +184,7 @@ export const useWorkflowStore = create<WorkflowState & WorkflowActions>()(
           // ===================================
           // EXECUTION ACTIONS
           // ===================================
-          
+
           setExecutions: (executions) => {
             set((state) => {
               state.executions = new Map(executions.map((e) => [e.id, e]));
@@ -224,7 +224,7 @@ export const useWorkflowStore = create<WorkflowState & WorkflowActions>()(
           // ===================================
           // SCHEDULE ACTIONS
           // ===================================
-          
+
           setSchedules: (schedules) => {
             set((state) => {
               state.schedules = schedules;
@@ -246,7 +246,7 @@ export const useWorkflowStore = create<WorkflowState & WorkflowActions>()(
           // ===================================
           // STATS ACTIONS
           // ===================================
-          
+
           setStats: (stats) => {
             set((state) => {
               state.stats = stats;
@@ -256,7 +256,7 @@ export const useWorkflowStore = create<WorkflowState & WorkflowActions>()(
           // ===================================
           // FILTER ACTIONS
           // ===================================
-          
+
           setCategory: (category) => {
             set((state) => {
               state.selectedCategory = category;
@@ -274,7 +274,7 @@ export const useWorkflowStore = create<WorkflowState & WorkflowActions>()(
           // ===================================
           // FETCH ACTIONS
           // ===================================
-          
+
           fetchWorkflows: async () => {
             set((s) => {
               s.isLoading = true;
@@ -409,7 +409,7 @@ export const useWorkflowStore = create<WorkflowState & WorkflowActions>()(
           // ===================================
           // REAL-TIME ACTIONS
           // ===================================
-          
+
           subscribeToExecutions: () => {
             const unsubscribe = workflowService.subscribeToWorkflowExecutions((payload) => {
               const { eventType, new: newExecution, old: oldExecution } = payload;
@@ -435,7 +435,7 @@ export const useWorkflowStore = create<WorkflowState & WorkflowActions>()(
           unsubscribeAll: () => {
             const state = get();
             state.unsubscribeExecutions?.();
-            
+
             set((s) => {
               s.unsubscribeExecutions = null;
             });
@@ -444,7 +444,7 @@ export const useWorkflowStore = create<WorkflowState & WorkflowActions>()(
           // ===================================
           // OPERATION ACTIONS
           // ===================================
-          
+
           createWorkflow: async (data) => {
             const { data: workflow, error } = await workflowService.createWorkflow(data);
             if (error) {
@@ -550,7 +550,7 @@ export const useWorkflowStore = create<WorkflowState & WorkflowActions>()(
           // ===================================
           // UTILITY ACTIONS
           // ===================================
-          
+
           clearError: () => {
             set((s) => {
               s.error = null;
@@ -640,4 +640,17 @@ export const selectCategories = (state: WorkflowState) => {
   const categories = new Set<string>();
   state.workflows.forEach((w) => categories.add(w.event_category));
   return Array.from(categories).sort();
+};
+
+export const selectStats = (state: WorkflowState) => {
+  if (state.stats) return state.stats;
+
+  // Fallback calculation from state to prevent UI crashes, as requested
+  const executionList = Array.from(state.executions.values());
+  const total = executionList.length || 0;
+  const pending = executionList.filter(e => e.status === 'pending').length || 0;
+  const completed = executionList.filter(e => e.status === 'completed').length || 0;
+  const failed = executionList.filter(e => e.status === 'failed').length || 0;
+
+  return { total, pending, completed, failed };
 };

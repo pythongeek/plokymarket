@@ -19,7 +19,22 @@ const authAttempts = new Map<string, { count: number; resetTime: number }>();
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const response = NextResponse.next();
+  let response = NextResponse.next({ request });
+
+  // Mandatory Security Headers for Financial Platforms
+  const securityHeaders = {
+    'X-Frame-Options': 'DENY', // Prevent Clickjacking
+    'X-Content-Type-Options': 'nosniff', // Prevent MIME sniffing
+    'X-XSS-Protection': '1; mode=block', // Enable XSS filtering
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'Permissions-Policy': 'camera=(), microphone=(), geolocation=()', // Disable unused features
+    'Strict-Transport-Security': 'max-age=31536000; includeSubDomains', // Enforce HTTPS
+  };
+
+  // Inject headers without overriding existing ones
+  Object.entries(securityHeaders).forEach(([key, value]) => {
+    response.headers.set(key, value);
+  });
 
   // Create Supabase client
   const supabase = createServerClient(
@@ -49,18 +64,16 @@ export async function middleware(request: NextRequest) {
   );
 
   const isApiAdminPath = pathname.startsWith('/api/admin');
+  const isAdminPath = pathname.startsWith('/admin');
 
   // Auth portal only needs rate limiting and security headers, NOT auth checks
   if (isAuthPortal) {
-    // Add security headers
-    response.headers.set('X-Frame-Options', 'DENY');
-    response.headers.set('X-Content-Type-Options', 'nosniff');
-    response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+    // Add extra headers for auth portal
     response.headers.set('X-Robots-Tag', 'noindex, nofollow');
     return response;
   }
 
-  if (isSecurePath || isApiAdminPath) {
+  if (isSecurePath || isApiAdminPath || isAdminPath) {
     // IP whitelist check (if configured)
     if (ALLOWED_ADMIN_IPS.length > 0) {
       const clientIp =
@@ -108,10 +121,15 @@ export async function middleware(request: NextRequest) {
       },
     });
 
+    // Copy cookies from original response
+    response.cookies.getAll().forEach(cookie => {
+      responseWithHeaders.cookies.set(cookie);
+    });
+
     // Also add security headers to the actual output response
-    responseWithHeaders.headers.set('X-Frame-Options', 'DENY');
-    responseWithHeaders.headers.set('X-Content-Type-Options', 'nosniff');
-    responseWithHeaders.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+    Object.entries(securityHeaders).forEach(([key, value]) => {
+      responseWithHeaders.headers.set(key, value);
+    });
     responseWithHeaders.headers.set('X-Robots-Tag', 'noindex, nofollow');
 
     return responseWithHeaders;
@@ -125,5 +143,6 @@ export const config = {
     '/sys-cmd-7x9k2/:path*',
     '/auth-portal-3m5n8/:path*',
     '/api/admin/:path*',
+    '/admin/:path*',
   ],
 };

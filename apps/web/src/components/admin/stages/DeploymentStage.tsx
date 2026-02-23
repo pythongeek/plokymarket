@@ -309,7 +309,7 @@ export function DeploymentStage({
             <div className="flex gap-2 mt-4">
               <Button
                 variant="outline"
-                onClick={() => window.open(`/market/${deployedMarketId}`, '_blank')}
+                onClick={() => window.open(`/markets/${deployedMarketId}`, '_blank')}
                 className="border-green-500/40 text-green-300"
               >
                 <ExternalLink className="w-4 h-4 mr-2" />

@@ -489,247 +489,93 @@ export function useLeaderboard(
     try {
       const supabase = createClient();
 
-      // Calculate date range
-      const endDate = new Date();
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() - TIME_PERIODS[period].days);
-
-      // Fetch trades within period
-      const { data: trades, error: tradesError } = await supabase
-        .from('trades')
+      // 1. Fetch from leaderboard_cache
+      let query = supabase
+        .from('leaderboard_cache')
         .select(`
           *,
-          markets:market_id (category, status, winning_outcome),
-          maker:maker_id (id, full_name, kyc_verified),
-          taker:taker_id (id, full_name, kyc_verified)
+          user:user_id (
+            id, 
+            full_name, 
+            kyc_verified,
+            avatar_url
+          )
         `)
-        .gte('created_at', startDate.toISOString())
-        .order('created_at', { ascending: true });
+        .eq('timeframe', period === 'allTime' ? 'all_time' : period);
 
-      if (tradesError) throw tradesError;
+      // Apply Filters
+      if (kycOnly) {
+        query = query.eq('user:user_id.kyc_verified', true);
+      }
 
-      // Fetch positions for P&L calculation
-      const { data: positions, error: positionsError } = await supabase
-        .from('positions')
-        .select(`
-          *,
-          markets:market_id (status, winning_outcome, resolved_at),
-          user:user_id (id, full_name, kyc_verified, created_at)
-        `)
-        .gte('created_at', startDate.toISOString());
+      // Sort by chosen category/score
+      if (category === 'absoluteProfit') {
+        query = query.order('realized_pnl', { ascending: false });
+      } else if (category === 'volume') {
+        query = query.order('trading_volume', { ascending: false });
+      } else if (category === 'riskAdjusted') {
+        query = query.order('risk_score', { ascending: true }); // Lower is better
+      } else {
+        query = query.order('score', { ascending: false });
+      }
 
-      if (positionsError) throw positionsError;
+      const { data: cacheData, error: cacheError } = await query.limit(100);
 
-      // Process user statistics
-      const userStats = new Map<string, {
-        user: any;
-        trades: any[];
-        positions: any[];
-        tradingDays: Set<string>;
-      }>();
+      if (cacheError) throw cacheError;
 
-      // Aggregate trades
-      trades?.forEach((trade: any) => {
-        [trade.maker, trade.taker].forEach(user => {
-          if (!user) return;
-          if (!userStats.has(user.id)) {
-            userStats.set(user.id, { user, trades: [], positions: [], tradingDays: new Set() });
-          }
-          userStats.get(user.id)!.trades.push(trade);
-          userStats.get(user.id)!.tradingDays.add(trade.created_at.split('T')[0]);
-        });
-      });
+      // 2. Map to LeaderboardEntry
+      const leaderboardData: LeaderboardEntry[] = (cacheData || []).map((item: any, index: number) => ({
+        rank: index + 1,
+        userId: item.user_id,
+        userName: item.user?.full_name || 'Anonymous Trader',
+        userAvatar: item.user?.avatar_url,
+        isKycVerified: item.user?.kyc_verified || false,
 
-      // Aggregate positions
-      positions?.forEach(position => {
-        if (!position.user) return;
-        if (!userStats.has(position.user.id)) {
-          userStats.set(position.user.id, {
-            user: position.user,
-            trades: [],
-            positions: [],
-            tradingDays: new Set()
-          });
-        }
-        userStats.get(position.user.id)!.positions.push(position);
-      });
+        absoluteProfit: (item.realized_pnl || 0) / 100,
+        absoluteProfitBDT: ((item.realized_pnl || 0) / 100) * 110,
+        returnPercentage: item.roi || 0,
+        sharpeRatio: 0, // Would need more granular data for true Sharpe
+        accuracy: 0,
+        consistency: 0,
+        volume: (item.trading_volume || 0) / 100,
+        volumeBDT: ((item.trading_volume || 0) / 100) * 110,
 
-      // Calculate rankings
-      const leaderboardData: LeaderboardEntry[] = [];
+        totalTrades: 0,
+        winningTrades: 0,
+        losingTrades: 0,
+        avgWin: 0,
+        avgLoss: 0,
+        maxDrawdown: 0,
+        winRate: 0,
+        avgPositionTime: 0,
+        tradingDays: 0,
 
-      userStats.forEach(({ user, trades, positions, tradingDays }) => {
-        // Skip KYC-only filter if needed
-        if (kycOnly && !user.kyc_verified) return;
-
-        // Calculate metrics
-        let absoluteProfit = 0;
-        let winningTrades = 0;
-        let losingTrades = 0;
-        let totalVolume = 0;
-        let correctPredictions = 0;
-        let totalPredictions = 0;
-        let totalWins = 0;
-        let totalLosses = 0;
-
-        const returns: number[] = [];
-
-        // Process positions for P&L
-        positions.forEach(pos => {
-          const entryPrice = pos.average_price || 0;
-          const quantity = pos.quantity || 0;
-
-          if (pos.markets?.status === 'resolved') {
-            const won = pos.markets.winning_outcome === pos.outcome;
-            const pnl = won ? (1 - entryPrice) * quantity : -entryPrice * quantity;
-            absoluteProfit += pnl;
-
-            totalPredictions++;
-            if (won) {
-              correctPredictions++;
-              winningTrades++;
-              totalWins += pnl;
-            } else {
-              losingTrades++;
-              totalLosses += Math.abs(pnl);
-            }
-          }
-
-          totalVolume += entryPrice * quantity;
-        });
-
-        // Calculate derived metrics
-        const totalTrades = winningTrades + losingTrades;
-        const winRate = totalTrades > 0 ? winningTrades / totalTrades : 0;
-        const avgWin = winningTrades > 0 ? totalWins / winningTrades : 0;
-        const avgLoss = losingTrades > 0 ? totalLosses / losingTrades : 0;
-
-        // Starting capital estimation (from wallet or first trade)
-        const startingCapital = 10000; // Default, would fetch from actual data
-        const returnPercentage = startingCapital > 0 ? (absoluteProfit / startingCapital) * 100 : 0;
-
-        // Sharpe ratio calculation
-        const avgReturn = returns.length > 0 ? returns.reduce((a, b) => a + b, 0) / returns.length : 0;
-        const stdDev = returns.length > 0
-          ? Math.sqrt(returns.reduce((sq, n) => sq + Math.pow(n - avgReturn, 2), 0) / returns.length)
-          : 1;
-        const sharpeRatio = stdDev > 0 ? (avgReturn - 0.05) / stdDev : 0;
-
-        // Accuracy
-        const accuracy = totalPredictions > 0 ? correctPredictions / totalPredictions : 0;
-
-        // Consistency (Win Rate × Win/Loss Ratio)
-        const winLossRatio = avgLoss > 0 ? avgWin / avgLoss : avgWin > 0 ? Infinity : 0;
-        const consistency = winRate * (winLossRatio > 0 ? Math.min(winLossRatio, 5) : 0);
-
-        // Calculate weighted score based on category
-        let weightedScore = 0;
-        switch (category) {
-          case 'absoluteProfit':
-            weightedScore = calculateTimeWeightedScore(absoluteProfit, new Date().toISOString());
-            break;
-          case 'returnPercentage':
-            weightedScore = returnPercentage;
-            break;
-          case 'riskAdjusted':
-            weightedScore = sharpeRatio * 100;
-            break;
-          case 'accuracy':
-            weightedScore = accuracy * 100;
-            break;
-          case 'consistency':
-            weightedScore = consistency * 100;
-            break;
-          case 'volume':
-            weightedScore = totalVolume;
-            break;
-        }
-
-        // Anti-gaming validation
-        const validation = validateAntiGaming({
-          totalTrades,
-          tradingDays: tradingDays.size,
-          avgPositionTime: 2, // Would calculate from actual data
-          winRate,
-          volume: totalVolume,
-          weightedScore,
-        }, category);
-
-        if (!validation.isValid && category !== 'absoluteProfit') {
-          weightedScore = validation.adjustedScore;
-        }
-
-        leaderboardData.push({
-          rank: 0, // Will be assigned after sorting
-          userId: user.id,
-          userName: user.full_name || 'Anonymous Trader',
-          isKycVerified: user.kyc_verified || false,
-          absoluteProfit,
-          absoluteProfitBDT: absoluteProfit * 110,
-          returnPercentage,
-          sharpeRatio,
-          accuracy,
-          consistency,
-          volume: totalVolume,
-          volumeBDT: totalVolume * 110,
-          totalTrades,
-          winningTrades,
-          losingTrades,
-          avgWin,
-          avgLoss,
-          maxDrawdown: 0, // Would calculate from equity curve
-          winRate,
-          avgPositionTime: 2,
-          tradingDays: tradingDays.size,
-          weightedScore,
-          rankChange: 0,
-        });
-      });
-
-      // Sort and assign ranks
-      leaderboardData.sort((a, b) => b.weightedScore - a.weightedScore);
-      leaderboardData.forEach((entry, index) => {
-        entry.rank = index + 1;
-        // Simulate rank change (would fetch from historical data)
-        entry.rankChange = Math.floor(Math.random() * 10) - 5;
-      });
+        weightedScore: item.score || 0,
+        rankChange: Math.floor(Math.random() * 6) - 3, // Mocked for now
+      }));
 
       setEntries(leaderboardData);
 
-      // Calculate user rank if userId provided
+      // 3. User Specific Rank
       if (currentUserId) {
-        const userEntry = leaderboardData.find(e => e.userId === currentUserId);
-        if (userEntry) {
-          const nextEntry = leaderboardData[userEntry.rank - 2];
-          const prevEntry = leaderboardData[userEntry.rank];
-
-          const percentile = ((leaderboardData.length - userEntry.rank) / leaderboardData.length) * 100;
-
+        const userItem = leaderboardData.find(e => e.userId === currentUserId);
+        if (userItem) {
+          const percentile = ((leaderboardData.length - userItem.rank) / leaderboardData.length) * 100;
           setUserRank({
-            currentRank: userEntry.rank,
-            previousRank: userEntry.rank - userEntry.rankChange,
+            currentRank: userItem.rank,
             totalParticipants: leaderboardData.length,
             percentile,
             category,
             period,
             metrics: {
-              absoluteProfit: userEntry.absoluteProfit,
-              returnPercentage: userEntry.returnPercentage,
-              sharpeRatio: userEntry.sharpeRatio,
-              accuracy: userEntry.accuracy,
-              consistency: userEntry.consistency,
-              volume: userEntry.volume,
+              absoluteProfit: userItem.absoluteProfit,
+              returnPercentage: userItem.returnPercentage,
+              sharpeRatio: 0,
+              accuracy: 0,
+              consistency: 0,
+              volume: userItem.volume,
             },
-            nextRank: nextEntry ? {
-              rank: nextEntry.rank,
-              gap: nextEntry.weightedScore - userEntry.weightedScore,
-              userName: nextEntry.userName,
-            } : undefined,
-            prevRank: prevEntry ? {
-              rank: prevEntry.rank,
-              gap: userEntry.weightedScore - prevEntry.weightedScore,
-              userName: prevEntry.userName,
-            } : undefined,
-            rewardTier: getRewardTier(percentile),
+            rewardTier: getRewardTier(percentile) ?? undefined,
           });
         }
       }
@@ -741,7 +587,6 @@ export function useLeaderboard(
     } finally {
       setLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [category, period, kycOnly, currentUserId]);
 
   useEffect(() => {

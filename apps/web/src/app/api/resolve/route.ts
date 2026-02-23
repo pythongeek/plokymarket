@@ -6,7 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createServiceClient } from '@/lib/supabase/server';
 import { setLock, checkLock } from '@/lib/upstash/redis';
 
 export const runtime = 'edge';
@@ -16,12 +16,12 @@ export const preferredRegion = 'iad1';
 function verifyAuth(request: NextRequest): boolean {
   const apiKey = request.headers.get('x-api-key');
   const expectedKey = process.env.N8N_API_KEY || process.env.RESOLUTION_API_KEY;
-  
+
   if (!expectedKey) {
     console.warn('[Resolve] API key not configured, allowing in dev mode');
     return process.env.NODE_ENV === 'development';
   }
-  
+
   return apiKey === expectedKey;
 }
 
@@ -35,7 +35,7 @@ interface ResolutionPayload {
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
-  
+
   try {
     // 1. Authentication
     if (!verifyAuth(request)) {
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
 
     // 2. Parse payload
     const payload: ResolutionPayload = await request.json();
-    
+
     // Validate required fields
     if (!payload.eventId || !payload.result) {
       return NextResponse.json(
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
     // 3. Check confidence threshold
     if (confidence < 0.9) {
       return NextResponse.json(
-        { 
+        {
           status: 'disputed',
           reason: 'confidence_too_low',
           confidence,
@@ -74,10 +74,10 @@ export async function POST(request: NextRequest) {
     // 4. Double-spending prevention - Check Redis cache
     const cacheKey = `processed:${eventId}`;
     const isProcessed = await checkLock(cacheKey);
-    
+
     if (isProcessed) {
       return NextResponse.json(
-        { 
+        {
           status: 'already_processed',
           eventId,
           message: 'This event has already been resolved'
@@ -86,12 +86,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 5. Initialize Supabase
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      { auth: { persistSession: false, autoRefreshToken: false } }
-    );
+    const supabase = await createServiceClient();
 
     // 6. Atomic transaction - Update market
     const now = new Date().toISOString();
@@ -166,7 +161,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('[Resolve] Error:', error);
     return NextResponse.json(
-      { 
+      {
         error: 'Internal server error',
         details: error.message,
         executionTimeMs: Date.now() - startTime

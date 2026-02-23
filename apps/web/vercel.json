@@ -1,9 +1,12 @@
 {
-  "buildCommand": "npm run build",
+  "version": 2,
+  "buildCommand": "bash scripts/pre-deploy.sh && next build",
   "devCommand": "npm run dev",
   "installCommand": "npm install",
   "framework": "nextjs",
-  "regions": ["iad1"],
+  "regions": [
+    "sin1"
+  ],
   "crons": [
     {
       "path": "/api/cron/master?secret=${MASTER_CRON_SECRET}",

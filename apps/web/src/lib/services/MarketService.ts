@@ -52,6 +52,29 @@ export class MarketService implements IMarketService {
 
             console.log(`[MarketService] Market created: ${newMarket.id} (${newMarket.status})`);
 
+            // 1.5: Sync resolution_config into resolution_systems table
+            const resConfig = marketData.resolution_data?.resolution_config;
+            if (resConfig) {
+                const primaryMethod = resConfig.method || 'manual_admin';
+                const aiKeywords = resConfig.ai_keywords || [];
+                const confidenceThreshold = resConfig.confidence_threshold || 85;
+
+                const { error: resSysError } = await getSupabaseAdmin()
+                    .from('resolution_systems')
+                    .insert({
+                        event_id: newMarket.id, // Note: resolution_systems.event_id maps to markets.id
+                        primary_method: primaryMethod,
+                        ai_keywords: aiKeywords,
+                        confidence_threshold: confidenceThreshold,
+                        status: 'pending'
+                    });
+
+                if (resSysError) {
+                    console.error('[MarketService] Failed to create resolution_systems entry:', resSysError);
+                    // Continuing since market was successfully created, but logging the error.
+                }
+            }
+
             // 2. Automically initialize orderbook if status is active
             if (newMarket.status === 'active') {
                 await this.initializeOrderbook(newMarket.id);

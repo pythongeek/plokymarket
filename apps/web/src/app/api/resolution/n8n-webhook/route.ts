@@ -5,18 +5,18 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createServiceClient } from '@/lib/supabase/server';
 
 // Verify n8n API key
 function verifyN8NAuth(request: NextRequest): boolean {
     const apiKey = request.headers.get('x-n8n-api-key');
     const expectedKey = process.env.N8N_API_KEY;
-    
+
     if (!expectedKey) {
         console.warn('[n8n Webhook] N8N_API_KEY not configured');
         return true; // Allow in development
     }
-    
+
     return apiKey === expectedKey;
 }
 
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
 
         // Parse webhook payload
         const payload = await request.json();
-        
+
         // Validate required fields
         if (!payload.market_id || !payload.result) {
             return NextResponse.json(
@@ -41,19 +41,15 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const { 
-            market_id, 
+        const {
+            market_id,
             result,
             evidence = [],
             sources = [],
             execution_time_ms = 0
         } = payload;
 
-        // Initialize Supabase
-        const supabase = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.SUPABASE_SERVICE_ROLE_KEY!
-        );
+        const supabase = await createServiceClient();
 
         // Validate market exists
         const { data: market, error: marketError } = await supabase
@@ -73,11 +69,11 @@ export async function POST(request: NextRequest) {
         const outcome = result.outcome?.toUpperCase(); // YES, NO, or UNKNOWN
         const confidence = parseFloat(result.confidence) || 0;
         const reasoning = result.reasoning || '';
-        
+
         // Determine confidence level
         let confidenceLevel: string;
         let recommendedAction: string;
-        
+
         if (confidence >= 90) {
             confidenceLevel = 'HIGH';
             recommendedAction = outcome !== 'UNKNOWN' ? 'AUTO_RESOLVE' : 'HUMAN_REVIEW';
@@ -176,7 +172,7 @@ export async function POST(request: NextRequest) {
     } catch (error: any) {
         console.error('[n8n Webhook] Error:', error);
         return NextResponse.json(
-            { 
+            {
                 error: 'Internal server error',
                 details: error.message
             },

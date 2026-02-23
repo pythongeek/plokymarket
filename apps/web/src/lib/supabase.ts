@@ -281,43 +281,4 @@ export async function deleteSuggestion(id: string) {
   if (error) throw error;
 }
 
-// Realtime subscription
-export function subscribeToMarket(
-  marketId: string,
-  callback: (payload: unknown) => void
-) {
-  if (!supabase) return { unsubscribe: () => { } };
-  return supabase
-    .channel(`market:${marketId}`)
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'orders',
-        filter: `market_id=eq.${marketId}`,
-      },
-      callback
-    )
-    .subscribe();
-}
-
-export function subscribeToTrades(
-  marketId: string,
-  callback: (payload: unknown) => void
-) {
-  if (!supabase) return { unsubscribe: () => { } };
-  return supabase
-    .channel(`trades:${marketId}`)
-    .on(
-      'postgres_changes',
-      {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'trades',
-        filter: `market_id=eq.${marketId}`,
-      },
-      callback
-    )
-    .subscribe();
-}
+// Realtime subscription - now handled by custom hooks in components

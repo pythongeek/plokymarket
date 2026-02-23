@@ -4,15 +4,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createServiceClient } from '@/lib/supabase/server';
 
 export const runtime = 'edge';
 
-const getSupabase = () => createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { persistSession: false } }
-);
+// Initialize Supabase admin client is managed via createServiceClient
 
 // Calculate weighted vote result
 function calculateWeightedResult(votes: any[]) {
@@ -23,7 +19,7 @@ function calculateWeightedResult(votes: any[]) {
   for (const vote of votes) {
     const weight = vote.expert_weight || 1;
     totalWeight += weight;
-    
+
     if (vote.vote === 'yes') {
       yesWeight += weight;
     } else {
@@ -54,7 +50,7 @@ export async function POST(request: NextRequest) {
     }
 
     const token = authHeader.split(' ')[1];
-    const supabase = getSupabase();
+    const supabase = await createServiceClient();
 
     // Verify expert
     const { data: { user } } = await supabase.auth.getUser(token);
@@ -99,7 +95,7 @@ export async function POST(request: NextRequest) {
       .eq('event_id', event_id);
 
     const minVotesRequired = 5;
-    
+
     if (votes && votes.length >= minVotesRequired) {
       // Calculate result
       const result = calculateWeightedResult(votes.map(v => ({
@@ -161,7 +157,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Event ID required' }, { status: 400 });
     }
 
-    const supabase = getSupabase();
+    const supabase = await createServiceClient();
 
     const { data: votes } = await supabase
       .from('expert_votes')

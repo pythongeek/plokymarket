@@ -41,6 +41,7 @@ import { Card } from '@/components/ui/card';
 import { Slider } from '@/components/ui/slider';
 import { cn } from '@/lib/utils';
 import type { MarketDraft, MarketTemplate } from '@/lib/market-creation/service';
+import type { ResolutionConfig, ResolutionMethod } from '@/types/market-system';
 
 interface ParameterConfigurationStageProps {
   draft: MarketDraft;
@@ -101,7 +102,9 @@ export function ParameterConfigurationStage({
   const [resolutionSourceUrl, setResolutionSourceUrl] = useState(draft?.resolution_source_url || '');
   const [resolutionCriteria, setResolutionCriteria] = useState(draft?.resolution_criteria || '');
   const [resolutionDeadline, setResolutionDeadline] = useState(draft?.resolution_deadline?.slice(0, 16) || '');
-  const [resolutionConfig, setResolutionConfig] = useState<Record<string, any>>(draft?.resolution_config || { method: 'AI Oracle' });
+  const [resolutionConfig, setResolutionConfig] = useState<ResolutionConfig>(
+    (draft?.resolution_config as ResolutionConfig) || { method: 'ai_oracle', confidence_threshold: 80 }
+  );
 
   // Oracle & Verification
   const [oracleType, setOracleType] = useState(draft?.oracle_type || 'MANUAL');
@@ -400,24 +403,63 @@ export function ParameterConfigurationStage({
           সমাধানের মানদণ্ড (Resolution Criteria)
         </h3>
 
-        <div className="space-y-2">
+        <div className="space-y-4">
           <Label className="text-slate-300">সমাধানের পদ্ধতি (Resolution Method) *</Label>
           <Select
             value={resolutionConfig.method}
-            onValueChange={(val: any) => setResolutionConfig(prev => ({ ...prev, method: val }))}
+            onValueChange={(val: ResolutionMethod) => setResolutionConfig(prev => ({ ...prev, method: val }))}
           >
             <SelectTrigger className="bg-slate-900 border-slate-700 text-white">
               <SelectValue placeholder="পদ্ধতি নির্বাচন করুন" />
             </SelectTrigger>
             <SelectContent className="bg-slate-900 border-slate-700">
-              <SelectItem value="AI Oracle" className="text-white hover:bg-slate-800">
-                <span className="flex items-center gap-2"><Cpu className="w-3 h-3" /> এআই ওরাকল (AI Oracle)</span>
+              <SelectItem value="manual_admin" className="text-white hover:bg-slate-800">
+                <span className="flex items-center gap-2"><Users className="w-3 h-3" /> ম্যানুয়াল অ্যাডমিন</span>
               </SelectItem>
-              <SelectItem value="Expert Panel" className="text-white hover:bg-slate-800">
-                <span className="flex items-center gap-2"><Users className="w-3 h-3" /> বিশেষজ্ঞ প্যানেল (Expert Panel)</span>
+              <SelectItem value="ai_oracle" className="text-white hover:bg-slate-800">
+                <span className="flex items-center gap-2"><Cpu className="w-3 h-3" /> AI Oracle (স্বয়ংক্রিয়)</span>
+              </SelectItem>
+              <SelectItem value="expert_panel" className="text-white hover:bg-slate-800">
+                <span className="flex items-center gap-2"><Users className="w-3 h-3" /> বিশেষজ্ঞ প্যানেল</span>
+              </SelectItem>
+              <SelectItem value="community_vote" className="text-white hover:bg-slate-800">
+                <span className="flex items-center gap-2"><Users className="w-3 h-3" /> কমিউনিটি ভোট</span>
               </SelectItem>
             </SelectContent>
           </Select>
+
+          {resolutionConfig.method === 'ai_oracle' && (
+            <div className="space-y-4 p-4 border border-violet-500/30 bg-violet-500/5 rounded-lg mt-4">
+              <div className="space-y-2">
+                <Label className="text-violet-300">AI Keywords (Comma Separated)</Label>
+                <Input
+                  value={resolutionConfig.ai_keywords?.join(', ') || ''}
+                  onChange={(e) => setResolutionConfig(prev => ({
+                    ...prev,
+                    ai_keywords: e.target.value.split(',').map(k => k.trim()).filter(Boolean)
+                  }))}
+                  placeholder="যেমন: win, victory, true, yes"
+                  className="bg-slate-900 border-violet-500/30 text-white"
+                />
+              </div>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-violet-300">AI Confidence Threshold</Label>
+                  <Badge className="bg-violet-500/20 text-violet-300 border-violet-500/30">
+                    {resolutionConfig.confidence_threshold || 80}%
+                  </Badge>
+                </div>
+                <Slider
+                  value={[resolutionConfig.confidence_threshold || 80]}
+                  onValueChange={([val]) => setResolutionConfig(prev => ({ ...prev, confidence_threshold: val }))}
+                  min={50}
+                  max={99}
+                  step={1}
+                  className="w-full"
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

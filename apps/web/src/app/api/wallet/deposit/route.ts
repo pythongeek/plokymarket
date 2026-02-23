@@ -1,76 +1,72 @@
-import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { NextResponse } from 'next/server';
+import { bkashService } from '@/lib/payments/bkash';
 
-export async function POST(req: Request) {
+export async function POST(request: Request) {
     try {
         const supabase = await createClient();
 
-        // 1. Authenticate the User
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-        if (authError || !user) {
+        // Verify user
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // 2. Parse payload
-        const body = await req.json();
-        const { mfs_provider, bdt_amount, txn_id, sender_number } = body;
+        const body = await request.json();
+        const { amount, method } = body;
 
-        // Basic Validation
-        if (!mfs_provider || !bdt_amount || !txn_id || !sender_number) {
-            return NextResponse.json({ error: 'Missing required configuration fields.' }, { status: 400 });
+        // Validation
+        if (!amount || amount < 100) {
+            return NextResponse.json({ error: 'Minimum deposit is ৳100' }, { status: 400 });
         }
 
-        if (bdt_amount < 500) {
-            return NextResponse.json({ error: 'Minimum deposit is 500 BDT.' }, { status: 400 });
+        if (!method || !['bkash', 'nagad', 'rocket'].includes(method)) {
+            return NextResponse.json({ error: 'Invalid payment method' }, { status: 400 });
         }
 
-        // 3. Fetch Live Exchange Rate
-        const { data: exchangeRate, error: rateError } = await supabase
-            .from('exchange_rates')
-            .select('bdt_to_usdt')
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .single();
+        // Generate invoice number
+        const invoiceNumber = `DEP${Date.now()}${user.id.slice(0, 8)}`;
+        const callbackUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/wallet/deposit/callback`;
 
-        if (rateError || !exchangeRate) {
-            return NextResponse.json({ error: 'Exchange rate unavailable. Try again later.' }, { status: 500 });
+        let paymentData: any;
+
+        if (method === 'bkash') {
+            // Create bKash payment
+            paymentData = await bkashService.createPayment(amount, invoiceNumber, callbackUrl);
+        } else {
+            // Handle other methods similarly
+            return NextResponse.json({ error: 'Method not yet implemented' }, { status: 400 });
         }
 
-        const currentRate = exchangeRate.bdt_to_usdt;
-
-        // Calculate USDT equivalent based on config. (e.g. Rate 115 BDT = 1 USDT -> 500 BDT / 115)
-        const usdt_amount = Number((bdt_amount / currentRate).toFixed(2));
-
-        // 4. Insert into deposit_requests
-        const { data: request, error: depositError } = await supabase
-            .from('deposit_requests')
+        // Create pending transaction
+        const { data: transaction, error: txError } = await supabase
+            .from('payment_transactions')
             .insert({
                 user_id: user.id,
-                bdt_amount,
-                usdt_amount,
-                exchange_rate: currentRate,
-                mfs_provider,
-                txn_id,
-                sender_number,
-                status: 'pending'
+                type: 'deposit',
+                amount,
+                method,
+                status: 'pending',
+                transaction_id: paymentData.paymentID,
+                provider_response: paymentData,
+                expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(), // 30 min expiry
             })
             .select()
             .single();
 
-        if (depositError) {
-            // Check for uniqueness constraint violation (same txn_id + provider)
-            if (depositError.code === '23505') {
-                return NextResponse.json({ error: 'This Transaction ID has already been submitted for this provider.' }, { status: 409 });
-            }
-            console.error('Deposit Insert Error:', depositError);
-            return NextResponse.json({ error: 'Failed to submit deposit request.' }, { status: 500 });
+        if (txError) {
+            console.error('Transaction creation error:', txError);
+            return NextResponse.json({ error: 'Failed to create transaction' }, { status: 500 });
         }
 
-        return NextResponse.json({ success: true, request });
+        return NextResponse.json({
+            success: true,
+            transaction,
+            paymentUrl: paymentData.bkashURL,
+        });
 
-    } catch (err: any) {
-        console.error('Unhandled Deposit Error:', err);
-        return NextResponse.json({ error: 'Internal server error occurred.' }, { status: 500 });
+    } catch (error) {
+        console.error('Deposit error:', error);
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
     }
 }

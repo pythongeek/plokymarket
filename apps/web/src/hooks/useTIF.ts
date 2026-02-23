@@ -67,24 +67,24 @@ interface UseTIFReturn {
       gtdExpiry?: string;
     }
   ) => Promise<void>;
-  
+
   // State
   orderState: TIFOrderState;
   resetOrderState: () => void;
-  
+
   // Fill tracking
   partialFillState?: PartialFillState;
   fillRecords: FillRecord[];
   vwapResult: VWAPResult;
   refreshFillState: (orderId: string) => Promise<void>;
-  
+
   // GTC Re-entry
   reEnterOrder: (orderId: string, newPrice: number) => Promise<ReEntryResult>;
-  
+
   // GTD Management
   gtdOrdersNearingExpiry: Order[];
   refreshGTDOrders: () => Promise<void>;
-  
+
   // Queries
   getOrders: (tif: TIFType) => Promise<Order[]>;
 }
@@ -98,12 +98,12 @@ export function useTIF(
   options: UseTIFOptions = {}
 ): UseTIFReturn {
   const { onSuccess, onError, onPartialFill, onExpiry } = options;
-  
+
   const [orderState, setOrderState] = useState<TIFOrderState>({
     isPlacing: false,
     isChecking: false,
   });
-  
+
   const [partialFillState, setPartialFillState] = useState<PartialFillState | undefined>();
   const [fillRecords, setFillRecords] = useState<FillRecord[]>([]);
   const [vwapResult, setVwapResult] = useState<VWAPResult>({
@@ -113,7 +113,7 @@ export function useTIF(
     fills: [],
   });
   const [gtdOrdersNearingExpiry, setGtdOrdersNearingExpiry] = useState<Order[]>([]);
-  
+
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
   const currentOrderIdRef = useRef<string | null>(null);
 
@@ -182,13 +182,13 @@ export function useTIF(
         result,
       });
 
-      if (result.status === 'cancelled' || result.status === 'CANCELLED') {
+      if (result.status === 'cancelled') {
         onError?.(result.message);
       } else {
         onSuccess?.(result);
-        
+
         // Start polling for fill updates if order is active
-        if (result.orderId && ['open', 'OPEN', 'partial', 'PARTIAL'].includes(result.status)) {
+        if (result.orderId && ['open', 'partially_filled'].includes(result.status)) {
           currentOrderIdRef.current = result.orderId;
           startPolling(result.orderId);
         }
@@ -236,14 +236,14 @@ export function useTIF(
 
       if (state) {
         setPartialFillState(state);
-        
+
         // Check for partial fill updates
         if (state.filledQuantity > 0 && state.filledQuantity < state.originalQuantity) {
           onPartialFill?.(state);
         }
 
         // Stop polling if order is terminal
-        if (['filled', 'cancelled', 'expired', 'FILLED', 'CANCELLED', 'EXPIRED'].includes(state.status)) {
+        if (['filled', 'cancelled', 'expired'].includes(state.status)) {
           if (pollingRef.current) {
             clearInterval(pollingRef.current);
             pollingRef.current = null;
@@ -268,13 +268,13 @@ export function useTIF(
     newPrice: number
   ): Promise<ReEntryResult> => {
     const result = await reEnterGTCOrder(orderId, newPrice);
-    
+
     if (result.newOrderId) {
       // Start polling the new order
       currentOrderIdRef.current = result.newOrderId;
       startPolling(result.newOrderId);
     }
-    
+
     return result;
   }, [startPolling]);
 
@@ -284,7 +284,7 @@ export function useTIF(
   const refreshGTDOrders = useCallback(async () => {
     const orders = await getGTDNearingExpiry(userId);
     setGtdOrdersNearingExpiry(orders);
-    
+
     // Check if any have expired
     const expired = await checkGTDExpiry();
     if (expired.length > 0) {
@@ -302,7 +302,7 @@ export function useTIF(
   // Auto-refresh GTD orders periodically
   useEffect(() => {
     refreshGTDOrders();
-    
+
     const interval = setInterval(() => {
       refreshGTDOrders();
     }, 60000); // Every minute
@@ -393,15 +393,15 @@ export function useGTDCountdown(expiryTime: string | null) {
       const expiry = new Date(expiryTime).getTime();
       const now = Date.now();
       const remaining = Math.max(0, expiry - now);
-      
+
       setTimeRemaining(remaining);
       setIsExpired(remaining === 0);
-      
+
       return remaining;
     };
 
     calculateRemaining();
-    
+
     const interval = setInterval(() => {
       const remaining = calculateRemaining();
       if (remaining === 0) {
@@ -416,7 +416,7 @@ export function useGTDCountdown(expiryTime: string | null) {
     const hours = Math.floor(ms / 3600000);
     const minutes = Math.floor((ms % 3600000) / 60000);
     const seconds = Math.floor((ms % 60000) / 1000);
-    
+
     if (hours > 0) {
       return `${hours}h ${minutes}m`;
     } else if (minutes > 0) {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createServiceClient } from '@/lib/supabase/server';
 
 // ===================================
 // MASTER CRON JOB - Combined for Vercel Free Tier
@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
   // Verify cron secret
   const authHeader = req.headers.get('authorization');
   const secretFromQuery = req.nextUrl.searchParams.get('secret');
-  
+
   if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}` && secretFromQuery !== CRON_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -27,9 +27,7 @@ export async function GET(req: NextRequest) {
     tasks: [] as any[],
   };
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY!;
-  const supabase = createClient(supabaseUrl, supabaseKey);
+  const supabase = await createServiceClient();
 
   const now = new Date();
   const dayOfWeek = now.getUTCDay(); // 0 = Sunday, 1 = Monday
@@ -51,7 +49,7 @@ export async function GET(req: NextRequest) {
           const restingSeconds = Math.floor(
             (now.getTime() - new Date(order.resting_start_time).getTime()) / 1000
           );
-          
+
           await supabase
             .from('resting_orders')
             .update({ total_resting_seconds: restingSeconds })
@@ -139,10 +137,10 @@ export async function GET(req: NextRequest) {
         .gte('resting_start_time', sevenDaysAgo.toISOString())
         .not('spread_at_placement', 'is', null);
 
+      const userMarketSpreads: Record<string, { spreads: number[]; totalSize: number }> = {};
+
       if (!usersError && activeUsers) {
         // Calculate average spread per user per market
-        const userMarketSpreads: Record<string, { spreads: number[]; totalSize: number }> = {};
-        
         for (const order of activeUsers) {
           const key = `${order.user_id}:${order.market_id}`;
           if (!userMarketSpreads[key]) {
@@ -155,7 +153,7 @@ export async function GET(req: NextRequest) {
         for (const [key, data] of Object.entries(userMarketSpreads)) {
           const [userId, marketId] = key.split(':');
           const avgSpread = data.spreads.reduce((a, b) => a + b, 0) / data.spreads.length;
-          
+
           // Determine spread tier
           let spreadTier = 'wide';
           let multiplier = 0.5;
@@ -204,7 +202,7 @@ export async function GET(req: NextRequest) {
         const lastWeekStart = new Date(now);
         lastWeekStart.setDate(lastWeekStart.getDate() - 7);
         lastWeekStart.setHours(0, 0, 0, 0);
-        
+
         const lastWeekEnd = new Date(lastWeekStart);
         lastWeekEnd.setDate(lastWeekEnd.getDate() + 7);
 

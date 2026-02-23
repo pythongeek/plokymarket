@@ -13,7 +13,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createServiceClient } from '@/lib/supabase/server';
 import { setLock, checkLock } from '@/lib/upstash/redis';
 
 export const runtime = 'edge';
@@ -22,33 +22,29 @@ export const preferredRegion = 'iad1';
 // Verify QStash signature
 async function verifyQStashSignature(request: NextRequest): Promise<boolean> {
   const signature = request.headers.get('upstash-signature');
-  
+
   if (process.env.NODE_ENV === 'development' && !signature) {
     return true;
   }
-  
+
   if (!signature) {
     console.warn('[Cron] Missing QStash signature');
     return false;
   }
-  
+
   return true;
 }
 
 export async function GET(request: NextRequest) {
   const startTime = Date.now();
-  
+
   // Verify QStash signature
   const isValid = await verifyQStashSignature(request);
   if (!isValid) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { persistSession: false, autoRefreshToken: false } }
-  );
+  const supabase = await createServiceClient();
 
   const results = {
     processed: 0,
@@ -84,7 +80,7 @@ export async function GET(request: NextRequest) {
         // Check if already being processed
         const lockKey = `market:workflow:${market.id}`;
         const isLocked = await checkLock(lockKey);
-        
+
         if (isLocked) {
           console.log(`[Cron] Market ${market.id} already in workflow`);
           results.skipped++;
@@ -104,7 +100,7 @@ export async function GET(request: NextRequest) {
 
         // Trigger Upstash Workflow for AI processing
         const workflowUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/upstash-workflow`;
-        
+
         const workflowResponse = await fetch(workflowUrl, {
           method: 'POST',
           headers: {

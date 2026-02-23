@@ -129,3 +129,11 @@ export async function get(key: string): Promise<string | null> {
     return null;
   }
 }
+
+export const redis = {
+  get,
+  setex,
+  del: deleteLock,
+  incr: increment,
+  expire: expire
+};

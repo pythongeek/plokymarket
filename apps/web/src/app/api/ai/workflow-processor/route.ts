@@ -5,15 +5,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createServiceClient } from '@/lib/supabase/server';
 
 export const runtime = 'edge';
 
-const getSupabase = () => createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { persistSession: false } }
-);
+// Initialize Supabase admin client is managed via createServiceClient
 
 // Bangladesh Context Prompt Builder
 function buildPrompt(topic: string, context: string, variation: number): string {
@@ -139,7 +135,7 @@ async function callGemini(prompt: string): Promise<any> {
 
   const data = await response.json();
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  
+
   if (!text) {
     throw new Error('No content from Gemini');
   }
@@ -161,7 +157,7 @@ async function callGemini(prompt: string): Promise<any> {
 async function notifyAdmin(workflowId: string, topic: string, count: number) {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
-  
+
   if (!botToken || !chatId) return;
 
   const message = `
@@ -192,7 +188,7 @@ async function notifyAdmin(workflowId: string, topic: string, count: number) {
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
-  
+
   try {
     // Verify QStash signature (simplified for free tier)
     const signature = request.headers.get('upstash-signature');
@@ -203,7 +199,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { workflow_id, topic, context, variations, suggestion_ids } = body;
 
-    const supabase = getSupabase();
+    const supabase = await createServiceClient();
     const results = [];
 
     // Generate each variation

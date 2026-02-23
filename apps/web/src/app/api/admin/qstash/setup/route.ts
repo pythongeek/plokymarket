@@ -11,7 +11,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createServiceClient } from '@/lib/supabase/server';
 import { createSchedule, listSchedules, deleteSchedule } from '@/lib/qstash/client';
 
 // Available workflow configurations
@@ -53,40 +53,31 @@ export const runtime = 'edge';
 // Verify admin authentication
 async function verifyAdmin(request: Request): Promise<{ isAdmin: boolean; error?: string }> {
   const authHeader = request.headers.get('authorization');
-  
+
   if (!authHeader?.startsWith('Bearer ')) {
     return { isAdmin: false, error: 'Missing authorization header' };
   }
 
   const token = authHeader.split(' ')[1];
-  
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      },
-    }
-  );
+
+  const supabase = await createServiceClient();
 
   const { data: { user }, error } = await supabase.auth.getUser(token);
-  
+
   if (error || !user) {
     return { isAdmin: false, error: 'Invalid token' };
   }
 
   // Check if user is admin (supports both 'users' and 'user_profiles' tables)
   let isAdmin = false;
-  
+
   // Try user_profiles table first (most common)
   const { data: profile } = await supabase
     .from('user_profiles')
     .select('is_admin, is_super_admin')
     .eq('id', user.id)
     .single();
-  
+
   if (profile?.is_admin || profile?.is_super_admin) {
     isAdmin = true;
   } else {
@@ -96,7 +87,7 @@ async function verifyAdmin(request: Request): Promise<{ isAdmin: boolean; error?
       .select('role')
       .eq('id', user.id)
       .single();
-    
+
     if (userData?.role === 'admin') {
       isAdmin = true;
     }
@@ -117,7 +108,7 @@ async function verifyAdmin(request: Request): Promise<{ isAdmin: boolean; error?
  */
 export async function POST(request: Request) {
   const adminCheck = await verifyAdmin(request);
-  
+
   if (!adminCheck.isAdmin) {
     return NextResponse.json(
       { error: adminCheck.error || 'Unauthorized' },
@@ -127,7 +118,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { 
+    const {
       workflow = 'check-markets',
       baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://plokymarket.vercel.app'
     } = body;
@@ -136,7 +127,7 @@ export async function POST(request: Request) {
     const config = WORKFLOW_CONFIGS[workflow as keyof typeof WORKFLOW_CONFIGS];
     if (!config) {
       return NextResponse.json(
-        { 
+        {
           error: 'Invalid workflow',
           available: Object.keys(WORKFLOW_CONFIGS)
         },
@@ -178,7 +169,7 @@ export async function POST(request: Request) {
   } catch (error: any) {
     console.error('[QStash Setup] Error:', error);
     return NextResponse.json(
-      { 
+      {
         error: error.message || 'Failed to setup QStash schedule',
         details: error.stack,
       },
@@ -193,7 +184,7 @@ export async function POST(request: Request) {
  */
 export async function GET(request: Request) {
   const adminCheck = await verifyAdmin(request);
-  
+
   if (!adminCheck.isAdmin) {
     return NextResponse.json(
       { error: adminCheck.error || 'Unauthorized' },
@@ -203,7 +194,7 @@ export async function GET(request: Request) {
 
   try {
     const schedules = await listSchedules();
-    
+
     return NextResponse.json({
       success: true,
       schedules,
@@ -226,7 +217,7 @@ export async function GET(request: Request) {
  */
 export async function DELETE(request: Request) {
   const adminCheck = await verifyAdmin(request);
-  
+
   if (!adminCheck.isAdmin) {
     return NextResponse.json(
       { error: adminCheck.error || 'Unauthorized' },

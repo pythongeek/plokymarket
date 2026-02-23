@@ -6,9 +6,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import { 
-  verifyQStashSignature, 
+import { createServiceClient } from '@/lib/supabase/server';
+import {
+  verifyQStashSignature,
   createWorkflowExecution,
   updateWorkflowStatus,
   logWorkflowStep,
@@ -17,11 +17,7 @@ import {
 export const runtime = 'edge';
 export const preferredRegion = 'iad1';
 
-const getSupabase = () => createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { persistSession: false, autoRefreshToken: false } }
-);
+// Initialize Supabase admin client is managed via createServiceClient
 
 interface AutoVerifyPayload {
   workflowType: 'auto_verification';
@@ -43,7 +39,7 @@ async function checkMfsTransactionStatus(
   // - bKash API
   // - Nagad API  
   // - Rocket API
-  
+
   // For now, return false to always use manual verification
   return { verified: false, reason: 'Auto-verification not configured' };
 }
@@ -51,33 +47,33 @@ async function checkMfsTransactionStatus(
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
   let executionId: string | null = null;
-  
+
   try {
     // Verify QStash signature
     const signature = request.headers.get('upstash-signature') || '';
     const body = await request.text();
-    
+
     if (!verifyQStashSignature(signature, body)) {
       return NextResponse.json(
         { error: 'Invalid signature' },
         { status: 401 }
       );
     }
-    
+
     const data: AutoVerifyPayload = JSON.parse(body);
-    
+
     // Create workflow execution record
     executionId = await createWorkflowExecution('auto_verification', { timestamp: data.timestamp });
     if (executionId) {
       await updateWorkflowStatus(executionId, 'running');
     }
-    
-    const supabase = getSupabase();
-    
+
+    const supabase = await createServiceClient();
+
     // Step 1: Get pending deposits older than 10 minutes
     await logWorkflowStep(executionId!, 'fetch_pending', 'started');
     const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-    
+
     const { data: pendingDeposits, error: fetchError } = await supabase
       .from('deposit_requests')
       .select('*')
@@ -86,17 +82,17 @@ export async function POST(request: NextRequest) {
       .lt('created_at', tenMinutesAgo)
       .order('created_at', { ascending: true })
       .limit(50);
-    
+
     if (fetchError) {
       await logWorkflowStep(executionId!, 'fetch_pending', 'failed', {}, fetchError.message);
       throw fetchError;
     }
-    
+
     const deposits = pendingDeposits || [];
-    await logWorkflowStep(executionId!, 'fetch_pending', 'completed', { 
-      count: deposits.length 
+    await logWorkflowStep(executionId!, 'fetch_pending', 'completed', {
+      count: deposits.length
     });
-    
+
     if (deposits.length === 0) {
       await updateWorkflowStatus(executionId!, 'completed');
       return NextResponse.json({
@@ -107,14 +103,14 @@ export async function POST(request: NextRequest) {
         autoVerified: 0,
       });
     }
-    
+
     // Step 2: Process each deposit
     await logWorkflowStep(executionId!, 'process_deposits', 'started');
-    
+
     let autoVerified = 0;
     let manualQueue = 0;
     let failed = 0;
-    
+
     for (const deposit of deposits) {
       try {
         // Mark as attempted
@@ -125,7 +121,7 @@ export async function POST(request: NextRequest) {
             updated_at: new Date().toISOString(),
           })
           .eq('id', deposit.id);
-        
+
         // Check MFS status (placeholder)
         const verificationResult = await checkMfsTransactionStatus(
           deposit.mfs_provider,
@@ -133,7 +129,7 @@ export async function POST(request: NextRequest) {
           deposit.sender_number,
           parseFloat(deposit.bdt_amount.toString())
         );
-        
+
         if (verificationResult.verified) {
           // Auto-verify the deposit
           const { error: verifyError } = await supabase.rpc('verify_and_credit_deposit', {
@@ -142,10 +138,10 @@ export async function POST(request: NextRequest) {
             p_usdt_amount: parseFloat(deposit.usdt_amount.toString()),
             p_admin_notes: 'Auto-verified by system',
           });
-          
+
           if (!verifyError) {
             autoVerified++;
-            
+
             // Update with auto-approved status
             await supabase
               .from('deposit_requests')
@@ -157,7 +153,7 @@ export async function POST(request: NextRequest) {
                 },
               })
               .eq('id', deposit.id);
-            
+
             // Notify user
             await supabase.from('notifications').insert({
               user_id: deposit.user_id,
@@ -171,7 +167,7 @@ export async function POST(request: NextRequest) {
         } else {
           // Move to manual queue
           manualQueue++;
-          
+
           await supabase
             .from('deposit_requests')
             .update({
@@ -189,21 +185,21 @@ export async function POST(request: NextRequest) {
         failed++;
       }
     }
-    
+
     await logWorkflowStep(executionId!, 'process_deposits', 'completed', {
       autoVerified,
       manualQueue,
       failed,
     });
-    
+
     // Step 3: Send summary to admins if there are results
     if (autoVerified > 0 || manualQueue > 0) {
       await logWorkflowStep(executionId!, 'send_summary', 'started');
-      
+
       const { data: admins } = await supabase
         .from('admin_roles')
         .select('user_id');
-      
+
       const summaryMessage = `🔍 অটো-ভেরিফিকেশন সামারি
 
 মোট চেক করা হয়েছে: ${deposits.length}
@@ -212,7 +208,7 @@ export async function POST(request: NextRequest) {
 ❌ ব্যর্থ: ${failed}
 
 সময়: ${new Date().toLocaleString('bn-BD', { timeZone: 'Asia/Dhaka' })}`;
-      
+
       for (const admin of admins || []) {
         await supabase.from('notifications').insert({
           user_id: admin.user_id,
@@ -221,16 +217,16 @@ export async function POST(request: NextRequest) {
           message: summaryMessage,
         });
       }
-      
+
       await logWorkflowStep(executionId!, 'send_summary', 'completed');
     }
-    
+
     // Mark workflow as completed
     const duration = Date.now() - startTime;
     if (executionId) {
       await updateWorkflowStatus(executionId, 'completed');
     }
-    
+
     return NextResponse.json({
       success: true,
       message: 'Auto-verification completed',
@@ -243,11 +239,11 @@ export async function POST(request: NextRequest) {
         failed,
       },
     });
-    
+
   } catch (error) {
     const duration = Date.now() - startTime;
     console.error('Auto-verification workflow error:', error);
-    
+
     if (executionId) {
       await updateWorkflowStatus(
         executionId,
@@ -255,7 +251,7 @@ export async function POST(request: NextRequest) {
         error instanceof Error ? error.message : 'Unknown error'
       );
     }
-    
+
     return NextResponse.json(
       {
         success: false,

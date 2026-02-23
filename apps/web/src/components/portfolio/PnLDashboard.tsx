@@ -2,12 +2,12 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  Wallet, 
-  Target, 
-  Percent, 
+import {
+  TrendingUp,
+  TrendingDown,
+  Wallet,
+  Target,
+  Percent,
   Activity,
   Award,
   Calendar,
@@ -23,6 +23,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer
+} from 'recharts';
 import { usePnL, type TimeHorizon, USD_TO_BDT } from '@/hooks/portfolio/usePnL';
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatPercentage } from '@/lib/format';
@@ -60,7 +69,7 @@ const itemVariants = {
   }
 };
 
-const pulseAnimation = {
+const pulseAnimation: any = {
   scale: [1, 1.02, 1],
   transition: {
     duration: 2,
@@ -116,7 +125,7 @@ export function PnLDashboard({ userId }: PnLDashboardProps) {
             Track your investments and maximize returns
           </p>
         </div>
-        
+
         <div className="flex items-center gap-3">
           <Button
             variant="outline"
@@ -126,7 +135,7 @@ export function PnLDashboard({ userId }: PnLDashboardProps) {
           >
             {showBDT ? '৳ BDT' : '$ USD'}
           </Button>
-          
+
           <div className="flex bg-muted rounded-lg p-1">
             {(['intraday', 'daily', 'weekly', 'monthly', 'quarterly', 'annual', 'allTime'] as TimeHorizon[]).map((h) => (
               <button
@@ -134,8 +143,8 @@ export function PnLDashboard({ userId }: PnLDashboardProps) {
                 onClick={() => setTimeHorizon(h)}
                 className={cn(
                   "px-3 py-1.5 text-xs font-medium rounded-md transition-all",
-                  timeHorizon === h 
-                    ? "bg-primary text-primary-foreground shadow-sm" 
+                  timeHorizon === h
+                    ? "bg-primary text-primary-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
                 )}
               >
@@ -158,8 +167,8 @@ export function PnLDashboard({ userId }: PnLDashboardProps) {
             isProfit ? "bg-gradient-to-br from-emerald-500 to-teal-500" : "bg-gradient-to-br from-rose-500 to-orange-500"
           )} />
           <CardContent className="relative p-6">
-            <motion.div 
-              animate={isProfit && totalValue > 1000 ? pulseAnimation : {}}
+            <motion.div
+              animate={isProfit && totalValue > 1000 ? pulseAnimation : undefined}
               className="flex items-center justify-between"
             >
               <div className="flex items-center gap-2">
@@ -179,7 +188,7 @@ export function PnLDashboard({ userId }: PnLDashboardProps) {
               )}
             </motion.div>
             <div className="mt-4">
-              <motion.div 
+              <motion.div
                 key={totalValue}
                 initial={{ scale: 0.8, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
@@ -214,7 +223,7 @@ export function PnLDashboard({ userId }: PnLDashboardProps) {
               <span className="text-sm font-medium text-muted-foreground">রিয়েলাইজড P&L</span>
             </div>
             <div className="mt-4">
-              <motion.div 
+              <motion.div
                 key={realizedValue}
                 initial={{ scale: 0.8, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
@@ -243,7 +252,7 @@ export function PnLDashboard({ userId }: PnLDashboardProps) {
               <span className="text-sm font-medium text-muted-foreground">আনরিয়েলাইজড P&L</span>
             </div>
             <div className="mt-4">
-              <motion.div 
+              <motion.div
                 key={unrealizedValue}
                 initial={{ scale: 0.8, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
@@ -257,6 +266,75 @@ export function PnLDashboard({ userId }: PnLDashboardProps) {
               <p className="text-xs text-muted-foreground mt-1">
                 খোলা পজিশনে সম্ভাব্য লাভ/ক্ষতি
               </p>
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      {/* PnL Performance Chart */}
+      <motion.div variants={itemVariants}>
+        <Card className="overflow-hidden border-primary/10">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-base font-bold flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-primary" />
+              PnL ইতিহাস
+            </CardTitle>
+            <Badge variant="outline" className="text-[10px] uppercase font-bold tracking-tighter">
+              {timeHorizonLabels[timeHorizon].bn} পারফরম্যান্স
+            </Badge>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <div className="h-[250px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={pnlData.history} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="pnlGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={isProfit ? "#10b981" : "#ef4444"} stopOpacity={0.3} />
+                      <stop offset="95%" stopColor={isProfit ? "#10b981" : "#ef4444"} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#ccc" opacity={0.2} />
+                  <XAxis
+                    dataKey="date"
+                    hide
+                  />
+                  <YAxis
+                    hide
+                    domain={['auto', 'auto']}
+                  />
+                  <RechartsTooltip
+                    content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        return (
+                          <div className="bg-background/95 backdrop-blur-sm border border-primary/20 p-2 rounded-lg shadow-xl text-xs">
+                            <p className="font-bold opacity-70 mb-1">
+                              {new Date(payload[0].payload.date).toLocaleDateString('bn-BD', {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </p>
+                            <p className={cn("font-black", isProfit ? "text-emerald-500" : "text-rose-500")}>
+                              {formatCurrency(showBDT ? payload[0].payload.bdtValue : payload[0].payload.value, currency)}
+                            </p>
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey={showBDT ? "bdtValue" : "value"}
+                    stroke={isProfit ? "#10b981" : "#ef4444"}
+                    strokeWidth={2}
+                    fillOpacity={1}
+                    fill="url(#pnlGradient)"
+                    animationDuration={1500}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
             </div>
           </CardContent>
         </Card>
@@ -402,8 +480,8 @@ export function PnLDashboard({ userId }: PnLDashboardProps) {
                           <p className="text-rose-600 font-medium text-sm">
                             -{formatCurrency(suggestion.unrealizedLossBDT, 'BDT')}
                           </p>
-                          <Badge 
-                            variant="secondary" 
+                          <Badge
+                            variant="secondary"
                             className="mt-1 text-xs bg-emerald-100 text-emerald-700"
                           >
                             সেভিংস: {formatCurrency(suggestion.potentialTaxSavingsBDT, 'BDT')}
@@ -428,16 +506,16 @@ export function PnLDashboard({ userId }: PnLDashboardProps) {
   );
 }
 
-function MetricCard({ 
-  label, 
-  value, 
-  icon: Icon, 
+function MetricCard({
+  label,
+  value,
+  icon: Icon,
   color,
-  subtext 
-}: { 
-  label: string; 
-  value: string; 
-  icon: React.ElementType; 
+  subtext
+}: {
+  label: string;
+  value: string;
+  icon: React.ElementType;
   color: string;
   subtext: string;
 }) {

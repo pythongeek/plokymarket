@@ -3,16 +3,10 @@
  * Supports burst allowance and smooth refill.
  */
 
+import { redis } from "@/lib/upstash/redis";
+
 const REFILL_RATE_PER_SEC = 100 / 60; // 100 orders per minute = ~1.66 ops/sec
 const MAX_BURST = 20; // Burst allowance
-
-interface Bucket {
-    tokens: number;
-    lastRefill: number;
-}
-
-const buckets = new Map<string, Bucket>();
-
 
 export class RateLimiter {
     // Default: 100/min (1.66/sec)
@@ -25,33 +19,23 @@ export class RateLimiter {
         'place': { rate: 50, burst: 50 }   // Higher limit for placing
     };
 
-    static check(userId: string, type: 'default' | 'cancel' | 'place' = 'default'): boolean {
-        const now = Date.now();
-        const key = `${userId}:${type}`; // Unique bucket per user + type
-        let bucket = buckets.get(key);
-
+    static async check(userId: string, type: 'default' | 'cancel' | 'place' = 'default'): Promise<boolean> {
+        const key = `ratelimit:${userId}:${type}`; // Unique prefix
         const config = this.LIMITS[type] || { rate: this.DEFAULT_RATE, burst: this.DEFAULT_BURST };
+        const window = Math.ceil(config.burst / config.rate) || 1; // Simplified to fixed window
 
-        if (!bucket) {
-            bucket = { tokens: config.burst, lastRefill: now };
-            buckets.set(key, bucket);
-        }
-
-        // Refill
-        const elapsedSec = (now - bucket.lastRefill) / 1000;
-        const newTokens = elapsedSec * config.rate;
-
-        if (newTokens > 0) {
-            bucket.tokens = Math.min(config.burst, bucket.tokens + newTokens);
-            bucket.lastRefill = now;
-        }
-
-        if (bucket.tokens >= 1) {
-            bucket.tokens -= 1;
+        try {
+            const current = await redis.incr(key);
+            if (current === 1) {
+                await redis.expire(key, window);
+            }
+            if (current > config.burst) {
+                return false;
+            }
             return true;
+        } catch (error) {
+            console.error('RateLimiter Redis Error:', error);
+            return true; // Fallback: allow request if Redis fails
         }
-
-        return false;
     }
 }
-

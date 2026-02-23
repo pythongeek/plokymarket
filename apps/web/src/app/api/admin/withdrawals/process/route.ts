@@ -1,172 +1,124 @@
-import { createClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 
-// POST /api/admin/withdrawals/process
-// Move withdrawal from pending to processing (hold balance)
+/**
+ * POST /api/admin/withdrawals/process
+ * Admin API to process withdrawal requests (approve/reject)
+ */
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient();
-    
-    // Get user session
+    const supabase = await createServiceClient();
+
+    // 1. Authenticate Session
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
     if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Check if user has admin role
-    const { data: adminRole, error: roleError } = await supabase
-      .from('admin_roles')
-      .select('role')
-      .eq('user_id', user.id)
+    // 2. Authorization Check (Admin Only)
+    // Checking against user_profiles for admin status as per guidelines
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .select('is_admin, is_super_admin')
+      .eq('id', user.id)
       .single();
 
-    if (roleError || !adminRole) {
-      return NextResponse.json(
-        { error: 'Admin access required' },
-        { status: 403 }
-      );
+    if (!profile?.is_admin && !profile?.is_super_admin) {
+      return NextResponse.json({ error: 'Access Denied: Admins Only' }, { status: 403 });
     }
 
-    const body = await request.json();
-    const { withdrawalId, adminNotes } = body;
-
-    if (!withdrawalId) {
-      return NextResponse.json(
-        { error: 'Withdrawal ID required' },
-        { status: 400 }
-      );
+    const { withdrawal_id, action, note } = await request.json();
+    if (!withdrawal_id || !action) {
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    // Get withdrawal request
-    const { data: withdrawal, error: withdrawalError } = await supabase
+    // 3. Status Verification
+    const { data: withdrawal, error: fetchError } = await supabase
       .from('withdrawal_requests')
       .select('*')
-      .eq('id', withdrawalId)
+      .eq('id', withdrawal_id)
       .single();
 
-    if (withdrawalError || !withdrawal) {
-      return NextResponse.json(
-        { error: 'Withdrawal request not found' },
-        { status: 404 }
-      );
+    if (fetchError || !withdrawal) {
+      return NextResponse.json({ error: 'Withdrawal request not found' }, { status: 404 });
     }
 
-    if (withdrawal.status !== 'pending') {
-      return NextResponse.json(
-        { error: 'Withdrawal already processed' },
-        { status: 400 }
-      );
+    // Status check: Must be pending or processing
+    if (withdrawal.status !== 'pending' && withdrawal.status !== 'processing') {
+      return NextResponse.json({ error: 'Invalid withdrawal status for processing' }, { status: 400 });
     }
 
-    // Check user balance
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('balance')
-      .eq('id', withdrawal.user_id)
-      .single();
+    if (action === 'approve') {
+      // Execute Payout Logic (Mock)
+      const payoutResult = await processPayout(withdrawal);
 
-    if (profileError || !profile) {
-      return NextResponse.json(
-        { error: 'User profile not found' },
-        { status: 404 }
-      );
-    }
-
-    if (profile.balance < withdrawal.usdt_amount) {
-      return NextResponse.json(
-        { error: 'Insufficient user balance' },
-        { status: 400 }
-      );
-    }
-
-    // Create balance hold
-    const { data: hold, error: holdError } = await supabase
-      .from('balance_holds')
-      .insert({
-        user_id: withdrawal.user_id,
-        amount: withdrawal.usdt_amount,
-        hold_type: 'withdrawal',
-        reference_id: withdrawalId,
-        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24 hours
-      })
-      .select()
-      .single();
-
-    if (holdError) {
-      console.error('Failed to create balance hold:', holdError);
-      return NextResponse.json(
-        { error: 'Failed to hold balance' },
-        { status: 500 }
-      );
-    }
-
-    // Deduct balance from user
-    const { error: balanceError } = await supabase
-      .from('profiles')
-      .update({
-        balance: profile.balance - withdrawal.usdt_amount,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', withdrawal.user_id);
-
-    if (balanceError) {
-      console.error('Failed to deduct balance:', balanceError);
-      return NextResponse.json(
-        { error: 'Failed to deduct balance' },
-        { status: 500 }
-      );
-    }
-
-    // Update withdrawal status to processing
-    const { error: updateError } = await supabase
-      .from('withdrawal_requests')
-      .update({
-        status: 'processing',
-        balance_hold_id: hold.id,
-        admin_notes: adminNotes || null,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', withdrawalId);
-
-    if (updateError) {
-      console.error('Failed to update withdrawal:', updateError);
-      return NextResponse.json(
-        { error: 'Failed to update withdrawal status' },
-        { status: 500 }
-      );
-    }
-
-    // Create notification for user
-    await supabase.from('notifications').insert({
-      user_id: withdrawal.user_id,
-      type: 'withdrawal_processing',
-      title: 'উইথড্র প্রসেসিং শুরু হয়েছে',
-      message: `আপনার ${withdrawal.usdt_amount} USDT উইথড্র রিকোয়েস্ট প্রসেসিং শুরু হয়েছে।`,
-      metadata: {
-        withdrawal_id: withdrawalId,
-        usdt_amount: withdrawal.usdt_amount,
-        bdt_amount: withdrawal.bdt_amount
+      if (!payoutResult.success) {
+        return NextResponse.json({ error: 'Payout Gateway Error' }, { status: 502 });
       }
-    });
+
+      // Update withdrawal_requests status to approved
+      const { error: updateError } = await supabase
+        .from('withdrawal_requests')
+        .update({
+          status: 'completed', // 'completed' is the final success status in our enum
+          processed_at: new Date().toISOString(),
+          processed_by: user.id,
+          transfer_proof_url: payoutResult.transactionId, // Store mock result
+          admin_notes: note || 'Approved by Admin'
+        })
+        .eq('id', withdrawal_id);
+
+      if (updateError) throw updateError;
+
+      // Release the escrow/hold balance in Supabase via RPC
+      // This is necessary because funds are locked during initial request/processing
+      const { error: rpcError } = await supabase.rpc('release_balance_hold', { p_id: withdrawal_id });
+      if (rpcError) throw rpcError;
+
+    } else if (action === 'reject') {
+      // Reject and Refund balance to user via atomic RPC
+      const { error: rejectError } = await supabase.rpc('reject_withdrawal', {
+        p_id: withdrawal_id,
+        p_note: note || 'Rejected by Admin'
+      });
+
+      if (rejectError) throw rejectError;
+    } else {
+      return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+    }
 
     return NextResponse.json({
       success: true,
-      message: 'Withdrawal moved to processing',
-      data: {
-        holdId: hold.id,
-        withdrawalId
-      }
+      message: `Withdrawal ${action}ed successfully`,
+      status: action === 'approve' ? 'completed' : 'rejected'
     });
 
-  } catch (error) {
-    console.error('Admin process withdrawal error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+  } catch (error: any) {
+    console.error('CRITICAL_WITHDRAWAL_ERROR:', error);
+    return NextResponse.json({
+      error: 'Internal Server Error',
+      details: error.message
+    }, { status: 500 });
   }
+}
+
+/**
+ * processPayout
+ * Mock function for MFS (bKash/Nagad/Rocket) Payout integration
+ */
+async function processPayout(withdrawal: any) {
+  // Placeholder for real MFS Gateway API integration
+  // Logic Flow:
+  // 1. Prepare Request Payload with recipient number and amount
+  // 2. Sign request with platform secret key
+  // 3. POST to Gateway API (bKash/Nagad/Rocket)
+  // 4. Handle response asynchronously or synchronously
+
+  console.log(`[Payout Mock] Processing ${withdrawal.bdt_amount} BDT for ${withdrawal.recipient_number} via ${withdrawal.mfs_provider}`);
+
+  // Simulating successful gateway response
+  return {
+    success: true,
+    transactionId: `MFS-${withdrawal.mfs_provider.toUpperCase()}-${Date.now()}`
+  };
 }

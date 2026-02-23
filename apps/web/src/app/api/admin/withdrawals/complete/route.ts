@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 
 // POST /api/admin/withdrawals/complete
@@ -6,10 +6,10 @@ import { NextResponse } from 'next/server';
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
-    
+
     // Get user session
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
+
     if (authError || !user) {
       return NextResponse.json(
         { error: 'Authentication required' },
@@ -41,8 +41,10 @@ export async function POST(request: Request) {
       );
     }
 
+    const service = await createServiceClient();
+
     // Get withdrawal request
-    const { data: withdrawal, error: withdrawalError } = await supabase
+    const { data: withdrawal, error: withdrawalError } = await service
       .from('withdrawal_requests')
       .select('*')
       .eq('id', withdrawalId)
@@ -63,7 +65,7 @@ export async function POST(request: Request) {
     }
 
     // Use the database function to complete withdrawal
-    const { data: result, error: functionError } = await supabase
+    const { data: result, error: functionError } = await service
       .rpc('process_withdrawal', {
         p_withdrawal_id: withdrawalId,
         p_user_id: withdrawal.user_id,
@@ -81,14 +83,14 @@ export async function POST(request: Request) {
 
     // Update transfer proof if provided
     if (transferProofUrl) {
-      await supabase
+      await service
         .from('withdrawal_requests')
         .update({ transfer_proof_url: transferProofUrl })
         .eq('id', withdrawalId);
     }
 
     // Create notification for user
-    await supabase.from('notifications').insert({
+    await service.from('notifications').insert({
       user_id: withdrawal.user_id,
       type: 'withdrawal_completed',
       title: 'উইথড্র সম্পন্ন হয়েছে',

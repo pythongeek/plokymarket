@@ -1,0 +1,1937 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plokymarket — Core Pillars Production Analysis</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=DM+Sans:wght@300;400;500;700;800&family=Bebas+Neue&display=swap');
+
+:root {
+  --bg: #050810;
+  --s1: #0a0f1e;
+  --s2: #0f1629;
+  --border: #1e2a45;
+  --border2: #243050;
+  --p: #4f9eff;      /* blue */
+  --g: #22d3a0;      /* green */
+  --r: #ff4f6a;      /* red */
+  --y: #ffc044;      /* yellow */
+  --o: #ff7e35;      /* orange */
+  --v: #a855f7;      /* violet */
+  --t: #e2eeff;      /* text */
+  --m: #5c7099;      /* muted */
+}
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--t);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* SCANLINE EFFECT */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* HEADER */
+.masthead {
+  background: linear-gradient(135deg, #0a0f1e 0%, #050d1f 50%, #080514 100%);
+  border-bottom: 1px solid var(--border);
+  padding: 48px 40px 40px;
+  position: relative;
+  overflow: hidden;
+}
+
+.masthead::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: 20%;
+  width: 600px; height: 600px;
+  background: radial-gradient(circle, rgba(79,158,255,0.06) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.masthead::after {
+  content: '';
+  position: absolute;
+  bottom: -50%;
+  right: 10%;
+  width: 400px; height: 400px;
+  background: radial-gradient(circle, rgba(34,211,160,0.04) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.masthead-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  position: relative;
+}
+
+.tag-line {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  color: var(--g);
+  text-transform: uppercase;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tag-line::before {
+  content: '';
+  display: inline-block;
+  width: 20px; height: 1px;
+  background: var(--g);
+}
+
+.masthead h1 {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: clamp(36px, 5vw, 64px);
+  letter-spacing: 0.03em;
+  line-height: 0.95;
+  color: var(--t);
+  margin-bottom: 16px;
+}
+
+.masthead h1 span { color: var(--p); }
+
+.masthead-desc {
+  color: var(--m);
+  font-size: 15px;
+  max-width: 600px;
+  margin-bottom: 32px;
+}
+
+.meta-row {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.meta-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  color: var(--m);
+}
+
+.meta-chip strong { color: var(--t); }
+
+/* LAYOUT */
+.wrap {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 40px 80px;
+}
+
+/* PILLAR SECTION */
+.pillar {
+  margin-top: 64px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--s1);
+}
+
+.pillar-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  padding: 28px 32px;
+  background: var(--s2);
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+
+.pillar-head::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 4px;
+  border-radius: 2px 0 0 2px;
+}
+
+.ph-blue::before { background: var(--p); }
+.ph-green::before { background: var(--g); }
+.ph-red::before { background: var(--r); }
+.ph-yellow::before { background: var(--y); }
+.ph-violet::before { background: var(--v); }
+.ph-orange::before { background: var(--o); }
+
+.pillar-icon {
+  font-size: 32px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.pillar-meta { flex: 1; }
+
+.pillar-num {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  color: var(--m);
+  letter-spacing: 0.1em;
+  margin-bottom: 4px;
+}
+
+.pillar-name {
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 800;
+  font-size: 22px;
+  color: var(--t);
+  margin-bottom: 4px;
+}
+
+.pillar-subtitle {
+  font-size: 13px;
+  color: var(--m);
+}
+
+.pillar-status {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.badge {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  white-space: nowrap;
+  letter-spacing: 0.05em;
+}
+
+.badge-red { background: rgba(255,79,106,0.12); color: var(--r); border: 1px solid rgba(255,79,106,0.25); }
+.badge-green { background: rgba(34,211,160,0.1); color: var(--g); border: 1px solid rgba(34,211,160,0.2); }
+.badge-yellow { background: rgba(255,192,68,0.1); color: var(--y); border: 1px solid rgba(255,192,68,0.2); }
+.badge-blue { background: rgba(79,158,255,0.1); color: var(--p); border: 1px solid rgba(79,158,255,0.2); }
+.badge-violet { background: rgba(168,85,247,0.1); color: var(--v); border: 1px solid rgba(168,85,247,0.2); }
+.badge-orange { background: rgba(255,126,53,0.1); color: var(--o); border: 1px solid rgba(255,126,53,0.2); }
+
+/* PILLAR BODY */
+.pillar-body {
+  padding: 32px;
+}
+
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.three-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 16px;
+}
+
+/* ANALYSIS BLOCK */
+.analysis-block {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+}
+
+.ab-head {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--t);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ab-head .dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.dot-red { background: var(--r); }
+.dot-green { background: var(--g); }
+.dot-blue { background: var(--p); }
+.dot-yellow { background: var(--y); }
+.dot-violet { background: var(--v); }
+.dot-orange { background: var(--o); }
+
+.ab-list {
+  list-style: none;
+}
+
+.ab-list li {
+  font-size: 12px;
+  color: var(--m);
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 1.5;
+}
+
+.ab-list li:last-child { border-bottom: none; }
+.ab-list li::before { content: '›'; color: var(--p); flex-shrink: 0; }
+
+/* CODE PANELS */
+.code-compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 20px 0;
+}
+
+.code-panel {
+  background: #020510;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  position: relative;
+}
+
+.cp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  color: var(--m);
+}
+
+.cp-head.bad { background: rgba(255,79,106,0.06); }
+.cp-head.good { background: rgba(34,211,160,0.05); }
+
+.cp-head .cp-tag {
+  font-size: 9px;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.cp-head.bad .cp-tag { background: rgba(255,79,106,0.15); color: var(--r); }
+.cp-head.good .cp-tag { background: rgba(34,211,160,0.12); color: var(--g); }
+
+.code-content {
+  padding: 14px 16px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  line-height: 1.7;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.c-kw { color: #c792ea; }    /* keyword */
+.c-fn { color: #82aaff; }    /* function */
+.c-str { color: #c3e88d; }   /* string */
+.c-cm { color: #4a5568; }    /* comment */
+.c-nm { color: #f78c6c; }    /* number */
+.c-tp { color: #ffcb6b; }    /* type */
+.c-bad { color: var(--r); text-decoration: line-through; opacity: 0.7; }
+.c-good { color: var(--g); }
+.c-hi { background: rgba(34,211,160,0.08); }
+
+/* FULL CODE BLOCK */
+.code-block {
+  background: #020510;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  margin: 16px 0;
+}
+
+.cb-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255,255,255,0.02);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  color: var(--m);
+}
+
+.cb-content {
+  padding: 16px 18px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  line-height: 1.8;
+  overflow-x: auto;
+}
+
+/* ISSUE CARDS */
+.issue-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.issue-card {
+  display: grid;
+  grid-template-columns: 40px 1fr auto;
+  gap: 14px;
+  align-items: start;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  transition: border-color 0.2s;
+}
+
+.issue-card:hover { border-color: var(--border2); }
+
+.issue-icon {
+  width: 36px; height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
+.ii-r { background: rgba(255,79,106,0.12); }
+.ii-y { background: rgba(255,192,68,0.1); }
+.ii-b { background: rgba(79,158,255,0.1); }
+.ii-g { background: rgba(34,211,160,0.08); }
+
+.issue-content { min-width: 0; }
+.issue-title { font-weight: 700; font-size: 13px; color: var(--t); margin-bottom: 2px; }
+.issue-file { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--m); margin-bottom: 4px; }
+.issue-desc { font-size: 12px; color: var(--m); line-height: 1.5; }
+.issue-meta { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
+
+/* FIX CARDS */
+.fix-section {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px dashed var(--border);
+}
+
+.fix-title {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  color: var(--g);
+  letter-spacing: 0.05em;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fix-title::before {
+  content: '';
+  display: inline-block;
+  width: 14px; height: 1px;
+  background: var(--g);
+}
+
+/* CALLOUT */
+.callout {
+  border-radius: 10px;
+  padding: 14px 18px;
+  border-left: 3px solid;
+  margin: 16px 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.ca-red { background: rgba(255,79,106,0.05); border-color: var(--r); }
+.ca-green { background: rgba(34,211,160,0.05); border-color: var(--g); }
+.ca-yellow { background: rgba(255,192,68,0.05); border-color: var(--y); }
+.ca-blue { background: rgba(79,158,255,0.05); border-color: var(--p); }
+.ca-violet { background: rgba(168,85,247,0.05); border-color: var(--v); }
+
+.callout strong { display: block; margin-bottom: 4px; font-size: 12px; }
+
+/* ARCH DIAGRAM */
+.arch-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.arch-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.015);
+}
+
+.arch-row .arch-name { font-weight: 600; color: var(--t); min-width: 120px; }
+.arch-row .arch-detail { color: var(--m); flex: 1; }
+.arch-row .arch-state { font-family: 'IBM Plex Mono', monospace; font-size: 10px; }
+
+/* SQL BLOCK */
+.sql-block {
+  background: #020410;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  line-height: 1.8;
+  overflow-x: auto;
+  margin: 12px 0;
+}
+
+.sql-kw { color: #89ddff; }
+.sql-fn { color: #82aaff; }
+.sql-str { color: #c3e88d; }
+.sql-cm { color: #4a5568; }
+.sql-tp { color: #ffcb6b; }
+
+/* CHECKLIST TABLE */
+.check-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin: 12px 0;
+}
+
+.check-table th {
+  background: rgba(255,255,255,0.03);
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 10px;
+  font-family: 'IBM Plex Mono', monospace;
+  color: var(--m);
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border);
+}
+
+.check-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  color: var(--m);
+  vertical-align: top;
+}
+
+.check-table td:first-child { color: var(--t); font-weight: 500; }
+
+/* PROGRESS BAR */
+.progress-wrap {
+  margin: 16px 0;
+}
+
+.progress-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.progress-label {
+  font-size: 12px;
+  color: var(--m);
+  min-width: 160px;
+}
+
+.progress-bar {
+  flex: 1;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--p);
+  transition: width 0.6s ease;
+}
+
+.progress-pct {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  color: var(--m);
+  min-width: 32px;
+  text-align: right;
+}
+
+/* DIVIDER */
+.divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border) 20%, var(--border) 80%, transparent);
+  margin: 32px 0;
+}
+
+/* SPRINT BOX */
+.sprint-box {
+  background: rgba(255,255,255,0.015);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  margin: 12px 0;
+}
+
+.sprint-head {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 700;
+  font-size: 13px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.sprint-items {
+  padding: 12px 16px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.si {
+  font-size: 12px;
+  color: var(--m);
+  padding: 5px 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.si::before {
+  content: '→';
+  color: var(--p);
+  flex-shrink: 0;
+}
+
+/* SECTION TITLE */
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 0;
+}
+
+.sh-line {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.sh-text {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  color: var(--m);
+  white-space: nowrap;
+  letter-spacing: 0.05em;
+}
+
+/* FINAL TIMELINE */
+.timeline-grid {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: 0;
+  margin: 16px 0;
+}
+
+.tg-time {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  color: var(--m);
+  text-align: right;
+  padding: 16px 20px 16px 0;
+  border-right: 1px solid var(--border);
+  position: relative;
+}
+
+.tg-time::after {
+  content: '';
+  position: absolute;
+  right: -4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--p);
+  border: 2px solid var(--bg);
+}
+
+.tg-content {
+  padding: 12px 0 12px 20px;
+}
+
+.tg-title { font-weight: 700; font-size: 13px; margin-bottom: 4px; }
+.tg-desc { font-size: 12px; color: var(--m); }
+
+/* ENV TABLE */
+.env-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  margin: 12px 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.env-table th {
+  background: rgba(255,255,255,0.03);
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 10px;
+  color: var(--m);
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border);
+}
+
+.env-table td {
+  padding: 7px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+
+.env-table td:first-child { color: var(--g); }
+.env-table td:nth-child(2) { color: var(--m); font-size: 10px; }
+
+.dot-status {
+  display: inline-block;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  margin-right: 6px;
+}
+.ds-r { background: var(--r); }
+.ds-g { background: var(--g); }
+.ds-y { background: var(--y); }
+
+/* FOOTER */
+footer {
+  background: var(--s1);
+  border-top: 1px solid var(--border);
+  padding: 32px 40px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  color: var(--m);
+  text-align: center;
+}
+
+@media (max-width: 768px) {
+  .wrap { padding: 0 20px 60px; }
+  .masthead { padding: 32px 20px; }
+  .two-col, .code-compare { grid-template-columns: 1fr; }
+  .three-col { grid-template-columns: 1fr; }
+  .sprint-items { grid-template-columns: 1fr; }
+  .pillar-head { flex-direction: column; }
+  .pillar-status { flex-direction: row; }
+}
+</style>
+</head>
+<body>
+
+<!-- MASTHEAD -->
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="tag-line">PLOKYMARKET — CORE PILLAR ANALYSIS & PRODUCTION HARDENING</div>
+    <h1>৮টি কোর পিলার<br><span>সম্পূর্ণ বিশ্লেষণ</span></h1>
+    <p class="masthead-desc">প্রতিটি লেয়ার কীভাবে কাজ করছে, কোথায় সমস্যা, এবং প্রোডাকশন-রেডি করতে ঠিক কী কোড লিখতে হবে।</p>
+    <div class="meta-row">
+      <div class="meta-chip">Framework <strong>Next.js 15.3 App Router</strong></div>
+      <div class="meta-chip">DB <strong>PostgreSQL 15 (Supabase)</strong></div>
+      <div class="meta-chip">Deploy <strong>Vercel Edge</strong></div>
+      <div class="meta-chip">Build Status <strong style="color:var(--y)">~79% Ready</strong></div>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- PILLAR 1: AUTHENTICATION                        -->
+<!-- ═══════════════════════════════════════════════ -->
+<div class="pillar">
+  <div class="pillar-head ph-blue">
+    <div class="pillar-icon">🔐</div>
+    <div class="pillar-meta">
+      <div class="pillar-num">PILLAR 01 / 08</div>
+      <div class="pillar-name">Authentication & Session Layer</div>
+      <div class="pillar-subtitle">Supabase Auth + SSR middleware + rate limiting + admin role guard</div>
+    </div>
+    <div class="pillar-status">
+      <span class="badge badge-yellow">PARTIAL</span>
+      <span class="badge badge-blue">3 CRITICAL GAPS</span>
+    </div>
+  </div>
+  <div class="pillar-body">
+
+    <div class="two-col">
+      <div class="analysis-block">
+        <div class="ab-head"><div class="dot dot-blue"></div>বর্তমান ডিজাইন</div>
+        <ul class="ab-list">
+          <li>Supabase Auth — email/password + Google OAuth</li>
+          <li>@supabase/ssr — SSR-compatible cookie-based sessions</li>
+          <li>Middleware — admin path guard (/sys-cmd-7x9k2)</li>
+          <li>Rate limiter — in-memory Map, 5 attempts per email/15min</li>
+          <li>initializeAuth() — onAuthStateChange listener, user_profiles join</li>
+          <li>Admin detection — is_admin + is_super_admin DB field check</li>
+          <li>IP whitelist — optional ADMIN_IP_WHITELIST env var</li>
+        </ul>
+      </div>
+      <div class="analysis-block">
+        <div class="ab-head"><div class="dot dot-red"></div>সমস্যা ও ফাঁক</div>
+        <ul class="ab-list">
+          <li>Rate limiter একটি in-memory Map — Vercel serverless restart করলে রিসেট হয়</li>
+          <li>loginRateLimiter.reset() success-এর আগে call হয় না — logic bug</li>
+          <li>কোনো CSRF protection নেই API routes-এ</li>
+          <li>Session token rotation নেই (token reuse attack possible)</li>
+          <li>Refresh token expiry handle হয় না gracefully</li>
+          <li>Admin status শুধু DB query দিয়ে check — JWT claim নেই</li>
+          <li>No account lockout after N failed attempts (only time-based)</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="fix-section">
+      <div class="fix-title">PRODUCTION FIX — Rate Limiter (Redis-backed)</div>
+      <div class="code-compare">
+        <div class="code-panel">
+          <div class="cp-head bad"><span>lib/security.ts — CURRENT (broken in serverless)</span><span class="cp-tag">BAD</span></div>
+          <div class="code-content"><span class="c-cm">// In-memory — resets on every cold start</span>
+<span class="c-kw">const</span> authAttempts = <span class="c-kw">new</span> <span class="c-fn">Map</span>&lt;
+  <span class="c-tp">string</span>, {count:<span class="c-tp">number</span>, resetTime:<span class="c-tp">number</span>}
+&gt;();
+
+<span class="c-kw">export const</span> loginRateLimiter = {
+  isRateLimited: (email: <span class="c-tp">string</span>) =&gt; {
+    <span class="c-kw">const</span> data = authAttempts.get(email);
+    <span class="c-cm">// PROBLEM: new serverless instance = new Map</span>
+    <span class="c-kw">return</span> data?.count &gt;= <span class="c-nm">5</span>;
+  }
+}</div>
+        </div>
+        <div class="code-panel">
+          <div class="cp-head good"><span>lib/security.ts — FIXED (Upstash Redis)</span><span class="cp-tag">PRODUCTION</span></div>
+          <div class="code-content"><span class="c-kw">import</span> { Redis } <span class="c-kw">from</span> <span class="c-str">'@upstash/redis'</span>;
+<span class="c-kw">const</span> redis = Redis.<span class="c-fn">fromEnv</span>();
+
+<span class="c-kw">export const</span> loginRateLimiter = {
+  <span class="c-fn">isRateLimited</span>: <span class="c-kw">async</span> (key: <span class="c-tp">string</span>) =&gt; {
+    <span class="c-kw">const</span> count = <span class="c-kw">await</span> redis.<span class="c-fn">get</span>&lt;<span class="c-tp">number</span>&gt;(
+      <span class="c-str">`ratelimit:login:</span>${key}<span class="c-str">`</span>
+    );
+    <span class="c-kw">return</span> (count ?? <span class="c-nm">0</span>) &gt;= <span class="c-nm">5</span>;
+  },
+  <span class="c-fn">recordAttempt</span>: <span class="c-kw">async</span> (key: <span class="c-tp">string</span>) =&gt; {
+    <span class="c-kw">const</span> k = <span class="c-str">`ratelimit:login:</span>${key}<span class="c-str">`</span>;
+    <span class="c-kw">await</span> redis.<span class="c-fn">incr</span>(k);
+    <span class="c-kw">await</span> redis.<span class="c-fn">expire</span>(k, <span class="c-nm">900</span>); <span class="c-cm">// 15 min TTL</span>
+  },
+  <span class="c-fn">reset</span>: <span class="c-kw">async</span> (key: <span class="c-tp">string</span>) =&gt;
+    redis.<span class="c-fn">del</span>(<span class="c-str">`ratelimit:login:</span>${key}<span class="c-str">`</span>),
+};</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="fix-section">
+      <div class="fix-title">PRODUCTION FIX — Security Headers (middleware.ts)</div>
+      <div class="code-block">
+        <div class="cb-head"><span>src/middleware.ts — add to all responses</span><span class="badge badge-green">ADD THIS</span></div>
+        <div class="cb-content"><span class="c-cm">// Add after creating response object</span>
+<span class="c-kw">const</span> securityHeaders = {
+  <span class="c-str">'X-Frame-Options'</span>: <span class="c-str">'DENY'</span>,
+  <span class="c-str">'X-Content-Type-Options'</span>: <span class="c-str">'nosniff'</span>,
+  <span class="c-str">'X-XSS-Protection'</span>: <span class="c-str">'1; mode=block'</span>,
+  <span class="c-str">'Referrer-Policy'</span>: <span class="c-str">'strict-origin-when-cross-origin'</span>,
+  <span class="c-str">'Permissions-Policy'</span>: <span class="c-str">'camera=(), microphone=(), geolocation=()'</span>,
+  <span class="c-str">'Content-Security-Policy'</span>: [
+    <span class="c-str">"default-src 'self'"</span>,
+    <span class="c-str">"script-src 'self' 'unsafe-eval' 'unsafe-inline'"</span>,  <span class="c-cm">// Next.js needs this</span>
+    <span class="c-str">"style-src 'self' 'unsafe-inline' fonts.googleapis.com"</span>,
+    <span class="c-str">"img-src 'self' data: blob: *.supabase.co *.supabase.in"</span>,
+    <span class="c-str">"connect-src 'self' *.supabase.co wss://*.supabase.co"</span>,
+    <span class="c-str">"font-src 'self' fonts.gstatic.com"</span>,
+  ].<span class="c-fn">join</span>(<span class="c-str">';'</span>),
+  <span class="c-str">'Strict-Transport-Security'</span>: <span class="c-str">'max-age=31536000; includeSubDomains'</span>,
+};
+
+<span class="c-kw">Object</span>.<span class="c-fn">entries</span>(securityHeaders).<span class="c-fn">forEach</span>(([k, v]) =&gt;
+  response.headers.<span class="c-fn">set</span>(k, v)
+);</div>
+      </div>
+    </div>
+
+    <div class="callout ca-yellow">
+      <strong>⚡ 3 Critical Auth Env Vars Missing</strong>
+      Set in Vercel: <code>UPSTASH_REDIS_REST_URL</code>, <code>UPSTASH_REDIS_REST_TOKEN</code>, <code>NEXTAUTH_SECRET</code> (32-char random string). Without Redis, rate limiter is useless in production.
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- PILLAR 2: DATABASE & RLS                        -->
+<!-- ═══════════════════════════════════════════════ -->
+<div class="pillar">
+  <div class="pillar-head ph-green">
+    <div class="pillar-icon">🗄️</div>
+    <div class="pillar-meta">
+      <div class="pillar-num">PILLAR 02 / 08</div>
+      <div class="pillar-name">Database Layer & Row Level Security</div>
+      <div class="pillar-subtitle">PostgreSQL 15 + Supabase + 93 migrations + RLS policies</div>
+    </div>
+    <div class="pillar-status">
+      <span class="badge badge-green">MOSTLY SOLID</span>
+      <span class="badge badge-yellow">PERF GAPS</span>
+    </div>
+  </div>
+  <div class="pillar-body">
+
+    <div class="two-col">
+      <div class="analysis-block">
+        <div class="ab-head"><div class="dot dot-green"></div>কী ভালো আছে</div>
+        <ul class="ab-list">
+          <li>93টি migration sequential — পুরো schema versioned</li>
+          <li>RLS enabled on all public tables</li>
+          <li>SECURITY DEFINER functions — safe privilege escalation</li>
+          <li>Admin audit log table — সব admin action tracked</li>
+          <li>match_order(), settle_market() — DB-level matching</li>
+          <li>track_user_activity() RPC — graceful error handling</li>
+          <li>user_profiles table linked to auth.users correctly</li>
+        </ul>
+      </div>
+      <div class="analysis-block">
+        <div class="ab-head"><div class="dot dot-yellow"></div>পারফরম্যান্স গ্যাপ</div>
+        <ul class="ab-list">
+          <li>orders table — কোনো composite index নেই (market_id + status + outcome)</li>
+          <li>match_order() — N+1 query pattern, loop-এর ভেতর SELECT</li>
+          <li>OrderBook API — প্রতিটি request-এ full reconstruction from DB</li>
+          <li>No query result caching (Redis) — same queries run repeatedly</li>
+          <li>wallets.balance — no optimistic locking, race condition possible</li>
+          <li>positions upsert — missing conflict resolution index</li>
+          <li>No connection pooling config (PgBouncer) for high load</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="fix-section">
+      <div class="fix-title">PRODUCTION FIX — Critical DB Indexes + Race Condition Fix</div>
+      <div class="sql-block"><span class="sql-cm">-- Run in Supabase SQL Editor — CRITICAL for trading performance</span>
+
+<span class="sql-cm">-- 1. Order book queries (most frequent)</span>
+<span class="sql-kw">CREATE INDEX CONCURRENTLY IF NOT EXISTS</span> idx_orders_book
+  <span class="sql-kw">ON</span> orders (market_id, outcome, side, status, price)
+  <span class="sql-kw">WHERE</span> status <span class="sql-kw">IN</span> (<span class="sql-str">'open'</span>, <span class="sql-str">'partially_filled'</span>);
+
+<span class="sql-cm">-- 2. User orders lookup</span>
+<span class="sql-kw">CREATE INDEX CONCURRENTLY IF NOT EXISTS</span> idx_orders_user_active
+  <span class="sql-kw">ON</span> orders (user_id, status, created_at <span class="sql-kw">DESC</span>)
+  <span class="sql-kw">WHERE</span> status <span class="sql-kw">NOT IN</span> (<span class="sql-str">'filled'</span>, <span class="sql-str">'cancelled'</span>, <span class="sql-str">'expired'</span>);
+
+<span class="sql-cm">-- 3. Wallet balance — add optimistic locking version</span>
+<span class="sql-kw">ALTER TABLE</span> wallets <span class="sql-kw">ADD COLUMN IF NOT EXISTS</span>
+  version <span class="sql-tp">INTEGER DEFAULT 0</span>;
+
+<span class="sql-cm">-- 4. Safe balance deduction (prevents race conditions)</span>
+<span class="sql-kw">CREATE OR REPLACE FUNCTION</span> safe_deduct_balance(
+  p_user_id <span class="sql-tp">UUID</span>, p_amount <span class="sql-tp">NUMERIC</span>, p_version <span class="sql-tp">INTEGER</span>
+) <span class="sql-kw">RETURNS BOOLEAN</span> <span class="sql-kw">AS</span> $$
+<span class="sql-kw">BEGIN</span>
+  <span class="sql-kw">UPDATE</span> wallets
+  <span class="sql-kw">SET</span> balance = balance - p_amount,
+      version = version + <span class="sql-tp">1</span>,
+      updated_at = <span class="sql-fn">NOW</span>()
+  <span class="sql-kw">WHERE</span> user_id = p_user_id
+    <span class="sql-kw">AND</span> version = p_version
+    <span class="sql-kw">AND</span> balance &gt;= p_amount;   <span class="sql-cm">-- Atomic check-and-deduct</span>
+  
+  <span class="sql-kw">RETURN</span> <span class="sql-fn">FOUND</span>;  <span class="sql-cm">-- Returns false if race condition detected</span>
+<span class="sql-kw">END</span>; $$ <span class="sql-kw">LANGUAGE</span> plpgsql <span class="sql-kw">SECURITY DEFINER</span>;
+
+<span class="sql-cm">-- 5. Trades index for portfolio queries</span>
+<span class="sql-kw">CREATE INDEX CONCURRENTLY IF NOT EXISTS</span> idx_trades_user
+  <span class="sql-kw">ON</span> trades (buyer_id, seller_id, created_at <span class="sql-kw">DESC</span>);</div>
+    </div>
+
+    <div class="fix-section">
+      <div class="fix-title">PRODUCTION FIX — OrderBook API Caching</div>
+      <div class="code-block">
+        <div class="cb-head"><span>app/api/orderbook/[marketId]/route.ts</span><span class="badge badge-green">ADD REDIS CACHE</span></div>
+        <div class="cb-content"><span class="c-kw">import</span> { Redis } <span class="c-kw">from</span> <span class="c-str">'@upstash/redis'</span>;
+<span class="c-kw">const</span> redis = Redis.<span class="c-fn">fromEnv</span>();
+
+<span class="c-kw">export async function</span> <span class="c-fn">GET</span>(req, { params }) {
+  <span class="c-kw">const</span> { marketId } = <span class="c-kw">await</span> params;
+  <span class="c-kw">const</span> cacheKey = <span class="c-str">`orderbook:</span>${marketId}<span class="c-str">`</span>;
+
+  <span class="c-cm">// 1. Try cache first (500ms TTL for near-realtime)</span>
+  <span class="c-kw">const</span> cached = <span class="c-kw">await</span> redis.<span class="c-fn">get</span>(cacheKey);
+  <span class="c-kw">if</span> (cached) {
+    <span class="c-kw">return</span> <span class="c-fn">NextResponse</span>.<span class="c-fn">json</span>(cached, {
+      headers: { <span class="c-str">'X-Cache'</span>: <span class="c-str">'HIT'</span> }
+    });
+  }
+
+  <span class="c-cm">// 2. Reconstruct from DB (expensive — do once)</span>
+  <span class="c-kw">const</span> supabase = <span class="c-fn">createAdminClient</span>(); <span class="c-cm">// use service role</span>
+  <span class="c-kw">const</span> engine = <span class="c-kw">await</span> OrderBookService.<span class="c-fn">getEngine</span>(supabase, marketId);
+  <span class="c-kw">const</span> snapshot = OrderBookService.<span class="c-fn">mapSnapshotToDTO</span>(engine.<span class="c-fn">getSnapshot</span>());
+
+  <span class="c-cm">// 3. Cache with 500ms TTL</span>
+  <span class="c-kw">await</span> redis.<span class="c-fn">setex</span>(cacheKey, <span class="c-nm">1</span>, snapshot); <span class="c-cm">// 1 second TTL</span>
+
+  <span class="c-kw">return</span> <span class="c-fn">NextResponse</span>.<span class="c-fn">json</span>(snapshot, {
+    headers: { <span class="c-str">'X-Cache'</span>: <span class="c-str">'MISS'</span> }
+  });
+}
+
+<span class="c-cm">// Invalidate cache when order placed/cancelled</span>
+<span class="c-kw">export async function</span> <span class="c-fn">invalidateOrderBook</span>(marketId: <span class="c-tp">string</span>) {
+  <span class="c-kw">await</span> redis.<span class="c-fn">del</span>(<span class="c-str">`orderbook:</span>${marketId}<span class="c-str">`</span>);
+}</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- PILLAR 3: API LAYER                             -->
+<!-- ═══════════════════════════════════════════════ -->
+<div class="pillar">
+  <div class="pillar-head ph-red">
+    <div class="pillar-icon">⚡</div>
+    <div class="pillar-meta">
+      <div class="pillar-num">PILLAR 03 / 08</div>
+      <div class="pillar-name">API Routes Layer (74 Endpoints)</div>
+      <div class="pillar-subtitle">Next.js Route Handlers + Supabase Server Client + validation</div>
+    </div>
+    <div class="pillar-status">
+      <span class="badge badge-red">CRITICAL BUGS</span>
+      <span class="badge badge-yellow">MISSING APIS</span>
+    </div>
+  </div>
+  <div class="pillar-body">
+
+    <div class="callout ca-red">
+      <strong>🔴 ROOT CAUSE — সবচেয়ে বড় সমস্যা (৭৪ টি route-এর বেশিরভাগ ভেঙে আছে)</strong>
+      <code>createClient()</code> একটি async function কিন্তু সব route-এ await ছাড়া call হচ্ছে। Result হচ্ছে Promise object-এ .from() call — যা একটি TypeError এবং সব DB operation fail করছে।
+    </div>
+
+    <div class="code-compare">
+      <div class="code-panel">
+        <div class="cp-head bad"><span>BROKEN PATTERN — ১০+ route-এ</span><span class="cp-tag">BREAKS ALL DB OPS</span></div>
+        <div class="code-content"><span class="c-cm">// deposits/request/route.ts (line 11)</span>
+<span class="c-kw">const</span> supabase = <span class="c-bad">createClient()</span>;
+<span class="c-cm">// supabase is a Promise, not a client!</span>
+
+<span class="c-kw">const</span> { data: { user } } = <span class="c-kw">await</span>
+  supabase.auth.<span class="c-fn">getUser</span>();
+<span class="c-cm">// TypeError: Cannot read properties</span>
+<span class="c-cm">// of undefined (reading 'getUser')</span>
+
+<span class="c-cm">// Same pattern in:</span>
+<span class="c-cm">// wallet/balance/route.ts</span>
+<span class="c-cm">// p2p-sellers/route.ts</span>
+<span class="c-cm">// deposit/manual/route.ts</span>
+<span class="c-cm">// api/follows/route.ts + 6 more</span></div>
+      </div>
+      <div class="code-panel">
+        <div class="cp-head good"><span>FIXED PATTERN — সব route-এ apply করুন</span><span class="cp-tag">PRODUCTION READY</span></div>
+        <div class="code-content"><span class="c-cm">// STEP 1: Always await createClient</span>
+<span class="c-kw">const</span> supabase = <span class="c-kw">await</span> <span class="c-fn">createClient</span>();
+
+<span class="c-cm">// STEP 2: Always validate auth first</span>
+<span class="c-kw">const</span> { data: { user }, error } =
+  <span class="c-kw">await</span> supabase.auth.<span class="c-fn">getUser</span>();
+
+<span class="c-kw">if</span> (!user || error) {
+  <span class="c-kw">return</span> <span class="c-fn">NextResponse</span>.<span class="c-fn">json</span>(
+    { error: <span class="c-str">'প্রমাণীকরণ প্রয়োজন'</span> },
+    { status: <span class="c-nm">401</span> }
+  );
+}
+
+<span class="c-cm">// STEP 3: Then use supabase safely</span>
+<span class="c-kw">const</span> { data } = <span class="c-kw">await</span>
+  supabase.<span class="c-fn">from</span>(<span class="c-str">'table'</span>).<span class="c-fn">select</span>();</div>
+      </div>
+    </div>
+
+    <div class="fix-section">
+      <div class="fix-title">MISSING APIs — বানাতে হবে (financial safety critical)</div>
+
+      <div class="code-block">
+        <div class="cb-head"><span>app/api/admin/withdrawals/process/route.ts — CREATE THIS FILE</span><span class="badge badge-red">MISSING</span></div>
+        <div class="cb-content"><span class="c-kw">import</span> { <span class="c-fn">NextRequest</span>, <span class="c-fn">NextResponse</span> } <span class="c-kw">from</span> <span class="c-str">'next/server'</span>;
+<span class="c-kw">import</span> { <span class="c-fn">createClient</span> } <span class="c-kw">from</span> <span class="c-str">'@/lib/supabase/server'</span>;
+
+<span class="c-kw">export async function</span> <span class="c-fn">POST</span>(req: <span class="c-tp">NextRequest</span>) {
+  <span class="c-kw">const</span> supabase = <span class="c-kw">await</span> <span class="c-fn">createClient</span>();
+
+  <span class="c-cm">// Verify admin</span>
+  <span class="c-kw">const</span> { data: { user } } = <span class="c-kw">await</span> supabase.auth.<span class="c-fn">getUser</span>();
+  <span class="c-kw">if</span> (!user) <span class="c-kw">return</span> <span class="c-fn">NextResponse</span>.<span class="c-fn">json</span>({ error: <span class="c-str">'Unauthorized'</span> }, { status: <span class="c-nm">401</span> });
+
+  <span class="c-kw">const</span> { data: admin } = <span class="c-kw">await</span> supabase
+    .<span class="c-fn">from</span>(<span class="c-str">'user_profiles'</span>).<span class="c-fn">select</span>(<span class="c-str">'is_admin'</span>)
+    .<span class="c-fn">eq</span>(<span class="c-str">'id'</span>, user.id).<span class="c-fn">single</span>();
+  <span class="c-kw">if</span> (!admin?.is_admin)
+    <span class="c-kw">return</span> <span class="c-fn">NextResponse</span>.<span class="c-fn">json</span>({ error: <span class="c-str">'Forbidden'</span> }, { status: <span class="c-nm">403</span> });
+
+  <span class="c-kw">const</span> { withdrawal_id, action, rejection_reason } = <span class="c-kw">await</span> req.<span class="c-fn">json</span>();
+
+  <span class="c-kw">if</span> (!withdrawal_id || ![<span class="c-str">'approve'</span>, <span class="c-str">'reject'</span>].<span class="c-fn">includes</span>(action)) {
+    <span class="c-kw">return</span> <span class="c-fn">NextResponse</span>.<span class="c-fn">json</span>({ error: <span class="c-str">'Invalid request'</span> }, { status: <span class="c-nm">400</span> });
+  }
+
+  <span class="c-kw">if</span> (action === <span class="c-str">'approve'</span>) {
+    <span class="c-cm">// 1. Update status to approved</span>
+    <span class="c-kw">const</span> { error } = <span class="c-kw">await</span> supabase
+      .<span class="c-fn">from</span>(<span class="c-str">'withdrawal_requests'</span>)
+      .<span class="c-fn">update</span>({
+        status: <span class="c-str">'approved'</span>,
+        processed_by: user.id,
+        processed_at: <span class="c-kw">new</span> <span class="c-fn">Date</span>().<span class="c-fn">toISOString</span>()
+      })
+      .<span class="c-fn">eq</span>(<span class="c-str">'id'</span>, withdrawal_id)
+      .<span class="c-fn">eq</span>(<span class="c-str">'status'</span>, <span class="c-str">'pending'</span>); <span class="c-cm">// idempotency guard</span>
+    <span class="c-kw">if</span> (error) <span class="c-kw">throw</span> error;
+  } <span class="c-kw">else</span> {
+    <span class="c-cm">// 2. Reject: restore user balance</span>
+    <span class="c-kw">const</span> { error } = <span class="c-kw">await</span> supabase.<span class="c-fn">rpc</span>(<span class="c-str">'reject_withdrawal_and_restore'</span>, {
+      p_withdrawal_id: withdrawal_id,
+      p_rejected_by: user.id,
+      p_reason: rejection_reason ?? <span class="c-str">'Admin rejected'</span>
+    });
+    <span class="c-kw">if</span> (error) <span class="c-kw">throw</span> error;
+  }
+
+  <span class="c-cm">// 3. Log admin action</span>
+  <span class="c-kw">await</span> supabase.<span class="c-fn">from</span>(<span class="c-str">'admin_audit_log'</span>).<span class="c-fn">insert</span>({
+    admin_id: user.id, action: <span class="c-str">`withdrawal_</span>${action}<span class="c-str">`</span>,
+    entity_id: withdrawal_id, details: { rejection_reason }
+  });
+
+  <span class="c-kw">return</span> <span class="c-fn">NextResponse</span>.<span class="c-fn">json</span>({ success: <span class="c-kw">true</span>, action });
+}</div>
+      </div>
+
+      <div class="code-block">
+        <div class="cb-head"><span>app/api/admin/deposits/reject/route.ts — CREATE THIS FILE</span><span class="badge badge-red">MISSING</span></div>
+        <div class="cb-content"><span class="c-kw">export async function</span> <span class="c-fn">POST</span>(req: <span class="c-tp">NextRequest</span>) {
+  <span class="c-kw">const</span> supabase = <span class="c-kw">await</span> <span class="c-fn">createClient</span>();
+  <span class="c-kw">const</span> { deposit_id, reason } = <span class="c-kw">await</span> req.<span class="c-fn">json</span>();
+
+  <span class="c-cm">// Verify admin (same pattern as above)</span>
+  <span class="c-kw">const</span> adminId = <span class="c-kw">await</span> <span class="c-fn">verifyAdmin</span>(supabase);
+  <span class="c-kw">if</span> (!adminId) <span class="c-kw">return</span> <span class="c-fn">NextResponse</span>.<span class="c-fn">json</span>({ error: <span class="c-str">'Forbidden'</span> }, { status: <span class="c-nm">403</span> });
+
+  <span class="c-cm">// Mark deposit as rejected</span>
+  <span class="c-kw">await</span> supabase.<span class="c-fn">from</span>(<span class="c-str">'deposit_requests'</span>).<span class="c-fn">update</span>({
+    status: <span class="c-str">'rejected'</span>,
+    rejection_reason: reason,
+    rejected_by: adminId,
+    rejected_at: <span class="c-kw">new</span> <span class="c-fn">Date</span>().<span class="c-fn">toISOString</span>()
+  }).<span class="c-fn">eq</span>(<span class="c-str">'id'</span>, deposit_id).<span class="c-fn">eq</span>(<span class="c-str">'status'</span>, <span class="c-str">'pending'</span>);
+
+  <span class="c-cm">// Notify user (Telegram + in-app)</span>
+  <span class="c-kw">await</span> <span class="c-fn">sendUserNotification</span>(deposit_id, <span class="c-str">'deposit_rejected'</span>, reason);
+
+  <span class="c-kw">return</span> <span class="c-fn">NextResponse</span>.<span class="c-fn">json</span>({ success: <span class="c-kw">true</span> });
+}</div>
+      </div>
+    </div>
+
+    <div class="three-col">
+      <div class="analysis-block">
+        <div class="ab-head"><div class="dot dot-green"></div>Working APIs ✅</div>
+        <ul class="ab-list">
+          <li>/api/orders — GET, POST</li>
+          <li>/api/orderbook/[marketId]</li>
+          <li>/api/resolution/ai-oracle</li>
+          <li>/api/resolution/manual</li>
+          <li>/api/admin/events/create</li>
+          <li>/api/cron/master</li>
+          <li>/api/workflows/stats</li>
+        </ul>
+      </div>
+      <div class="analysis-block">
+        <div class="ab-head"><div class="dot dot-red"></div>Missing/Broken APIs ❌</div>
+        <ul class="ab-list">
+          <li>POST /api/admin/withdrawals/process</li>
+          <li>POST /api/admin/deposits/reject</li>
+          <li>GET /api/admin/withdrawals (list)</li>
+          <li>All routes without await createClient</li>
+          <li>/api/follows — FeedService methods missing</li>
+          <li>/api/notifications — snoozeUntil undefined</li>
+        </ul>
+      </div>
+      <div class="analysis-block">
+        <div class="ab-head"><div class="dot dot-yellow"></div>Needs Hardening 🔧</div>
+        <ul class="ab-list">
+          <li>Input validation (Zod schema) on all POST</li>
+          <li>API-level rate limiting (not just login)</li>
+          <li>Response caching headers</li>
+          <li>Error boundary — no raw error leak</li>
+          <li>CRON_SECRET validation on /api/cron/*</li>
+          <li>Request body size limit</li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- PILLAR 4: CLOB MATCHING ENGINE                  -->
+<!-- ═══════════════════════════════════════════════ -->
+<div class="pillar">
+  <div class="pillar-head ph-violet">
+    <div class="pillar-icon">📊</div>
+    <div class="pillar-meta">
+      <div class="pillar-num">PILLAR 04 / 08</div>
+      <div class="pillar-name">CLOB Matching Engine</div>
+      <div class="pillar-subtitle">Central Limit Order Book — price-time priority + pro-rata + DB-level settlement</div>
+    </div>
+    <div class="pillar-status">
+      <span class="badge badge-red">TYPE BROKEN</span>
+      <span class="badge badge-violet">ARCH SOLID</span>
+    </div>
+  </div>
+  <div class="pillar-body">
+
+    <div class="callout ca-red">
+      <strong>🔴 Matching Engine সম্পূর্ণ broken — type case mismatch</strong>
+      DB তে values lowercase (buy, sell, open) কিন্তু engine types uppercase (BUY, SELL, OPEN)। সব order placement এবং matching fail করছে সাইলেন্টলি।
+    </div>
+
+    <div class="code-compare">
+      <div class="code-panel">
+        <div class="cp-head bad"><span>lib/clob/types.ts — CURRENT (wrong)</span><span class="cp-tag">BREAKS MATCHING</span></div>
+        <div class="code-content"><span class="c-kw">type</span> <span class="c-tp">Side</span> = <span class="c-bad">"BUY" | "SELL"</span>
+
+<span class="c-kw">type</span> <span class="c-tp">OrderStatus</span> =
+  | <span class="c-bad">"OPEN"</span>
+  | <span class="c-bad">"FILLED"</span>
+  | <span class="c-bad">"CANCELED"</span>   <span class="c-cm">// wrong spelling!</span>
+  | <span class="c-bad">"PARTIALLY_FILLED"</span>
+
+<span class="c-cm">// test-limit.ts — also wrong</span>
+<span class="c-kw">const</span> order = {
+  side: <span class="c-bad">"BUY"</span>,     <span class="c-cm">// error TS2322</span>
+  price: <span class="c-bad">0.65</span>,   <span class="c-cm">// should be bigint!</span>
+  status: <span class="c-bad">"OPEN"</span>  <span class="c-cm">// error TS2820</span>
+}</div>
+      </div>
+      <div class="code-panel">
+        <div class="cp-head good"><span>lib/clob/types.ts — FIXED</span><span class="cp-tag">MATCHES DB</span></div>
+        <div class="code-content"><span class="c-kw">type</span> <span class="c-tp">Side</span> = <span class="c-good">"buy" | "sell"</span>
+
+<span class="c-kw">type</span> <span class="c-tp">OrderStatus</span> =
+  | <span class="c-good">"open"</span>
+  | <span class="c-good">"filled"</span>
+  | <span class="c-good">"cancelled"</span>  <span class="c-cm">// matches DB enum</span>
+  | <span class="c-good">"partially_filled"</span>
+  | <span class="c-good">"expired"</span>
+  | <span class="c-good">"cancelling"</span>  <span class="c-cm">// also needed</span>
+
+<span class="c-kw">const</span> order = {
+  side: <span class="c-good">"buy"</span> <span class="c-kw">as</span> Side,
+  price: <span class="c-fn">BigInt</span>(<span class="c-nm">6500</span>), <span class="c-cm">// cents as bigint</span>
+  status: <span class="c-good">"open"</span> <span class="c-kw">as</span> OrderStatus
+}</div>
+      </div>
+    </div>
+
+    <div class="fix-section">
+      <div class="fix-title">PRODUCTION FIX — OrderBookService.getOrder() missing method</div>
+      <div class="code-block">
+        <div class="cb-head"><span>lib/clob/service.ts — add missing method</span><span class="badge badge-yellow">ADD TO CLASS</span></div>
+        <div class="cb-content"><span class="c-cm">// lib/clob/service.ts — OrderBookService class</span>
+<span class="c-kw">class</span> <span class="c-tp">OrderBookService</span> {
+  <span class="c-cm">// ... existing methods</span>
+
+  <span class="c-cm">// FIX: This method is called by service.ts:219 but doesn't exist</span>
+  <span class="c-fn">getOrder</span>(orderId: <span class="c-tp">string</span>) {
+    <span class="c-cm">// Search in bids and asks of all outcomes</span>
+    <span class="c-kw">for</span> (<span class="c-kw">const</span> side <span class="c-kw">of</span> [<span class="c-str">'bids'</span>, <span class="c-str">'asks'</span>] <span class="c-kw">as const</span>) {
+      <span class="c-kw">for</span> (<span class="c-kw">const</span> outcome <span class="c-kw">of</span> [<span class="c-str">'YES'</span>, <span class="c-str">'NO'</span>] <span class="c-kw">as const</span>) {
+        <span class="c-kw">const</span> order = <span class="c-kw">this</span>.engine[side][outcome]
+          .<span class="c-fn">getAllOrders</span>()
+          .<span class="c-fn">find</span>(o =&gt; o.id === orderId);
+        <span class="c-kw">if</span> (order) <span class="c-kw">return</span> order;
+      }
+    }
+    <span class="c-kw">return null</span>;
+  }
+
+  <span class="c-cm">// FIX: cancellation service compares wrong case</span>
+  <span class="c-fn">isCancelling</span>(order: <span class="c-tp">Order</span>): <span class="c-tp">boolean</span> {
+    <span class="c-cm">// ❌ old: order.status === "CANCELLING"</span>
+    <span class="c-kw">return</span> order.status === <span class="c-str">"cancelling"</span>; <span class="c-cm">// ✅ lowercase</span>
+  }
+}</div>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div class="analysis-block">
+        <div class="ab-head"><div class="dot dot-violet"></div>Architecture (Good)</div>
+        <ul class="ab-list">
+          <li>Price-time priority FIFO matching</li>
+          <li>Pro-rata allocation support</li>
+          <li>DB-level match_order() function</li>
+          <li>Separate YES/NO order books</li>
+          <li>Slippage tolerance calculator</li>
+          <li>Bracket orders (stop-loss/take-profit)</li>
+          <li>One-click trading mode</li>
+        </ul>
+      </div>
+      <div class="analysis-block">
+        <div class="ab-head"><div class="dot dot-orange"></div>Production Hardening Needed</div>
+        <ul class="ab-list">
+          <li>Add order deduplication (prevent double-submit)</li>
+          <li>Server-side order validation before DB write</li>
+          <li>Websocket push for fills (not polling)</li>
+          <li>Market circuit breaker (halt if price moves 20%+)</li>
+          <li>Max order size per user per market</li>
+          <li>Idempotency key on POST /api/orders</li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- PILLAR 5: WALLET & PAYMENT                      -->
+<!-- ═══════════════════════════════════════════════ -->
+<div class="pillar">
+  <div class="pillar-head ph-yellow">
+    <div class="pillar-icon">💸</div>
+    <div class="pillar-meta">
+      <div class="pillar-num">PILLAR 05 / 08</div>
+      <div class="pillar-name">Wallet & Payment System</div>
+      <div class="pillar-subtitle">bKash / Nagad deposits + USDT withdrawals + exchange rate + admin verification</div>
+    </div>
+    <div class="pillar-status">
+      <span class="badge badge-red">MOCK IN PROD</span>
+      <span class="badge badge-yellow">ADMIN MISSING</span>
+    </div>
+  </div>
+  <div class="pillar-body">
+
+    <div class="two-col">
+      <div class="analysis-block">
+        <div class="ab-head"><div class="dot dot-yellow"></div>বর্তমান ডিজাইন</div>
+        <ul class="ab-list">
+          <li>MFS deposit — user fills TXN ID + sender number manually</li>
+          <li>Admin verifies deposit manually via /api/admin/deposits/verify</li>
+          <li>Withdrawal — user requests, admin processes (partially)</li>
+          <li>QStash workflows — deposit/withdrawal notification emails/Telegram</li>
+          <li>Daily limits — KYC level-based enforcement</li>
+          <li>Exchange rate — hardcoded 120 BDT/USDT</li>
+          <li>USDT address — Math.random() mock! ❌</li>
+        </ul>
+      </div>
+      <div class="analysis-block">
+        <div class="ab-head"><div class="dot dot-red"></div>Critical Issues</div>
+        <ul class="ab-list">
+          <li>generateDepositAddress() generates fake address — real funds lost</li>
+          <li>No duplicate TXN ID check race condition (parallel requests)</li>
+          <li>Exchange rate hardcoded — BDT fluctuation = user loss</li>
+          <li>Admin withdrawal processing API missing completely</li>
+          <li>No withdrawal status page for users</li>
+          <li>No expiry on pending deposits (can be approved stale)</li>
+          <li>No fraud detection — same TXN ID = blocked, but..., same sender</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="fix-section">
+      <div class="fix-title">PRODUCTION FIX — All Critical Wallet Issues</div>
+
+      <div class="code-block">
+        <div class="cb-head"><span>store/useStore.ts — generateDepositAddress (CRITICAL)</span><span class="badge badge-red">UNSAFE MOCK</span></div>
+        <div class="cb-content"><span class="c-cm">// ❌ CURRENT — NEVER USE IN PRODUCTION</span>
+<span class="c-fn">generateDepositAddress</span>: <span class="c-kw">async</span> (network) =&gt; {
+  <span class="c-kw">const</span> mockAddress = network === <span class="c-str">'TRC20'</span>
+    ? <span class="c-str">'T'</span> + Math.<span class="c-fn">random</span>().<span class="c-fn">toString</span>(<span class="c-nm">36</span>)  <span class="c-cm">// ❌ FAKE!</span>
+    : <span class="c-str">'0x'</span> + Math.<span class="c-fn">random</span>().<span class="c-fn">toString</span>(<span class="c-nm">36</span>); <span class="c-cm">// ❌ FAKE!</span>
+}
+
+<span class="c-cm">// ✅ PRODUCTION — Use static admin wallets from DB</span>
+<span class="c-fn">generateDepositAddress</span>: <span class="c-kw">async</span> (network) =&gt; {
+  <span class="c-kw">const</span> { data } = <span class="c-kw">await</span> supabase
+    .<span class="c-fn">from</span>(<span class="c-str">'admin_deposit_wallets'</span>)
+    .<span class="c-fn">select</span>(<span class="c-str">'address, qr_code_url'</span>)
+    .<span class="c-fn">eq</span>(<span class="c-str">'network'</span>, network)
+    .<span class="c-fn">eq</span>(<span class="c-str">'is_active'</span>, <span class="c-kw">true</span>)
+    .<span class="c-fn">single</span>();
+  <span class="c-cm">// User sends to THIS fixed address, admin confirms receipt</span>
+  <span class="c-kw">return</span> data; <span class="c-cm">// Real admin wallet address</span>
+},</div>
+      </div>
+
+      <div class="code-block">
+        <div class="cb-head"><span>app/api/exchange-rate/route.ts — Live BDT Rate</span><span class="badge badge-green">CREATE THIS</span></div>
+        <div class="cb-content"><span class="c-kw">export const</span> revalidate = <span class="c-nm">300</span>; <span class="c-cm">// ISR: refresh every 5 minutes</span>
+
+<span class="c-kw">export async function</span> <span class="c-fn">GET</span>() {
+  <span class="c-kw">try</span> {
+    <span class="c-cm">// Try CoinGecko first</span>
+    <span class="c-kw">const</span> res = <span class="c-kw">await</span> <span class="c-fn">fetch</span>(
+      <span class="c-str">'https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=bdt'</span>,
+      { next: { revalidate: <span class="c-nm">300</span> } }
+    );
+    <span class="c-kw">const</span> data = <span class="c-kw">await</span> res.<span class="c-fn">json</span>();
+    <span class="c-kw">const</span> rate = data?.tether?.bdt;
+
+    <span class="c-kw">if</span> (rate && rate > <span class="c-nm">100</span> && rate < <span class="c-nm">200</span>) { <span class="c-cm">// sanity check</span>
+      <span class="c-cm">// Cache in Redis for fast access</span>
+      <span class="c-kw">await</span> redis.<span class="c-fn">setex</span>(<span class="c-str">'usd_bdt_rate'</span>, <span class="c-nm">300</span>, rate);
+      <span class="c-kw">return</span> <span class="c-fn">NextResponse</span>.<span class="c-fn">json</span>({ rate, source: <span class="c-str">'live'</span> });
+    }
+  } <span class="c-kw">catch</span> {}
+
+  <span class="c-cm">// Fallback: last cached rate, or hardcoded</span>
+  <span class="c-kw">const</span> cached = <span class="c-kw">await</span> redis.<span class="c-fn">get</span>&lt;<span class="c-tp">number</span>&gt;(<span class="c-str">'usd_bdt_rate'</span>);
+  <span class="c-kw">return</span> <span class="c-fn">NextResponse</span>.<span class="c-fn">json</span>({
+    rate: cached ?? <span class="c-nm">122</span>,
+    source: cached ? <span class="c-str">'cached'</span> : <span class="c-str">'fallback'</span>
+  });
+}</div>
+      </div>
+    </div>
+
+    <div class="callout ca-blue">
+      <strong>💡 admin_deposit_wallets table তৈরি করুন</strong>
+      Supabase-এ একটি table: (id, network TEXT, address TEXT, qr_code_url TEXT, is_active BOOL)। Admin নিজের USDT wallet address সেখানে সেভ করবেন। User সেই address-এ পাঠাবে এবং TXN ID submit করবে।
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- PILLAR 6: STATE MANAGEMENT                      -->
+<!-- ═══════════════════════════════════════════════ -->
+<div class="pillar">
+  <div class="pillar-head ph-orange">
+    <div class="pillar-icon">🧠</div>
+    <div class="pillar-meta">
+      <div class="pillar-num">PILLAR 06 / 08</div>
+      <div class="pillar-name">Frontend State Management</div>
+      <div class="pillar-subtitle">Zustand + persistence + market store + workflow store</div>
+    </div>
+    <div class="pillar-status">
+      <span class="badge badge-yellow">MONOLITH RISK</span>
+      <span class="badge badge-orange">PERF ISSUES</span>
+    </div>
+  </div>
+  <div class="pillar-body">
+
+    <div class="two-col">
+      <div class="analysis-block">
+        <div class="ab-head"><div class="dot dot-orange"></div>বর্তমান সমস্যা</div>
+        <ul class="ab-list">
+          <li>useStore.ts — single massive store, সব state একসাথে persisted</li>
+          <li>wallet, positions, markets — সব localStorage-এ serialize হচ্ছে</li>
+          <li>Markets list — store-এ cache হচ্ছে, stale data সমস্যা</li>
+          <li>selectStats export নেই workflowStore থেকে (TS error)</li>
+          <li>initializeAuth() — login-এর পর sequential 3টি async call</li>
+          <li>subscribeToMarket() — cleanup function সঠিকভাবে call হচ্ছে না সব ক্ষেত্রে</li>
+          <li>Trading state (price, qty) persist হচ্ছে — stale after refresh</li>
+        </ul>
+      </div>
+      <div class="analysis-block">
+        <div class="ab-head"><div class="dot dot-green"></div>Production Fix Strategy</div>
+        <ul class="ab-list">
+          <li>Split useStore into domain slices (auth, market, trading, wallet)</li>
+          <li>Only auth slice persist করুন — wallet/markets always re-fetch</li>
+          <li>React Query for server state (markets, orders, positions)</li>
+          <li>Zustand শুধু UI state-এর জন্য (trading panel, UI prefs)</li>
+          <li>add selectStats export to workflowStore</li>
+          <li>useEffect cleanup return করুন সব subscriptions-এ</li>
+          <li>tradingState.price — don't persist, initialize from market data</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="code-block">
+      <div class="cb-head"><span>store/workflowStore.ts — add missing export (quick fix)</span><span class="badge badge-yellow">QUICK FIX</span></div>
+      <div class="cb-content"><span class="c-cm">// Find selectStats in store/index.ts and add to workflowStore.ts:</span>
+<span class="c-kw">export const</span> <span class="c-fn">selectStats</span> = (state: <span class="c-tp">WorkflowStore</span>) =&gt; ({
+  totalWorkflows: state.workflows.<span class="c-fn">length</span>,
+  activeWorkflows: state.workflows.<span class="c-fn">filter</span>(w =&gt; w.is_active).<span class="c-fn">length</span>,
+  pendingExecutions: state.executions.<span class="c-fn">filter</span>(e =&gt; e.status === <span class="c-str">'pending'</span>).<span class="c-fn">length</span>,
+  failedExecutions: state.executions.<span class="c-fn">filter</span>(e =&gt; e.status === <span class="c-str">'failed'</span>).<span class="c-fn">length</span>,
+  escalatedExecutions: state.executions.<span class="c-fn">filter</span>(e =&gt; e.status === <span class="c-str">'escalated'</span>).<span class="c-fn">length</span>,
+  successRate: state.executions.<span class="c-fn">length</span> > <span class="c-nm">0</span>
+    ? (state.executions.<span class="c-fn">filter</span>(e =&gt; e.status === <span class="c-str">'completed'</span>).<span class="c-fn">length</span>
+       / state.executions.<span class="c-fn">length</span> * <span class="c-nm">100</span>).<span class="c-fn">toFixed</span>(<span class="c-nm">1</span>)
+    : <span class="c-str">'0.0'</span>
+});
+
+<span class="c-cm">// Fix Zustand persist — only persist auth, NOT all state</span>
+<span class="c-kw">export const</span> useStore = <span class="c-fn">create</span>(
+  <span class="c-fn">persist</span>(
+    (set, get) =&gt; ({ <span class="c-cm">/* ...state... */</span> }),
+    {
+      name: <span class="c-str">'ploky-store'</span>,
+      <span class="c-cm">// Only persist auth-related state</span>
+      partialize: (state) =&gt; ({
+        currentUser: state.currentUser,
+        isAuthenticated: state.isAuthenticated,
+        <span class="c-cm">// Don't persist: markets, wallet, orders (stale risk)</span>
+      })
+    }
+  )
+);</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- PILLAR 7: AI ORACLE SYSTEM                      -->
+<!-- ═══════════════════════════════════════════════ -->
+<div class="pillar">
+  <div class="pillar-head ph-violet">
+    <div class="pillar-icon">🤖</div>
+    <div class="pillar-meta">
+      <div class="pillar-num">PILLAR 07 / 08</div>
+      <div class="pillar-name">AI Oracle & Resolution System</div>
+      <div class="pillar-subtitle">Gemini AI + multi-stage pipeline + confidence scoring + expert panel</div>
+    </div>
+    <div class="pillar-status">
+      <span class="badge badge-green">WELL DESIGNED</span>
+      <span class="badge badge-yellow">PROD CONFIG</span>
+    </div>
+  </div>
+  <div class="pillar-body">
+
+    <div class="arch-stack">
+      <div class="arch-row">
+        <span class="arch-name">1. Query Builder</span>
+        <span class="arch-detail">Market question → search keywords + context</span>
+        <span class="arch-state badge badge-green">✅ DONE</span>
+      </div>
+      <div class="arch-row">
+        <span class="arch-name">2. News Retrieval</span>
+        <span class="arch-detail">Fetch Prothom Alo, Daily Star, BBC Bengali RSS feeds</span>
+        <span class="arch-state badge badge-yellow">⚠️ MOCK</span>
+      </div>
+      <div class="arch-row">
+        <span class="arch-name">3. AI Synthesis</span>
+        <span class="arch-detail">Gemini 1.5 Flash analyzes evidence → YES/NO + confidence</span>
+        <span class="arch-state badge badge-green">✅ DONE</span>
+      </div>
+      <div class="arch-row">
+        <span class="arch-name">4. Deliberation</span>
+        <span class="arch-detail">Second AI pass — challenges the initial conclusion</span>
+        <span class="arch-state badge badge-green">✅ DONE</span>
+      </div>
+      <div class="arch-row">
+        <span class="arch-name">5. Decision Gate</span>
+        <span class="arch-detail">≥85% confidence → auto-resolve | else → manual queue</span>
+        <span class="arch-state badge badge-green">✅ DONE</span>
+      </div>
+      <div class="arch-row">
+        <span class="arch-name">6. Settlement</span>
+        <span class="arch-detail">settle_market() DB function → pay winners from losers</span>
+        <span class="arch-state badge badge-green">✅ DONE</span>
+      </div>
+      <div class="arch-row">
+        <span class="arch-name">7. Dispute System</span>
+        <span class="arch-detail">Bond-based tribunal, judge assignment, community vote</span>
+        <span class="arch-state badge badge-blue">DB ONLY</span>
+      </div>
+    </div>
+
+    <div class="fix-section">
+      <div class="fix-title">PRODUCTION FIX — Real News Sources (replace mock)</div>
+      <div class="code-block">
+        <div class="cb-head"><span>lib/oracle/sources.ts — Real BD news fetcher</span><span class="badge badge-green">CREATE</span></div>
+        <div class="cb-content"><span class="c-kw">const</span> BD_NEWS_SOURCES = [
+  { name: <span class="c-str">'Prothom Alo'</span>, rss: <span class="c-str">'https://www.prothomalo.com/feed'</span> },
+  { name: <span class="c-str">'Daily Star'</span>, rss: <span class="c-str">'https://www.thedailystar.net/feed.rss'</span> },
+  { name: <span class="c-str">'BCC Bengali'</span>, rss: <span class="c-str">'https://feeds.bbci.co.uk/bengali/rss.xml'</span> },
+  { name: <span class="c-str">'Bdnews24'</span>, rss: <span class="c-str">'https://bdnews24.com/?widgetName=rssfeed&widgetId=1150&getXmlFeed=true'</span> },
+];
+
+<span class="c-kw">export async function</span> <span class="c-fn">fetchNewsForMarket</span>(
+  question: <span class="c-tp">string</span>,
+  keywords: <span class="c-tp">string</span>[]
+): <span class="c-tp">Promise</span>&lt;<span class="c-tp">NewsArticle</span>[]&gt; {
+  <span class="c-kw">const</span> articles: <span class="c-tp">NewsArticle</span>[] = [];
+
+  <span class="c-kw">for</span> (<span class="c-kw">const</span> source <span class="c-kw">of</span> BD_NEWS_SOURCES) {
+    <span class="c-kw">try</span> {
+      <span class="c-kw">const</span> res = <span class="c-kw">await</span> <span class="c-fn">fetch</span>(source.rss, {
+        next: { revalidate: <span class="c-nm">1800</span> } <span class="c-cm">// 30min cache</span>
+      });
+      <span class="c-kw">const</span> xml = <span class="c-kw">await</span> res.<span class="c-fn">text</span>();
+      <span class="c-kw">const</span> parsed = <span class="c-fn">parseRSSFeed</span>(xml);
+
+      <span class="c-cm">// Filter by keywords relevance</span>
+      <span class="c-kw">const</span> relevant = parsed.<span class="c-fn">filter</span>(item =&gt;
+        keywords.<span class="c-fn">some</span>(kw =&gt;
+          item.title.<span class="c-fn">includes</span>(kw) ||
+          item.description.<span class="c-fn">includes</span>(kw)
+        )
+      );
+      articles.<span class="c-fn">push</span>(...relevant);
+    } <span class="c-kw">catch</span> (e) {
+      console.<span class="c-fn">warn</span>(<span class="c-str">`Failed to fetch from </span>${source.name}<span class="c-str">:`</span>, e);
+    }
+  }
+
+  <span class="c-kw">return</span> articles.<span class="c-fn">slice</span>(<span class="c-nm">0</span>, <span class="c-nm">10</span>); <span class="c-cm">// Top 10 most relevant</span>
+}</div>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div class="analysis-block">
+        <div class="ab-head"><div class="dot dot-green"></div>BD-Specific Oracle Sources</div>
+        <ul class="ab-list">
+          <li>Prothom Alo RSS — sports, politics, economy</li>
+          <li>Daily Star — English coverage for international</li>
+          <li>BBC Bengali — verified global news</li>
+          <li>BPL Official API — cricket match scores</li>
+          <li>DSE website scraper — stock prices</li>
+          <li>Bangladesh Cricket Board — official results</li>
+          <li>Election Commission BD — official results</li>
+        </ul>
+      </div>
+      <div class="analysis-block">
+        <div class="ab-head"><div class="dot dot-yellow"></div>Production Requirements</div>
+        <ul class="ab-list">
+          <li>GOOGLE_GENERATIVE_AI_API_KEY env var set করুন</li>
+          <li>Fallback model (GPT-4o-mini if Gemini fails)</li>
+          <li>Rate limit: max 3 AI resolutions/minute</li>
+          <li>Store evidence URLs in DB for audit</li>
+          <li>Manual override — admin can always override AI</li>
+          <li>Dispute 48hr window before final settlement</li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- PILLAR 8: FRONTEND ARCHITECTURE                 -->
+<!-- ═══════════════════════════════════════════════ -->
+<div class="pillar">
+  <div class="pillar-head ph-blue">
+    <div class="pillar-icon">🎨</div>
+    <div class="pillar-meta">
+      <div class="pillar-num">PILLAR 08 / 08</div>
+      <div class="pillar-name">Frontend Architecture & UX</div>
+      <div class="pillar-subtitle">Next.js App Router + Tailwind + shadcn + i18n (Bangla) + real-time</div>
+    </div>
+    <div class="pillar-status">
+      <span class="badge badge-green">BD-FIRST ✅</span>
+      <span class="badge badge-yellow">POLISH NEEDED</span>
+    </div>
+  </div>
+  <div class="pillar-body">
+
+    <div class="three-col">
+      <div class="analysis-block">
+        <div class="ab-head"><div class="dot dot-green"></div>ভালো আছে ✅</div>
+        <ul class="ab-list">
+          <li>Bangla (bn) default language</li>
+          <li>i18next with 3 locales</li>
+          <li>shadcn/ui consistent design system</li>
+          <li>Framer Motion animations</li>
+          <li>Error states in MarketCard</li>
+          <li>Loading skeletons implemented</li>
+          <li>Recharts for price charts</li>
+          <li>Responsive layout (mobile-first)</li>
+        </ul>
+      </div>
+      <div class="analysis-block">
+        <div class="ab-head"><div class="dot dot-red"></div>সমস্যা ❌</div>
+        <ul class="ab-list">
+          <li>No global error boundary</li>
+          <li>হার্ডকোড করা ৳ — সব জায়গায় consistent না</li>
+          <li>UTC time — Bangladesh UTC+6 দেখায় না</li>
+          <li>FeedService methods missing → social features broken</li>
+          <li>Demo credential hardcoded in login page</li>
+          <li>TradingPanel — extra closing div tag (syntax error)</li>
+          <li>No page loading indicator (route transitions)</li>
+        </ul>
+      </div>
+      <div class="analysis-block">
+        <div class="ab-head"><div class="dot dot-blue"></div>বাংলাদেশ UX</div>
+        <ul class="ab-list">
+          <li>সব price ৳ (BDT) এ দেখান</li>
+          <li>UTC+6 timezone সব date/time-এ</li>
+          <li>Eid/Puja holiday market templates</li>
+          <li>bKash/Nagad color branding</li>
+          <li>০১XXXXXXXXX phone format validation</li>
+          <li>Bangla number formatting option</li>
+          <li>Mobile-first (85%+ BD users mobile)</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="fix-section">
+      <div class="fix-title">PRODUCTION FIX — Global Error Boundary + BD Timezone + Hardened Utils</div>
+      <div class="code-block">
+        <div class="cb-head"><span>components/ErrorBoundary.tsx + lib/utils/bd-format.ts</span><span class="badge badge-green">CREATE THESE</span></div>
+        <div class="cb-content"><span class="c-cm">// components/ErrorBoundary.tsx</span>
+<span class="c-str">'use client'</span>;
+<span class="c-kw">import</span> { Component, ReactNode } <span class="c-kw">from</span> <span class="c-str">'react'</span>;
+
+<span class="c-kw">export class</span> <span class="c-tp">ErrorBoundary</span> <span class="c-kw">extends</span> Component&lt;
+  { children: ReactNode },
+  { hasError: <span class="c-tp">boolean</span> }
+&gt; {
+  state = { hasError: <span class="c-kw">false</span> };
+  <span class="c-kw">static</span> <span class="c-fn">getDerivedStateFromError</span>() { <span class="c-kw">return</span> { hasError: <span class="c-kw">true</span> }; }
+  <span class="c-fn">componentDidCatch</span>(error, info) {
+    console.<span class="c-fn">error</span>(<span class="c-str">'UI Error:'</span>, error, info);
+    <span class="c-cm">// Send to Sentry: Sentry.captureException(error)</span>
+  }
+  <span class="c-fn">render</span>() {
+    <span class="c-kw">if</span> (<span class="c-kw">this</span>.state.hasError) <span class="c-kw">return</span> (
+      &lt;div className=<span class="c-str">"p-8 text-center"</span>&gt;
+        &lt;p className=<span class="c-str">"text-red-500 text-xl mb-4"</span>&gt;কিছু একটা ভুল হয়েছে&lt;/p&gt;
+        &lt;button onClick={() =&gt; <span class="c-kw">this</span>.<span class="c-fn">setState</span>({ hasError: <span class="c-kw">false</span> })}&gt;
+          আবার চেষ্টা করুন
+        &lt;/button&gt;
+      &lt;/div&gt;
+    );
+    <span class="c-kw">return this</span>.props.children;
+  }
+}
+
+<span class="c-cm">// lib/utils/bd-format.ts — Bangladesh-specific formatting</span>
+<span class="c-kw">const</span> BD_TIMEZONE = <span class="c-str">'Asia/Dhaka'</span>;
+
+<span class="c-kw">export const</span> <span class="c-fn">formatBDT</span> = (amount: <span class="c-tp">number</span>) =&gt;
+  <span class="c-kw">new</span> Intl.<span class="c-fn">NumberFormat</span>(<span class="c-str">'bn-BD'</span>, {
+    style: <span class="c-str">'currency'</span>, currency: <span class="c-str">'BDT'</span>,
+    maximumFractionDigits: <span class="c-nm">2</span>
+  }).<span class="c-fn">format</span>(amount);
+
+<span class="c-kw">export const</span> <span class="c-fn">formatBDDate</span> = (isoDate: <span class="c-tp">string</span>) =&gt;
+  <span class="c-kw">new</span> Intl.<span class="c-fn">DateTimeFormat</span>(<span class="c-str">'bn-BD'</span>, {
+    timeZone: BD_TIMEZONE,
+    day: <span class="c-str">'numeric'</span>, month: <span class="c-str">'long'</span>, year: <span class="c-str">'numeric'</span>,
+    hour: <span class="c-str">'2-digit'</span>, minute: <span class="c-str">'2-digit'</span>
+  }).<span class="c-fn">format</span>(<span class="c-kw">new</span> <span class="c-fn">Date</span>(isoDate));
+
+<span class="c-kw">export const</span> <span class="c-fn">validateBDPhone</span> = (phone: <span class="c-tp">string</span>) =&gt;
+  <span class="c-str">/^01[3-9]\d{8}$/</span>.<span class="c-fn">test</span>(phone);</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- ENV VARS COMPLETE LIST                          -->
+<!-- ═══════════════════════════════════════════════ -->
+<div class="pillar" style="margin-top: 64px;">
+  <div class="pillar-head ph-green">
+    <div class="pillar-icon">🔑</div>
+    <div class="pillar-meta">
+      <div class="pillar-num">CONFIG</div>
+      <div class="pillar-name">সম্পূর্ণ Environment Variables</div>
+      <div class="pillar-subtitle">Vercel Dashboard → Settings → Environment Variables-এ সব সেট করুন</div>
+    </div>
+  </div>
+  <div class="pillar-body">
+    <table class="env-table">
+      <thead>
+        <tr><th>Variable</th><th>Description</th><th>Status</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>NEXT_PUBLIC_SUPABASE_URL</td><td>Supabase project URL</td><td><span class="dot-status ds-g"></span>Done</td></tr>
+        <tr><td>NEXT_PUBLIC_SUPABASE_ANON_KEY</td><td>Public anon key</td><td><span class="dot-status ds-g"></span>Done</td></tr>
+        <tr><td>SUPABASE_SERVICE_ROLE_KEY</td><td>Admin DB operations</td><td><span class="dot-status ds-g"></span>Done</td></tr>
+        <tr><td>UPSTASH_REDIS_REST_URL</td><td>Redis for rate limiting + caching</td><td><span class="dot-status ds-r"></span>MISSING</td></tr>
+        <tr><td>UPSTASH_REDIS_REST_TOKEN</td><td>Redis auth token</td><td><span class="dot-status ds-r"></span>MISSING</td></tr>
+        <tr><td>QSTASH_TOKEN</td><td>Upstash QStash for workflows</td><td><span class="dot-status ds-r"></span>MISSING</td></tr>
+        <tr><td>QSTASH_CURRENT_SIGNING_KEY</td><td>Verify QStash webhook signatures</td><td><span class="dot-status ds-r"></span>MISSING</td></tr>
+        <tr><td>TELEGRAM_BOT_TOKEN</td><td>Admin notifications</td><td><span class="dot-status ds-r"></span>MISSING</td></tr>
+        <tr><td>TELEGRAM_CHAT_ID</td><td>Admin group chat ID</td><td><span class="dot-status ds-r"></span>MISSING</td></tr>
+        <tr><td>GOOGLE_GENERATIVE_AI_API_KEY</td><td>Gemini AI for oracle</td><td><span class="dot-status ds-y"></span>Optional</td></tr>
+        <tr><td>NEXTAUTH_SECRET</td><td>32-char random — session security</td><td><span class="dot-status ds-r"></span>MISSING</td></tr>
+        <tr><td>CRON_SECRET</td><td>Protect /api/cron/* endpoints</td><td><span class="dot-status ds-r"></span>MISSING</td></tr>
+        <tr><td>ADMIN_IP_WHITELIST</td><td>Comma-separated admin IPs</td><td><span class="dot-status ds-y"></span>Optional</td></tr>
+        <tr><td>UPSTASH_WORKFLOW_BASE_URL</td><td>Your Vercel domain for workflows</td><td><span class="dot-status ds-r"></span>MISSING</td></tr>
+        <tr><td>SENTRY_DSN</td><td>Error monitoring</td><td><span class="dot-status ds-y"></span>Recommended</td></tr>
+        <tr><td>NEXT_PUBLIC_APP_URL</td><td>Public URL for links</td><td><span class="dot-status ds-y"></span>Set to domain</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- FINAL EXECUTION SPRINT                          -->
+<!-- ═══════════════════════════════════════════════ -->
+<div class="pillar" style="margin-top: 48px; border-color: rgba(34,211,160,0.2);">
+  <div class="pillar-head" style="background: rgba(34,211,160,0.04); border-bottom-color: rgba(34,211,160,0.15);">
+    <div style="width:4px; position:absolute; left:0; top:0; bottom:0; background: var(--g); border-radius: 2px 0 0 2px;"></div>
+    <div class="pillar-icon">🚀</div>
+    <div class="pillar-meta">
+      <div class="pillar-num">EXECUTION PLAN</div>
+      <div class="pillar-name">৭ দিনে সম্পূর্ণ Production-Ready</div>
+      <div class="pillar-subtitle">ক্রমানুসারে execute করুন — একটি শেষ না করে পরেরটি শুরু করবেন না</div>
+    </div>
+    <span class="badge badge-green">SHIP IN 7 DAYS</span>
+  </div>
+  <div class="pillar-body">
+
+    <div class="sprint-box">
+      <div class="sprint-head" style="background: rgba(255,79,106,0.05);">
+        <span style="color: var(--r);">⚡ DAY 1-2 — কোড ঠিক করুন (0 TS errors)</span>
+        <span class="badge badge-red">CRITICAL</span>
+      </div>
+      <div class="sprint-items">
+        <div class="si">সব API route-এ <code>await createClient()</code> — bash grep দিয়ে খুঁজুন</div>
+        <div class="si">CLOB types — Side="buy"|"sell", Status lowercase</div>
+        <div class="si">FeedService-এ 5টি missing method implement করুন</div>
+        <div class="si">workflowStore-এ selectStats export যোগ করুন</div>
+        <div class="si">snoozeUntil variable declare করুন notifications/route.ts-এ</div>
+        <div class="si">useCancellation boolean|0 টাইপ fix করুন</div>
+        <div class="si">dispute-workflow null array check যোগ করুন</div>
+        <div class="si"><code>npm run build</code> → 0 errors নিশ্চিত করুন</div>
+      </div>
+    </div>
+
+    <div class="sprint-box">
+      <div class="sprint-head" style="background: rgba(255,192,68,0.05);">
+        <span style="color: var(--y);">💰 DAY 3-4 — Admin Financial Control + Security</span>
+        <span class="badge badge-yellow">HIGH PRIORITY</span>
+      </div>
+      <div class="sprint-items">
+        <div class="si">POST /api/admin/withdrawals/process তৈরি করুন</div>
+        <div class="si">POST /api/admin/deposits/reject তৈরি করুন</div>
+        <div class="si">WithdrawalProcessing.tsx admin component বানান</div>
+        <div class="si">generateDepositAddress() — mock সরিয়ে DB address দিন</div>
+        <div class="si">Upstash Redis setup + loginRateLimiter migrate করুন</div>
+        <div class="si">Security headers — সব response-এ যোগ করুন</div>
+        <div class="si">Live exchange rate API (CoinGecko)</div>
+        <div class="si">সব Missing env vars Vercel-এ সেট করুন</div>
+      </div>
+    </div>
+
+    <div class="sprint-box">
+      <div class="sprint-head" style="background: rgba(79,158,255,0.05);">
+        <span style="color: var(--p);">🇧🇩 DAY 5-6 — Bangladesh Polish + Performance</span>
+        <span class="badge badge-blue">UX LEVEL-UP</span>
+      </div>
+      <div class="sprint-items">
+        <div class="si">formatBDT() + formatBDDate() সব component-এ</div>
+        <div class="si">UTC+6 timezone সব time display-এ</div>
+        <div class="si">ErrorBoundary সব page-এ wrap করুন</div>
+        <div class="si">DB indexes (orders, trades, wallets)</div>
+        <div class="si">OrderBook API Redis cache যোগ করুন</div>
+        <div class="si">safe_deduct_balance() DB function add করুন</div>
+        <div class="si">Real BD news sources oracle-এ</div>
+        <div class="si">Sentry.init() error tracking setup</div>
+      </div>
+    </div>
+
+    <div class="sprint-box">
+      <div class="sprint-head" style="background: rgba(34,211,160,0.05);">
+        <span style="color: var(--g);">✅ DAY 7 — E2E Test + Launch</span>
+        <span class="badge badge-green">SHIP IT</span>
+      </div>
+      <div class="sprint-items">
+        <div class="si">Register → deposit → trade → withdraw পুরো flow test</div>
+        <div class="si">Admin: deposit approve/reject test</div>
+        <div class="si">Market create → trade → resolve flow test</div>
+        <div class="si">Mobile (Bangladesh phone) responsive test</div>
+        <div class="si">Vercel production deploy</div>
+        <div class="si">প্রথম BPL বাজি market create করুন</div>
+        <div class="si">বন্ধুদের invite করুন — soft launch!</div>
+        <div class="si">Sentry + Telegram alerts monitor করুন</div>
+      </div>
+    </div>
+
+    <div class="callout ca-green" style="margin-top: 24px;">
+      <strong>🎯 সাফল্যের মাপকাঠি: এই ৫টি হলে LAUNCH করুন</strong>
+      ① <code>npm run build</code> zero errors → ② Admin withdrawal approve/reject কাজ করে → ③ User bKash deposit → admin approve → wallet credit হয় → ④ User bet place করে → order match হয় → ⑤ Market resolve → winner টাকা পায়। এই পাঁচটি end-to-end কাজ করলে launch করুন।
+    </div>
+
+    <div class="progress-wrap" style="margin-top: 24px;">
+      <div class="progress-item">
+        <div class="progress-label">Auth Layer</div>
+        <div class="progress-bar"><div class="progress-fill" style="width:75%; background: var(--y);"></div></div>
+        <div class="progress-pct">75%</div>
+      </div>
+      <div class="progress-item">
+        <div class="progress-label">Database & RLS</div>
+        <div class="progress-bar"><div class="progress-fill" style="width:88%; background: var(--g);"></div></div>
+        <div class="progress-pct">88%</div>
+      </div>
+      <div class="progress-item">
+        <div class="progress-label">API Routes (74)</div>
+        <div class="progress-bar"><div class="progress-fill" style="width:60%; background: var(--r);"></div></div>
+        <div class="progress-pct">60%</div>
+      </div>
+      <div class="progress-item">
+        <div class="progress-label">CLOB Engine</div>
+        <div class="progress-bar"><div class="progress-fill" style="width:55%; background: var(--r);"></div></div>
+        <div class="progress-pct">55%</div>
+      </div>
+      <div class="progress-item">
+        <div class="progress-label">Wallet & Payment</div>
+        <div class="progress-bar"><div class="progress-fill" style="width:65%; background: var(--y);"></div></div>
+        <div class="progress-pct">65%</div>
+      </div>
+      <div class="progress-item">
+        <div class="progress-label">State Management</div>
+        <div class="progress-bar"><div class="progress-fill" style="width:70%; background: var(--y);"></div></div>
+        <div class="progress-pct">70%</div>
+      </div>
+      <div class="progress-item">
+        <div class="progress-label">AI Oracle System</div>
+        <div class="progress-bar"><div class="progress-fill" style="width:82%; background: var(--g);"></div></div>
+        <div class="progress-pct">82%</div>
+      </div>
+      <div class="progress-item">
+        <div class="progress-label">Frontend / BD UX</div>
+        <div class="progress-bar"><div class="progress-fill" style="width:78%; background: var(--p);"></div></div>
+        <div class="progress-pct">78%</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</div><!-- /wrap -->
+
+<footer>
+  <div>Plokymarket Core Pillar Analysis — February 2026</div>
+  <div style="margin-top: 6px; opacity: 0.4;">বাংলাদেশের প্রথম Prediction Market — Build করুন, Launch করুন, জিতুন 🇧🇩</div>
+</footer>
+
+</body>
+</html>

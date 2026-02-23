@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 
 // POST /api/admin/deposits/reject
@@ -6,10 +6,10 @@ import { NextResponse } from 'next/server';
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
-    
+
     // Get user session
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
+
     if (authError || !user) {
       return NextResponse.json(
         { error: 'Authentication required' },
@@ -48,8 +48,10 @@ export async function POST(request: Request) {
       );
     }
 
+    const service = await createServiceClient();
+
     // Get deposit request
-    const { data: deposit, error: depositError } = await supabase
+    const { data: deposit, error: depositError } = await service
       .from('deposit_requests')
       .select('*')
       .eq('id', depositId)
@@ -70,7 +72,7 @@ export async function POST(request: Request) {
     }
 
     // Update deposit request as rejected
-    const { error: updateError } = await supabase
+    const { error: updateError } = await service
       .from('deposit_requests')
       .update({
         status: 'rejected',
@@ -90,7 +92,7 @@ export async function POST(request: Request) {
     }
 
     // Create notification for user
-    await supabase.from('notifications').insert({
+    await service.from('notifications').insert({
       user_id: deposit.user_id,
       type: 'deposit_rejected',
       title: 'ডিপোজিট বাতিল হয়েছে',

@@ -42,7 +42,7 @@ async function runTest() {
 
     try {
         // Try to cancel immediately
-        engine.cancelOrder(ord1.id);
+        await engine.cancelOrder(ord1.id);
         console.error('FAILURE: Immediate Cancel SUCCEEDED (Should have failed)');
     } catch (e: any) {
         if (e.message.includes('Minimum resting time')) {
@@ -54,7 +54,7 @@ async function runTest() {
 
     // Wait > 100ms and try again
     await sleep(150);
-    const cancelResult = engine.cancelOrder(ord1.id);
+    const cancelResult = await engine.cancelOrder(ord1.id);
     if (cancelResult) {
         console.log('SUCCESS: Cancel accepted after resting time.');
     } else {
@@ -82,7 +82,7 @@ async function runTest() {
 
     for (const o of orders) {
         try {
-            engine.cancelOrder(o.id);
+            await engine.cancelOrder(o.id);
             cancelCount++;
         } catch (e: any) {
             if (e.message.includes('Rate Limit Exceeded')) {

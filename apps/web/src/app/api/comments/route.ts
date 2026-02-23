@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { ActivityService } from '@/lib/activity';
 
 // Simple in-memory rate limiter
 const rateLimits = new Map<string, number[]>();
@@ -24,16 +25,16 @@ function recordPost(userId: string) {
 function analyzeSentiment(content: string): { sentiment: string; score: number } {
   const positive = ['agree', 'bullish', 'win', 'good', 'great', 'buy', 'yes', 'correct'];
   const negative = ['disagree', 'bearish', 'lose', 'bad', 'sell', 'no', 'wrong'];
-  
+
   const lower = content.toLowerCase();
   let score = 0;
   positive.forEach(w => { if (lower.includes(w)) score += 0.2; });
   negative.forEach(w => { if (lower.includes(w)) score -= 0.2; });
-  
+
   let sentiment = 'neutral';
   if (score > 0.3) sentiment = 'positive';
   else if (score < -0.3) sentiment = 'negative';
-  
+
   return { sentiment, score };
 }
 
@@ -41,14 +42,14 @@ function analyzeSentiment(content: string): { sentiment: string; score: number }
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams;
   const marketId = searchParams.get('marketId');
-  
+
   if (!marketId) {
     return NextResponse.json({ error: 'Missing marketId' }, { status: 400 });
   }
 
   try {
     const supabase = await createClient();
-    
+
     // Simple query - get all comments for this market
     const { data: comments, error } = await supabase
       .from('market_comments')
@@ -84,12 +85,12 @@ export async function GET(req: NextRequest) {
       }
     });
 
-    return NextResponse.json({ 
-      data: { 
-        comments: roots, 
+    return NextResponse.json({
+      data: {
+        comments: roots,
         total_count: comments?.length || 0,
         has_more: false
-      } 
+      }
     });
   } catch (error: any) {
     console.error('Error fetching comments:', error);
@@ -170,6 +171,19 @@ export async function POST(req: NextRequest) {
     }
 
     recordPost(user.id);
+
+    // Log Activity
+    const activityService = new ActivityService();
+    await activityService.logActivity({
+      userId: user.id,
+      type: 'COMMENT',
+      data: {
+        marketId,
+        marketQuestion: marketQuestion || 'Market Discussion',
+        content: content.slice(0, 100),
+        commentId: comment.id
+      }
+    });
 
     return NextResponse.json({ data: comment });
   } catch (error: any) {

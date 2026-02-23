@@ -5,15 +5,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createServiceClient } from '@/lib/supabase/server';
 
 export const runtime = 'edge';
 
-const getSupabase = () => createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { persistSession: false } }
-);
+// Initialize Supabase admin client is managed via createServiceClient
 
 // Mock news fetcher (replace with actual news APIs)
 async function fetchNewsArticles(keywords: string[], sources: string[]): Promise<any[]> {
@@ -22,7 +18,7 @@ async function fetchNewsArticles(keywords: string[], sources: string[]): Promise
   // - GDELT
   // - Custom RSS feeds
   // - Bangladesh news sources
-  
+
   // For now, return mock data based on keywords
   return [
     {
@@ -112,7 +108,7 @@ Return ONLY valid JSON:
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
-  
+
   try {
     const { searchParams } = new URL(request.url);
     const eventId = searchParams.get('event_id');
@@ -124,7 +120,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = getSupabase();
+    const supabase = await createServiceClient();
 
     // Get event and resolution config
     const { data: event, error: eventError } = await supabase
@@ -185,7 +181,7 @@ export async function POST(request: NextRequest) {
 
     // Check confidence threshold
     const threshold = resolution.confidence_threshold || 85;
-    
+
     if (analysis.confidence < threshold || analysis.outcome === 'uncertain') {
       // Low confidence - update status but don't resolve
       await supabase

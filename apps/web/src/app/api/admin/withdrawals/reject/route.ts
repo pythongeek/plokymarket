@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 
 // POST /api/admin/withdrawals/reject
@@ -6,10 +6,10 @@ import { NextResponse } from 'next/server';
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
-    
+
     // Get user session
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
+
     if (authError || !user) {
       return NextResponse.json(
         { error: 'Authentication required' },
@@ -48,8 +48,10 @@ export async function POST(request: Request) {
       );
     }
 
+    const service = await createServiceClient();
+
     // Get withdrawal request
-    const { data: withdrawal, error: withdrawalError } = await supabase
+    const { data: withdrawal, error: withdrawalError } = await service
       .from('withdrawal_requests')
       .select('*')
       .eq('id', withdrawalId)
@@ -70,7 +72,7 @@ export async function POST(request: Request) {
     }
 
     // Use the database function to reject withdrawal
-    const { data: result, error: functionError } = await supabase
+    const { data: result, error: functionError } = await service
       .rpc('process_withdrawal', {
         p_withdrawal_id: withdrawalId,
         p_user_id: withdrawal.user_id,
@@ -87,7 +89,7 @@ export async function POST(request: Request) {
     }
 
     // Create notification for user
-    await supabase.from('notifications').insert({
+    await service.from('notifications').insert({
       user_id: withdrawal.user_id,
       type: 'withdrawal_rejected',
       title: 'উইথড্র বাতিল হয়েছে',
@@ -102,7 +104,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       message: 'Withdrawal rejected and balance refunded',
-      data: { 
+      data: {
         withdrawalId,
         refundedAmount: withdrawal.usdt_amount
       }

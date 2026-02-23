@@ -5,11 +5,11 @@ import { NextResponse } from 'next/server';
 // Get user's current balance
 export async function GET(request: Request) {
   try {
-    const supabase = createClient();
-    
+    const supabase = await createClient();
+
     // Get user session
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
+
     if (authError || !user) {
       return NextResponse.json(
         { error: 'Authentication required' },

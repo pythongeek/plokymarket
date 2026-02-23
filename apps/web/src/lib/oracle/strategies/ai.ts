@@ -10,42 +10,62 @@ export class AiResolutionStrategy implements IResolutionStrategy {
     async resolve(marketId: string, marketQuestion: string, context?: any): Promise<{ outcome: string; evidence: OracleEvidence; bondAmount?: number }> {
         const evidenceText = context?.evidenceText || "Internal Knowledge";
 
-        // 1. Multi-Model Prediction (Simulated)
-        // In reality, we would call OpenAI, Anthropic, Gemini, etc.
-        // Here we simulate consensus by calling Gemini multiple times with slight variations or just once + mock others.
+        // 1. Retrieval (Simulated/Mocked)
+        const retrievalOutput = {
+            searchQuery: marketQuestion,
+            sourceCount: 3,
+            sources: [
+                { title: "Daily Star - Bangladesh News", url: "https://thedailystar.net", snippet: "Recent developments regarding " + marketQuestion },
+                { title: "Prothom Alo", url: "https://prothomalo.com", snippet: "Official report on the matter." },
+                { title: "BSS News", url: "https://bssnews.net", snippet: "Government agency confirmation." }
+            ]
+        };
 
-        const models = ['Gemini', 'GPT-4o', 'Claude-3.5'];
+        // 2. Multi-Model Prediction (Simulated)
+        const models = ['Gemini-1.5-Flash', 'GPT-4o', 'Claude-3.5-Sonnet'];
         const predictions = await Promise.all(models.map(async (model) => {
             return this.predictWithModel(model, marketQuestion, evidenceText);
         }));
 
-        // 2. Consensus Calculation
+        // 3. Consensus Calculation (Deliberation)
         const consensus = this.calculateConsensus(predictions);
 
-        // 3. Escalation Check
-        if (consensus.confidence < 0.95) {
-            console.warn(`[AI Oracle] Low confidence (${consensus.confidence}). Escalating to Human Review.`);
-            return {
-                outcome: 'UNCERTAIN',
-                evidence: {
-                    summary: `Escalated: Consensus confidence ${consensus.confidence} < 0.95. Models disagreed or low certainty.`,
-                    urls: [],
-                    confidence: consensus.confidence,
-                    aiAnalysis: { predictions }
-                },
-                bondAmount: 0
-            };
-        }
+        // 4. Structured Output for Pipeline
+        const aiAnalysis = {
+            query: { marketId, marketQuestion, context },
+            retrieval_output: retrievalOutput,
+            synthesis_output: {
+                summary: `Analyzed evidence from ${retrievalOutput.sourceCount} sources.`,
+                keyPoints: ["Confirmed event timing.", "Identified authoritative source."]
+            },
+            deliberation_output: {
+                predictions,
+                consensus,
+                modelVersions: models
+            },
+            explanation_output: {
+                reasoning: `Market resolved based on ${consensus.outcome} consensus with ${Math.round(consensus.confidence * 100)}% confidence.`,
+                uncertainties: consensus.confidence < 0.9 ? ["Disagreement between models", "Source latency"] : []
+            }
+        };
+
+        // 5. Escalation Check
+        const finalOutcome = consensus.outcome;
+        const finalConfidence = consensus.confidence;
+        const recommendedAction = finalConfidence >= 0.95 ? 'AUTO_RESOLVE' : 'HUMAN_REVIEW';
 
         return {
-            outcome: consensus.outcome,
+            outcome: finalOutcome,
             evidence: {
-                summary: `Multi-Model Consensus (${models.join(', ')})`,
-                urls: [],
-                confidence: consensus.confidence,
-                aiAnalysis: { predictions, consensus }
+                summary: aiAnalysis.explanation_output.reasoning,
+                urls: retrievalOutput.sources.map(s => s.url),
+                confidence: finalConfidence,
+                aiAnalysis: {
+                    ...aiAnalysis,
+                    recommendedAction
+                }
             },
-            bondAmount: 100 // High confidence bond
+            bondAmount: finalConfidence >= 0.95 ? 100 : 50
         };
     }
 

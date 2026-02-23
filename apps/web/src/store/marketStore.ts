@@ -454,7 +454,9 @@ export const useMarketStore = create<MarketState & MarketActions>()(
             });
 
             set((s) => {
-              s.unsubscribeEvents = unsubscribe;
+              s.unsubscribeEvents = () => {
+                unsubscribe.unsubscribe();
+              };
             });
           },
 
@@ -480,7 +482,9 @@ export const useMarketStore = create<MarketState & MarketActions>()(
             });
 
             set((s) => {
-              s.unsubscribeFeatured = unsubscribe;
+              s.unsubscribeFeatured = () => {
+                unsubscribe.unsubscribe();
+              };
             });
           },
 

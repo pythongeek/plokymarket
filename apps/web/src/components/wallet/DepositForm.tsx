@@ -13,6 +13,8 @@ import { useToast } from '@/components/ui/use-toast';
 import { Loader2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useStore } from '@/store/useStore';
+import { useExchangeRate } from '@/hooks/useExchangeRate';
+import { ExchangeRateBadge } from '@/components/ExchangeRateBadge';
 
 const depositSchema = z.object({
     mfs_provider: z.enum(['bkash', 'nagad', 'rocket', 'upay']),
@@ -29,7 +31,7 @@ interface DepositFormProps {
 
 export function DepositForm({ onSuccess }: DepositFormProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [currentRate, setCurrentRate] = useState<number>(100);
+    const { rate, isLoading: isRateLoading } = useExchangeRate();
     const { toast } = useToast();
     const { fetchTransactions } = useStore();
     const supabase = createClient();
@@ -46,20 +48,6 @@ export function DepositForm({ onSuccess }: DepositFormProps) {
     const watchAmount = form.watch('bdt_amount');
     const watchProvider = form.watch('mfs_provider');
 
-    useEffect(() => {
-        // Fetch live rate
-        const fetchRate = async () => {
-            const { data } = await supabase
-                .from('exchange_rates')
-                .select('bdt_to_usdt')
-                .order('created_at', { ascending: false })
-                .limit(1)
-                .single();
-            if (data) setCurrentRate(data.bdt_to_usdt);
-        };
-        fetchRate();
-    }, [supabase]);
-
     const onSubmit = async (data: DepositFormValues) => {
         setIsSubmitting(true);
         try {
@@ -75,7 +63,7 @@ export function DepositForm({ onSuccess }: DepositFormProps) {
 
             toast({
                 title: 'Deposit Request Submitted',
-                description: `Successfully queued ${Number((data.bdt_amount / currentRate).toFixed(2))} USDT for verification.`,
+                description: `Successfully queued ${Number((data.bdt_amount / rate).toFixed(2))} USDT for verification.`,
             });
 
             form.reset();
@@ -94,8 +82,9 @@ export function DepositForm({ onSuccess }: DepositFormProps) {
 
     return (
         <Card className="w-full max-w-md mx-auto">
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle>MFS Deposit (bKash/Nagad)</CardTitle>
+                <ExchangeRateBadge />
             </CardHeader>
             <CardContent>
                 <div className="bg-muted/50 p-4 rounded-lg mb-6 text-sm">
@@ -133,7 +122,7 @@ export function DepositForm({ onSuccess }: DepositFormProps) {
                             <p className="text-sm text-destructive">{form.formState.errors.bdt_amount.message}</p>
                         )}
                         <p className="text-xs text-muted-foreground">
-                            You will receive approximately ≈ <strong>{watchAmount ? (watchAmount / currentRate).toFixed(2) : 0} USDT</strong>
+                            You will receive approximately ≈ <strong>{watchAmount ? (watchAmount / rate).toFixed(2) : 0} USDT</strong>
                         </p>
                     </div>
 

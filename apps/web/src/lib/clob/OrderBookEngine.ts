@@ -113,6 +113,10 @@ export class OrderBookEngine {
     // So 0.1% = 0.001 * 1e6 = 1000n.
     // 5000n (taker) = 0.5%. Correct.
 
+    public getOrder(orderId: string): Order | undefined {
+        return this.orderMap.get(orderId);
+    }
+
     async placeOrder(order: Order, contextOverride?: Partial<import('./types').RiskContext>): Promise<FillResult> {
         // console.log('[DEBUG] placeOrder called for', order.id);
 
@@ -137,6 +141,11 @@ export class OrderBookEngine {
             throw new Error(`Market Halted: ${this.haltReason}`);
         }
 
+        // Ensure side is downcased, for consistency with 'buy'/'sell'/'buy'/'sell' matching logic
+        if (order.side) {
+            order.side = String(order.side).toLowerCase() as Side;
+        }
+
         // RISK VALIDATION
         // Construct Context (Mocking external values for now)
         const baseContext: import('./types').RiskContext = {
@@ -157,7 +166,7 @@ export class OrderBookEngine {
         // For STP, we fetch the top matches from the opposite book to check for self-trades.
         // We check the top 10 levels for potential matches.
         const relevantOrders: Order[] = [];
-        const riskOppositeBook = order.side === 'bid' ? this.asks : this.bids;
+        const riskOppositeBook = order.side === 'buy' ? this.asks : this.bids;
         const iter = (riskOppositeBook as any).iterator(); // Now exists and returns Generator
         let node = iter.next();
         let levelsChecked = 0;
@@ -167,12 +176,12 @@ export class OrderBookEngine {
 
             // If Limit Order risk check:
             if (order.type === 'LIMIT') {
-                if (order.side === 'bid' && order.price < level.price) {
+                if (order.side === 'buy' && order.price < level.price) {
                     // Start of Ask book (Lowest Price) is higher than our Bid. No match possible.
                     // Wait, Asks are sorted Ascending. Yes.
                     break;
                 }
-                if (order.side === 'ask' && order.price > level.price) {
+                if (order.side === 'sell' && order.price > level.price) {
                     // Start of Bid book (Highest Price) is lower than our Ask. No match possible.
                     // Bids are sorted Descending.
                     // So first element is Highest.
@@ -232,13 +241,13 @@ export class OrderBookEngine {
 
         // 2. Price Improvement & Jitter prevention for Aggressive Orders
         // Identify if aggressive (crossing the spread)
-        const oppositeBook = order.side === 'bid' ? this.asks : this.bids;
+        const oppositeBook = order.side === 'buy' ? this.asks : this.bids;
         const bestOppositeNode = oppositeBook.minimum();
         let isAggressive = false;
 
         if (bestOppositeNode) {
             const bestOppositePrice = bestOppositeNode.data.price;
-            if (order.side === 'bid' && order.price >= bestOppositePrice) {
+            if (order.side === 'buy' && order.price >= bestOppositePrice) {
                 isAggressive = true;
                 // Price Improvement Check: Must beat best price by 1 tick ??
                 // "Must beat best price by 1 tick to cross" -> meaning if you cross, you must cross DEEP? 
@@ -263,7 +272,7 @@ export class OrderBookEngine {
                     const jitter = Math.floor(Math.random() * 50);
                     if (jitter > 0) await new Promise(r => setTimeout(r, jitter));
                 }
-            } else if (order.side === 'ask' && order.price <= bestOppositePrice) {
+            } else if (order.side === 'sell' && order.price <= bestOppositePrice) {
                 isAggressive = true;
                 if (order.quantity > 5000n * SCALE) {
                     const jitter = Math.floor(Math.random() * 50);
@@ -284,7 +293,7 @@ export class OrderBookEngine {
                 const bestLevel = bestLevelNode.data;
 
                 // Check Price Match
-                const canMatch = order.side === 'bid'
+                const canMatch = order.side === 'buy'
                     ? order.price >= bestLevel.price
                     : order.price <= bestLevel.price;
 
@@ -383,11 +392,11 @@ export class OrderBookEngine {
                         this.arena.free(makerIdx);
                         this.orderIndexMap.delete(makerOrder.id);
                     } else {
-                        makerOrder.status = 'partial';
+                        makerOrder.status = 'partially_filled';
                     }
 
                     // Depth Update: Maker liquidity decreased by tradeSize
-                    this.depthManager.update(makerOrder.side === 'bid' ? 'bid' : 'ask', tradePrice, -tradeSize);
+                    this.depthManager.update(makerOrder.side === 'buy' ? 'buy' : 'sell', tradePrice, -tradeSize);
 
                     makerOrderNode = nextNode;
                 }
@@ -399,7 +408,7 @@ export class OrderBookEngine {
 
             // Post-Loop
             if (order.status !== 'cancelled') {
-                order.status = remainingQuantity === 0n ? 'filled' : (order.filledQuantity > 0n ? 'partial' : 'open');
+                order.status = remainingQuantity === 0n ? 'filled' : (order.filledQuantity > 0n ? 'partially_filled' : 'open');
             }
 
             // Add to Book (Limit Orders)
@@ -408,14 +417,14 @@ export class OrderBookEngine {
                     order.status = 'cancelled';
                     this.wal.append({ type: 'ORDER_CANCELLED', id: order.id, reason: 'IOC_EXPIRED' });
                 } else {
-                    const myBook = order.side === 'bid' ? this.bids : this.asks;
+                    const myBook = order.side === 'buy' ? this.bids : this.asks;
                     this.addToBook(myBook, order);
                 }
             } else if (remainingQuantity > 0n && order.type === 'MARKET') {
                 order.status = 'cancelled';
             }
         } finally {
-            this.checkInversion();
+            await this.checkInversion();
         }
 
         return { fills, remainingQuantity, order };
@@ -471,17 +480,17 @@ export class OrderBookEngine {
         this.wal.append({ type: 'ORDER_ADDED', id: order.id, price: order.price, size: order.remainingQuantity });
 
         // Depth Update: New liquidity
-        this.depthManager.update(order.side === 'bid' ? 'bid' : 'ask', order.price, order.remainingQuantity);
+        this.depthManager.update(order.side === 'buy' ? 'buy' : 'sell', order.price, order.remainingQuantity);
     }
 
 
-    cancelOrder(orderId: string): boolean {
+    async cancelOrder(orderId: string): Promise<boolean> {
         // 1. Rate Limit
         // We need userId. We look up order first.
         const order = this.orderMap.get(orderId);
         if (!order) return false;
 
-        if (!RateLimiter.check(order.userId, 'cancel')) {
+        if (!(await RateLimiter.check(order.userId, 'cancel'))) {
             console.warn(`Rate Limit Exceeded: Cancel Order ${order.userId}`);
             // return false; // Or throw? For cancel, maybe failing silently or returning false is safer than crashing flow.
             // If we return false, user thinks it's still open.
@@ -496,7 +505,7 @@ export class OrderBookEngine {
         }
 
         // ... (existing cancel logic)
-        const book = order.side === 'bid' ? this.bids : this.asks;
+        const book = order.side === 'buy' ? this.bids : this.asks;
 
         const dummyLevel: OrderLevel = {
             price: order.price, totalQuantity: 0n, orderCount: 0, orders: new DoublyLinkedList(),
@@ -537,9 +546,9 @@ export class OrderBookEngine {
         }
 
         // Depth Update: Remove liquidity
-        this.depthManager.update(order.side === 'bid' ? 'bid' : 'ask', order.price, -order.remainingQuantity);
+        this.depthManager.update(order.side === 'buy' ? 'buy' : 'sell', order.price, -order.remainingQuantity);
 
-        this.checkInversion();
+        await this.checkInversion();
         return true;
     }
 
@@ -562,7 +571,7 @@ export class OrderBookEngine {
             this.wal.append({ type: 'ORDER_CANCELLED', id: maker.id, reason: 'STP' });
 
             if (level.orderCount === 0) book.remove(level);
-            this.depthManager.update(maker.side === 'bid' ? 'bid' : 'ask', maker.price, -maker.remainingQuantity);
+            this.depthManager.update(maker.side === 'buy' ? 'buy' : 'sell', maker.price, -maker.remainingQuantity);
 
             taker.status = 'cancelled';
             return 0n;
@@ -572,7 +581,7 @@ export class OrderBookEngine {
             taker.remainingQuantity -= dec;
             maker.remainingQuantity -= dec;
             this.arena.setRemainingQuantity(makerIdx, maker.remainingQuantity);
-            this.depthManager.update(maker.side === 'bid' ? 'bid' : 'ask', maker.price, -dec);
+            this.depthManager.update(maker.side === 'buy' ? 'buy' : 'sell', maker.price, -dec);
 
             level.totalQuantity -= dec;
 
@@ -605,7 +614,7 @@ export class OrderBookEngine {
             this.wal.append({ type: 'ORDER_CANCELLED', id: maker.id, reason: 'STP_OLDER' });
 
             if (level.orderCount === 0) book.remove(level);
-            this.depthManager.update(maker.side === 'bid' ? 'bid' : 'ask', maker.price, -maker.remainingQuantity);
+            this.depthManager.update(maker.side === 'buy' ? 'buy' : 'sell', maker.price, -maker.remainingQuantity);
 
             return remaining;
         }
@@ -613,10 +622,10 @@ export class OrderBookEngine {
 
     private checkFOK(order: Order): boolean {
         let needed = order.quantity;
-        const book = order.side === 'bid' ? this.asks : this.bids;
+        const book = order.side === 'buy' ? this.asks : this.bids;
         const levels = book.values();
         for (const level of levels) {
-            const canMatch = order.side === 'bid' ? order.price >= level.price : order.price <= level.price;
+            const canMatch = order.side === 'buy' ? order.price >= level.price : order.price <= level.price;
             if (!canMatch) break;
 
             if (level.totalQuantity >= needed) return true;
@@ -656,7 +665,7 @@ export class OrderBookEngine {
         }
     }
 
-    private checkInversion() {
+    private async checkInversion() {
         if (this.isHalted) return;
 
         const state = this.inversionDetector.detect(this.bids, this.asks);
@@ -684,7 +693,7 @@ export class OrderBookEngine {
 
             // Auto-Cancellation Trigger: > 100ms
             if (state.duration > 100) {
-                this.resolveInversion(state);
+                await this.resolveInversion(state);
             }
 
             // Critical Depth check (Immediate Halt still applies)
@@ -696,7 +705,7 @@ export class OrderBookEngine {
         }
     }
 
-    private resolveInversion(state: any) {
+    private async resolveInversion(state: any) {
         // "Cancel newest orders causing cross"
         const crossedOrderIds = this.inversionDetector.getCrossedOrders(this.bids, this.asks);
 
@@ -720,7 +729,7 @@ export class OrderBookEngine {
         if (orders.length > 0) {
             const newest = orders[0];
             console.log(`[AUTO-RESOLVE] Cancelling Crossing Order ${newest.id} (Time: ${newest.createdAt})`);
-            this.cancelOrder(newest.id);
+            await this.cancelOrder(newest.id);
             // We only cancel one per check loop (every order placement/action checks inversion). 
             // If still crossed, next check will cancel next newest.
         }
@@ -767,7 +776,7 @@ export class OrderBookEngine {
                 const newPrice = order.price - remainder;
 
                 // We must remove and re-add to maintain tree sort if price changes
-                this.cancelOrder(order.id);
+                await this.cancelOrder(order.id);
                 order.price = newPrice;
                 order.status = 'open';
                 delete order._node; // Prevent circular reference in WAL logging
@@ -782,6 +791,6 @@ export class OrderBookEngine {
             }
         }
 
-        this.checkInversion();
+        await this.checkInversion();
     }
 }

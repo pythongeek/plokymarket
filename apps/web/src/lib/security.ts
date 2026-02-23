@@ -1,3 +1,5 @@
+import { Redis } from '@upstash/redis';
+
 // Security utilities for authentication
 
 // Password strength requirements
@@ -137,8 +139,71 @@ class RateLimiter {
     }
 }
 
+// Initialize Redis silently, avoiding crashes if env variables are missing
+let redis: Redis | undefined;
+try {
+    redis = Redis.fromEnv();
+} catch (e) {
+    console.warn('Redis for rate limiting is not configured.');
+}
+
 // Global rate limiter instances
-export const loginRateLimiter = new RateLimiter(5, 60000); // 5 attempts per minute
+export const loginRateLimiter = {
+    isRateLimited: async (key: string): Promise<boolean> => {
+        try {
+            if (!redis) return false;
+            const count = await redis.get<number>(`ratelimit:login:${key}`);
+            return (count ?? 0) >= 5; // Limit to 5 attempts
+        } catch (e) { console.error('Redis error', e); return false; }
+    },
+
+    recordAttempt: async (key: string): Promise<void> => {
+        try {
+            if (!redis) return;
+            const k = `ratelimit:login:${key}`;
+            await redis.incr(k);
+            await redis.expire(k, 900); // 15 min TTL (Security standard)
+        } catch (e) { console.error('Redis error', e); }
+    },
+
+    reset: async (key: string): Promise<void> => {
+        try {
+            if (!redis) return;
+            await redis.del(`ratelimit:login:${key}`);
+        } catch (e) { console.error('Redis error', e); }
+    },
+
+    getRemainingTime: async (key: string): Promise<number> => {
+        try {
+            if (!redis) return 0;
+            const ttl = await redis.pttl(`ratelimit:login:${key}`);
+            return ttl > 0 ? Math.ceil(ttl / 1000) : 0;
+        } catch (e) {
+            console.error('Redis error', e);
+            return 0;
+        }
+    }
+};
+
+export const withdrawalRateLimiter = {
+    isRateLimited: async (userId: string): Promise<boolean> => {
+        try {
+            if (!redis) return false;
+            const count = await redis.get<number>(`ratelimit:withdrawal:${userId}`);
+            return (count ?? 0) >= 3; // Strict: Max 3 withdrawals per hour
+        } catch (e) { console.error('Redis error', e); return false; }
+    },
+
+    recordAttempt: async (userId: string): Promise<void> => {
+        try {
+            if (!redis) return;
+            const k = `ratelimit:withdrawal:${userId}`;
+            await redis.incr(k);
+            await redis.expire(k, 3600); // 1 hour TTL
+        } catch (e) { console.error('Redis error', e); }
+    },
+};
+
 export const registerRateLimiter = new RateLimiter(3, 300000); // 3 attempts per 5 minutes
 
 // CSRF token generation (for forms)

@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
-import type { Market, OutcomeType } from '@/types';
+import type { Market, OutcomeType, OrderSide } from '@/types';
 import { useTranslation } from 'react-i18next';
 import { OrderBookMini } from './OrderBookMini';
 import { useOrderBook } from '@/hooks/useOrderBook';
@@ -221,7 +221,7 @@ export function TradingPanel({ market, isPaused }: TradingPanelProps) {
     try {
       const success = await placeOrder(
         market.id,
-        activeTab,
+        activeTab.toLowerCase() as OrderSide, // Ensure lowercase 'buy' | 'sell'
         outcome,
         parseFloat(price),
         parseInt(quantity),

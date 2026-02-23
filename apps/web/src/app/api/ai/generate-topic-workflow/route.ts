@@ -5,16 +5,12 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createServiceClient } from '@/lib/supabase/server';
 
 export const runtime = 'edge';
 export const preferredRegion = 'iad1';
 
-const getSupabase = () => createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { persistSession: false } }
-);
+// Initialize Supabase admin client is managed via createServiceClient
 
 // Trigger Upstash Workflow
 async function triggerWorkflow(payload: any): Promise<string | null> {
@@ -50,7 +46,7 @@ async function triggerWorkflow(payload: any): Promise<string | null> {
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
-  
+
   try {
     const body = await request.json();
     const { topic, context, variations = 3, user_id } = body;
@@ -63,7 +59,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = getSupabase();
+    const supabase = await createServiceClient();
 
     // Generate workflow ID
     const workflowId = `ai-topic-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -127,7 +123,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('API error:', error);
     return NextResponse.json(
-      { 
+      {
         error: error.message || 'সার্ভার এরর',
         execution_time_ms: Date.now() - startTime
       },

@@ -5,15 +5,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createServiceClient } from '@/lib/supabase/server';
 
 export const runtime = 'edge';
 
-const getSupabase = () => createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { persistSession: false } }
-);
+// Initialize Supabase admin client is managed via createServiceClient
 
 // Bangladesh context prompts
 const FIELD_PROMPTS: Record<string, (data: any) => string> = {
@@ -180,7 +176,7 @@ async function callGemini(prompt: string): Promise<any> {
 
   const data = await response.json();
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  
+
   if (!text) {
     throw new Error('No content from Gemini');
   }
@@ -200,7 +196,7 @@ async function callGemini(prompt: string): Promise<any> {
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
-  
+
   try {
     const body = await request.json();
     const { field, current_data, context } = body;

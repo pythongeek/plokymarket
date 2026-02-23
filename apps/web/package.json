@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "vercel-build": "next build",
     "start": "next start",
     "lint": "next lint",
     "qstash:setup:batch": "node scripts/setup-qstash-schedule.js",
@@ -45,6 +46,7 @@
     "@tanstack/react-virtual": "^3.13.18",
     "@types/canvas-confetti": "^1.9.0",
     "@upstash/qstash": "^2.9.0",
+    "@upstash/redis": "^1.36.2",
     "canvas-confetti": "^1.9.4",
     "chart.js": "^4.5.1",
     "chartjs-adapter-date-fns": "^3.0.0",
@@ -65,6 +67,7 @@
     "next-themes": "^0.4.6",
     "node-fetch": "^3.3.2",
     "nuqs": "^2.8.8",
+    "pg": "^8.18.0",
     "protobufjs": "^8.0.0",
     "qrcode.react": "^4.2.0",
     "react": "^18.3.1",

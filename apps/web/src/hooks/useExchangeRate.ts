@@ -2,78 +2,82 @@
 
 import { useState, useEffect, useCallback } from 'react';
 
-interface ExchangeRate {
+interface ExchangeRateData {
   rate: number;
   source: string;
   updated_at: string;
+  isLoading: boolean;
+  isError: boolean;
+  refetch: () => void;
   cached: boolean;
 }
 
-interface UseExchangeRateReturn {
-  rate: number;
-  loading: boolean;
-  error: string | null;
-  refresh: () => Promise<void>;
-  lastUpdated: Date | null;
-}
+const REFRESH_INTERVAL = 5 * 60 * 1000; // Refresh every 5 minutes
+const FALLBACK_RATE = 120;
 
-export function useExchangeRate(): UseExchangeRateReturn {
-  const [rate, setRate] = useState<number>(100.00); // Default fallback
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+export function useExchangeRate(): ExchangeRateData {
+  const [rate, setRate] = useState<number>(FALLBACK_RATE);
+  const [source, setSource] = useState<string>('initializing');
+  const [updatedAt, setUpdatedAt] = useState<string>(new Date().toISOString());
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isError, setIsError] = useState<boolean>(false);
+  const [cached, setCached] = useState<boolean>(false);
 
   const fetchRate = useCallback(async () => {
+    setIsLoading(true);
+    setIsError(false);
+
     try {
-      setLoading(true);
-      setError(null);
-      
       const response = await fetch('/api/exchange-rate');
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
       const data = await response.json();
-      
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to fetch rate');
+
+      if (data.success && typeof data.rate === 'number' && data.rate > 0) {
+        setRate(data.rate);
+        setSource(data.source ?? 'unknown');
+        setUpdatedAt(data.updated_at ?? new Date().toISOString());
+        setCached(!!data.cached);
+      } else {
+        throw new Error(data.error || 'Invalid rate in response');
       }
-      
-      setRate(data.rate);
-      setLastUpdated(new Date(data.updated_at));
     } catch (err) {
-      console.error('Exchange rate fetch error:', err);
-      setError(err instanceof Error ? err.message : 'Unknown error');
-      // Keep previous rate on error
+      console.error('[useExchangeRate] Failed to fetch rate:', err);
+      setIsError(true);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
     fetchRate();
-    
-    // Refresh every 5 minutes
-    const interval = setInterval(fetchRate, 5 * 60 * 1000);
-    
+    const interval = setInterval(fetchRate, REFRESH_INTERVAL);
     return () => clearInterval(interval);
   }, [fetchRate]);
 
   return {
     rate,
-    loading,
-    error,
-    refresh: fetchRate,
-    lastUpdated,
+    source,
+    updated_at: updatedAt,
+    isLoading,
+    isError,
+    cached,
+    refetch: fetchRate,
   };
 }
 
 /**
- * Calculate conversion with current rate
+ * Simplified Conversion Hook
  */
 export function useConversion(rate: number) {
   const bdtToUsdt = useCallback((bdt: number): number => {
-    return Math.round((bdt / rate) * 100) / 100;
+    if (rate <= 0) return 0;
+    return parseFloat((bdt / rate).toFixed(6));
   }, [rate]);
 
   const usdtToBdt = useCallback((usdt: number): number => {
-    return Math.round((usdt * rate) * 100) / 100;
+    if (rate <= 0) return 0;
+    return parseFloat((usdt * rate).toFixed(2));
   }, [rate]);
 
   return { bdtToUsdt, usdtToBdt };

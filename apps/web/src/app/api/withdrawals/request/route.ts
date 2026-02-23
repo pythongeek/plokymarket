@@ -5,11 +5,11 @@ import { NextResponse } from 'next/server';
 // Create a new withdrawal request
 export async function POST(request: Request) {
   try {
-    const supabase = createClient();
-    
+    const supabase = await createClient();
+
     // Get user session
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
+
     if (authError || !user) {
       return NextResponse.json(
         { error: 'Authentication required' },
@@ -76,7 +76,7 @@ export async function POST(request: Request) {
     // Check daily withdrawal limit
     const today = new Date().toISOString().split('T')[0];
     const lastWithdrawalDate = profile.last_withdrawal_date;
-    
+
     let dailyTotal = 0;
     if (lastWithdrawalDate === today) {
       const { data: todayWithdrawals, error: todayError } = await supabase
@@ -129,68 +129,56 @@ export async function POST(request: Request) {
     const clientIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
     const userAgent = request.headers.get('user-agent') || 'unknown';
 
-    // Create withdrawal request
-    const { data: withdrawalRequest, error: insertError } = await supabase
-      .from('withdrawal_requests')
+    // --- 2FA INTERCEPTION (Instead of direct withdrawal creation) ---
+    // Generate secure 6-digit OTP
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString(); // 5 minutes
+
+    const withdrawalPayload = {
+      usdt_amount: usdtAmount,
+      bdt_amount: bdtAmount,
+      exchange_rate: exchangeRate,
+      mfs_provider: mfsProvider,
+      recipient_number: recipientNumber,
+      recipient_name: recipientName || null,
+      ip_address: clientIp,
+      user_agent: userAgent
+    };
+
+    const { data: verificationData, error: verificationError } = await supabase
+      .from('withdrawal_verifications')
       .insert({
         user_id: user.id,
-        usdt_amount: usdtAmount,
-        bdt_amount: bdtAmount,
-        exchange_rate: exchangeRate,
-        mfs_provider: mfsProvider,
-        recipient_number: recipientNumber,
-        recipient_name: recipientName || null,
-        status: 'pending',
-        ip_address: clientIp,
-        user_agent: userAgent
+        otp_code: otpCode,
+        expires_at: expiresAt,
+        withdrawal_payload: withdrawalPayload
       })
-      .select()
+      .select('id')
       .single();
 
-    if (insertError) {
-      console.error('Failed to create withdrawal request:', insertError);
+    if (verificationError) {
+      console.error('Failed to create withdrawal verification:', verificationError);
       return NextResponse.json(
-        { error: 'Failed to create withdrawal request' },
+        { error: 'Failed to initiate withdrawal verification' },
         { status: 500 }
       );
     }
 
-    // Trigger withdrawal processing workflow via Upstash
-    try {
-      const workflowResponse = await fetch(`${process.env.UPSTASH_WORKFLOW_BASE_URL}/withdrawal-processing`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.UPSTASH_WORKFLOW_TOKEN}`
-        },
-        body: JSON.stringify({
-          withdrawalId: withdrawalRequest.id,
-          userId: user.id,
-          amount: usdtAmount,
-          mfsProvider: mfsProvider,
-          recipientNumber: recipientNumber
-        })
-      });
-
-      if (!workflowResponse.ok) {
-        console.warn('Failed to trigger withdrawal processing workflow');
-      }
-    } catch (workflowError) {
-      console.warn('Workflow processing failed:', workflowError);
-    }
+    // Trigger Notification for OTP (Send OTP to user)
+    // Note: In production, send via email or SMS. Here we use the notification table/service
+    await supabase.from('notifications').insert({
+      user_id: user.id,
+      type: 'security_alert',
+      title: 'Withdrawal Verification Code',
+      message: `Your withdrawal verification OTP is: ${otpCode}. It expires in 5 minutes. DO NOT share this with anyone.`,
+      is_read: false
+    });
 
     return NextResponse.json({
       success: true,
-      message: 'Withdrawal request submitted successfully',
-      withdrawalRequest: {
-        id: withdrawalRequest.id,
-        usdtAmount: withdrawalRequest.usdt_amount,
-        bdtAmount: withdrawalRequest.bdt_amount,
-        mfsProvider: withdrawalRequest.mfs_provider,
-        recipientNumber: withdrawalRequest.recipient_number,
-        status: withdrawalRequest.status,
-        createdAt: withdrawalRequest.created_at
-      }
+      message: 'Withdrawal request initiated. Please verify OTP.',
+      requireOtp: true,
+      verificationId: verificationData.id
     });
 
   } catch (error) {
@@ -206,11 +194,11 @@ export async function POST(request: Request) {
 // Get user's withdrawal requests
 export async function GET(request: Request) {
   try {
-    const supabase = createClient();
-    
+    const supabase = await createClient();
+
     // Get user session
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
+
     if (authError || !user) {
       return NextResponse.json(
         { error: 'Authentication required' },
@@ -279,11 +267,11 @@ export async function GET(request: Request) {
 // Cancel a pending withdrawal request
 export async function PUT(request: Request, { params }: { params: { id: string } }) {
   try {
-    const supabase = createClient();
-    
+    const supabase = await createClient();
+
     // Get user session
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
+
     if (authError || !user) {
       return NextResponse.json(
         { error: 'Authentication required' },
@@ -356,16 +344,24 @@ export async function PUT(request: Request, { params }: { params: { id: string }
       }
 
       // Add back to balance
-      const { error: balanceError } = await supabase
+      const { data: currentProfile } = await supabase
         .from('profiles')
-        .update({
-          balance: supabase.rpc('add', [supabase.raw('balance'), withdrawal.usdt_amount]),
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', user.id);
+        .select('balance')
+        .eq('id', user.id)
+        .single();
 
-      if (balanceError) {
-        console.warn('Failed to restore balance on cancellation:', balanceError);
+      if (currentProfile) {
+        const { error: balanceError } = await supabase
+          .from('profiles')
+          .update({
+            balance: currentProfile.balance + withdrawal.usdt_amount,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', user.id);
+
+        if (balanceError) {
+          console.warn('Failed to restore balance on cancellation:', balanceError);
+        }
       }
     }
 

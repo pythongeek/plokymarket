@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { RefreshCw, TrendingUp, TrendingDown, ArrowRight, DollarSign, Clock } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useExchangeRateSSE, useAutoRefreshRate } from '@/lib/realtime/exchange-rate-sse';
+import { useTranslation } from 'react-i18next';
+import { cn } from '@/lib/utils';
 
 interface ExchangeRate {
     usdt_to_bdt: number;
@@ -23,7 +25,9 @@ interface P2PRateDisplayProps {
 }
 
 export function P2PRateDisplay({ showCalculator = false, compact = false, className = '' }: P2PRateDisplayProps) {
+    const { t } = useTranslation();
     const { rate, loading, error, lastUpdated, refresh } = useAutoRefreshRate(60);
+    const { isConnected } = useExchangeRateSSE(true);
     const [calculatorAmount, setCalculatorAmount] = useState('');
     const [calculatorFrom, setCalculatorFrom] = useState<'usdt' | 'bdt'>('usdt');
     const [prevRate, setPrevRate] = useState<number | null>(null);
@@ -94,7 +98,7 @@ export function P2PRateDisplay({ showCalculator = false, compact = false, classN
                             <DollarSign className="h-6 w-6 text-emerald-400" />
                         </div>
                         <div>
-                            <p className="text-slate-400 text-sm">USDT/BDT এক্সচেঞ্জ রেট</p>
+                            <p className="text-slate-400 text-sm">USDT/BDT {t('wallet.exchange_rate', 'এক্সচেঞ্জ রেট')}</p>
                             <div className="flex items-center gap-2">
                                 <span className="text-3xl font-bold">৳{currentRate.toFixed(2)}</span>
                                 {rateChange !== 0 && (
@@ -113,7 +117,7 @@ export function P2PRateDisplay({ showCalculator = false, compact = false, classN
                         className="border-slate-600 hover:bg-slate-700"
                     >
                         <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-                        রিফ্রেশ
+                        {t('common.refresh', 'রিফ্রেশ')}
                     </Button>
                 </div>
 
@@ -141,12 +145,24 @@ export function P2PRateDisplay({ showCalculator = false, compact = false, classN
                         <span className="px-2 py-1 bg-emerald-500/20 text-emerald-400 rounded text-xs">
                             Binance P2P
                         </span>
-                        <span className="text-xs">রিয়েলটাইম</span>
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs">{t('wallet.live_exchange_rate')}</span>
+                            <span className="flex h-2 w-2 relative">
+                                <span className={cn(
+                                    "animate-ping absolute inline-flex h-full w-full rounded-full opacity-75",
+                                    isConnected ? "bg-emerald-400" : "bg-slate-400"
+                                )}></span>
+                                <span className={cn(
+                                    "relative inline-flex rounded-full h-2 w-2",
+                                    isConnected ? "bg-emerald-500" : "bg-slate-500"
+                                )}></span>
+                            </span>
+                        </div>
                     </div>
                     <div className="flex items-center gap-1">
                         <Clock className="h-3 w-3" />
                         <span>
-                            আপডেট: {lastUpdated ? new Date(lastUpdated).toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' }) : 'এখনই'}
+                            {t('common.updated', 'আপডেট')}: {lastUpdated ? new Date(lastUpdated).toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' }) : t('common.just_now', 'এখনই')}
                         </span>
                     </div>
                 </div>

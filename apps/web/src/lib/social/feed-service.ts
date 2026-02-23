@@ -400,45 +400,126 @@ export class FeedService {
   async getGlobalFeed(
     options: {
       limit?: number;
-      cursor?: string;
+      offset?: number;
       filterTypes?: ContentType[];
     } = {}
-  ): Promise<Pick<GetFeedResponse, 'activities' | 'has_more' | 'next_cursor'>> {
+  ): Promise<GetFeedResponse> {
     const supabase = await createClient();
-    const { limit = 50, cursor, filterTypes } = options;
+    const { limit = 50, offset = 0, filterTypes } = options;
 
     let query = supabase
       .from('activities')
       .select(`
         *,
-        users (
+        users!user_id (
           id,
-          full_name
+          full_name,
+          username,
+          avatar_url
         )
       `)
-      .order('priority_score', { ascending: false })
-      .order('created_at', { ascending: false });
-
-    if (cursor) {
-      query = query.or(`priority_score.lt.${cursor},and(priority_score.eq.${cursor},created_at.lt.${cursor})`);
-    }
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
 
     if (filterTypes?.length) {
       query = query.in('type', filterTypes);
     }
 
-    const { data: activities, error } = await query.limit(limit);
+    const { data: activities, error } = await query;
     if (error) throw error;
-
-    const nextCursor = activities?.length >= limit
-      ? activities[activities.length - 1]?.priority_score
-      : undefined;
 
     return {
       activities: (activities || []) as Activity[],
-      has_more: !!nextCursor,
-      next_cursor: nextCursor
+      preferences: this.getDefaultPreferences('anonymous'),
+      unread_count: 0,
+      has_more: (activities?.length || 0) === limit
     };
+  }
+
+  async getUserFeed(
+    userId: string,
+    options: {
+      limit?: number;
+      offset?: number;
+    } = {}
+  ): Promise<GetFeedResponse> {
+    const supabase = await createClient();
+    const { limit = 50, offset = 0 } = options;
+
+    // First get who the user follows
+    const { data: follows } = await supabase
+      .from('user_follows')
+      .select('following_id')
+      .eq('follower_id', userId);
+
+    const followingIds = follows?.map(f => f.following_id) || [];
+
+    // Also get followed markets
+    const { data: marketFollows } = await supabase
+      .from('market_follows')
+      .select('market_id')
+      .eq('user_id', userId);
+
+    const followedMarketIds = marketFollows?.map(m => m.market_id) || [];
+
+    // Simple fallback if following no one
+    if (followingIds.length === 0 && followedMarketIds.length === 0) {
+      return this.getGlobalFeed(options);
+    }
+
+    let query = supabase
+      .from('activities')
+      .select(`
+        *,
+        users!user_id (
+          id,
+          full_name,
+          username,
+          avatar_url
+        )
+      `)
+      .in('user_id', [...followingIds, userId]) // Include their own activity optionally
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    const { data: activities, error } = await query;
+    if (error) throw error;
+
+    return {
+      activities: (activities || []) as Activity[],
+      preferences: await this.getPreferences(userId),
+      unread_count: 0,
+      has_more: (activities?.length || 0) === limit
+    };
+  }
+
+  async getMarketActivity(
+    marketId: string,
+    options: {
+      limit?: number;
+      offset?: number;
+    } = {}
+  ): Promise<Activity[]> {
+    const supabase = await createClient();
+    const { limit = 50, offset = 0 } = options;
+
+    const { data: activities, error } = await supabase
+      .from('activities')
+      .select(`
+        *,
+        users!user_id (
+          id,
+          full_name,
+          username,
+          avatar_url
+        )
+      `)
+      .contains('data', { marketId })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) throw error;
+    return (activities || []) as Activity[];
   }
 
   // ===================================
@@ -538,6 +619,98 @@ export class FeedService {
       });
   }
 
+  async toggleLike(activityId: string, userId: string): Promise<boolean> {
+    const supabase = await createClient();
+
+    // In a real schema, we'd have an activity_likes table.
+    // For now, since schema restrictions exist, we use the JSONB `data` field to store likers.
+    // Alternatively, just do a basic atomic operation if there's a likes column.
+    // Let's assume we append to the data object since we cannot add new columns.
+
+    // Fetch current activity
+    const { data: activity, error: fetchError } = await supabase
+      .from('activities')
+      .select('data')
+      .eq('id', activityId)
+      .single();
+
+    if (fetchError || !activity) return false;
+
+    const data = (activity.data as Record<string, any>) || {};
+    const likes: string[] = Array.isArray(data.likes) ? data.likes : [];
+
+    // Toggle logic
+    const hasLiked = likes.includes(userId);
+    const updatedLikes = hasLiked
+      ? likes.filter(id => id !== userId) // Unlike
+      : [...likes, userId];               // Like
+
+    const updatedData = {
+      ...data,
+      likes: updatedLikes,
+      likeCount: updatedLikes.length
+    };
+
+    const { error: updateError } = await supabase
+      .from('activities')
+      .update({ data: updatedData })
+      .eq('id', activityId);
+
+    if (updateError) {
+      console.error('Failed to toggle like:', updateError);
+      return false;
+    }
+
+    // If it was a like (not unlike), log a social interaction activity
+    if (!hasLiked) {
+      // Find who owns the activity
+      const { data: owner } = await supabase
+        .from('activities')
+        .select('user_id')
+        .eq('id', activityId)
+        .single();
+
+      if (owner && owner.user_id !== userId) {
+        // We can optionally use the reputation service here or insert a follow-up activity.
+      }
+    }
+
+    return !hasLiked; // Return true if liked, false if unliked
+  }
+
+  async shareActivity(activityId: string, targetPlatform: 'twitter' | 'facebook' | 'copy'): Promise<string> {
+    const supabase = await createClient();
+
+    const { data: activity, error } = await supabase
+      .from('activities')
+      .select('*, users!user_id(username)')
+      .eq('id', activityId)
+      .single();
+
+    if (error || !activity) throw new Error('Activity not found');
+
+    const shareUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://plokymarket.com'}/activity/${activityId}`;
+    const username = activity.users?.username || 'someone';
+    let text = `Check out this activity by @${username} on Plokymarket!`;
+
+    if (activity.type === 'market_movement' && activity.data?.marketQuestion) {
+      text = `Market moving: ${activity.data.marketQuestion} 🚀`;
+    } else if (activity.type === 'trader_activity' && activity.data?.action) {
+      text = `@${username} just ${activity.data.action} ${activity.data.marketQuestion ? 'on ' + activity.data.marketQuestion : ''}`;
+    }
+
+    switch (targetPlatform) {
+      case 'twitter':
+        return `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(shareUrl)}`;
+      case 'facebook':
+        return `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`;
+      case 'copy':
+        return shareUrl;
+      default:
+        return shareUrl;
+    }
+  }
+
   // ===================================
   // REAL-TIME SUBSCRIPTION
   // ===================================
@@ -558,7 +731,7 @@ export class FeedService {
           table: 'activities',
           filter: `user_id=eq.${userId}`
         },
-        (payload) => {
+        (payload: any) => {
           onUpdate({ type: 'new_activity', payload });
         }
       )

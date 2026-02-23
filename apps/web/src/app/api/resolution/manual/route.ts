@@ -4,21 +4,17 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createServiceClient } from '@/lib/supabase/server';
 
 export const runtime = 'edge';
 
-const getSupabase = () => createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { persistSession: false } }
-);
+// Initialize Supabase admin client is managed via createServiceClient
 
 // Send notification
 async function notifyResolution(eventId: string, outcome: string, isEmergency: boolean) {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
-  
+
   if (!botToken || !chatId) return;
 
   const message = `
@@ -49,7 +45,7 @@ Time: ${new Date().toLocaleString('bn-BD')}
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
-  
+
   try {
     const authHeader = request.headers.get('authorization');
     if (!authHeader?.startsWith('Bearer ')) {
@@ -57,7 +53,7 @@ export async function POST(request: NextRequest) {
     }
 
     const token = authHeader.split(' ')[1];
-    const supabase = getSupabase();
+    const supabase = await createServiceClient();
 
     // Verify admin
     const { data: { user } } = await supabase.auth.getUser(token);
@@ -163,8 +159,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: is_emergency 
-        ? 'Emergency resolution completed' 
+      message: is_emergency
+        ? 'Emergency resolution completed'
         : 'Resolution proposal submitted for approval',
       execution_time_ms: Date.now() - startTime
     });

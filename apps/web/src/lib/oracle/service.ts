@@ -24,148 +24,93 @@ export class OracleService {
     }
 
     /**
-     * 1. PROPOSE: An Agent (AI) or User proposes an outcome and stakes a bond.
+     * 1. PROPOSE: An Agent (AI) or System initiates a resolution pipeline.
      */
     async proposeOutcome(marketId: string, context?: any) {
         const supabase = await createClient();
 
-        // Fetch Market
+        // Fetch Market & Resolution Config
         const { data: market, error } = await supabase
             .from('markets')
-            .select('*')
+            .select('*, resolution_systems(*)')
             .eq('id', marketId)
             .single();
 
-        if (error || !market) throw new Error('Market not found');
+        if (error || !market) throw new Error('Market or resolution system not found');
 
-        const strategyType = (market.resolution_source_type as ResolutionStrategyType) || 'MANUAL';
+        // Determine Strategy
+        const strategyType = (market.resolution_systems?.primary_method === 'ai_oracle' ? 'AI' : 'MANUAL') as ResolutionStrategyType;
         const strategy = this.strategies[strategyType];
 
         if (!strategy) throw new Error(`No strategy for type: ${strategyType}`);
 
-        // Execute Strategy (to get the proposed outcome)
-        // Note: If strategy is MANUAL, we expect passed-in context to have the outcome.
-        // If AI, it calculates it.
+        // Execute Strategy
         const executionContext = { ...market.resolution_data, ...context };
-        const result = await strategy.resolve(market.id, market.question, executionContext);
+        const result = await strategy.resolve(market.id, market.question || market.title, executionContext);
 
-        // Calculate Bond
-        const bondAmount = result.bondAmount || MIN_BOND_AMOUNT;
+        // Create Resolution Pipeline (Initial Insert - 'pending' to allow triggers to catch setup)
+        const pipelineId = `pipe_${Date.now()}_${marketId.slice(0, 8)}`;
+        const aiData = result.evidence.aiAnalysis || {};
 
-        // TODO: Verify Proposer has funds (if user).
-        // For System/AI, we assume the "House" puts up the bond or it's virtual.
-
-        const challengeWindowEnd = new Date();
-        challengeWindowEnd.setHours(challengeWindowEnd.getHours() + DEFAULT_CHALLENGE_WINDOW_HOURS);
-
-        // Create Request / Proposal
-        const { data: request, error: reqError } = await supabase
-            .from('oracle_requests')
+        const { data: pipeline, error: pipeError } = await supabase
+            .from('ai_resolution_pipelines')
             .insert({
+                pipeline_id: pipelineId,
                 market_id: marketId,
-                request_type: 'initial',
-                status: 'proposed', // Optimistic State
-
-                proposed_outcome: result.outcome,
-                confidence_score: result.evidence.confidence,
-                evidence_text: result.evidence.summary,
-                evidence_urls: result.evidence.urls,
-                ai_analysis: result.evidence.aiAnalysis,
-
-                bond_amount: bondAmount,
-                bond_currency: 'BDT',
-                challenge_window_ends_at: challengeWindowEnd.toISOString(),
+                status: 'pending',
+                recommended_action: aiData.recommendedAction || 'HUMAN_REVIEW'
             })
             .select()
             .single();
 
-        if (reqError) {
-            console.error('Failed to create proposal', reqError);
-            throw new Error('Database error creating proposal');
+        if (pipeError) throw new Error('Database error creating resolution pipeline');
+
+        // Update Pipeline (to 'completed' to trigger tr_auto_resolve)
+        const { data: updatedPipeline, error: updateError } = await supabase
+            .from('ai_resolution_pipelines')
+            .update({
+                query: aiData.query || { marketId, context },
+                retrieval_output: aiData.retrieval_output || {},
+                synthesis_output: aiData.synthesis_output || {},
+                deliberation_output: aiData.deliberation_output || {},
+                explanation_output: aiData.explanation_output || {},
+                final_outcome: result.outcome,
+                final_confidence: result.evidence.confidence * 100, // DB expects Numeric(5,2)
+                confidence_level: result.evidence.confidence >= 0.9 ? 'HIGH' : 'MEDIUM',
+                status: 'completed'
+            })
+            .eq('id', pipeline.id)
+            .select()
+            .single();
+
+        if (updateError) {
+            console.error('Failed to update resolution pipeline', updateError);
+            throw new Error('Database error updating resolution pipeline');
         }
 
-        return request;
+        return updatedPipeline;
     }
 
     /**
-     * 2. CHALLENGE: A User challenges the proposed outcome, matching the bond.
+     * 2. FINALIZE: Manually finalize a market (Admin Overwrite)
      */
-    async challengeOutcome(requestId: string, challengerId: string, reason: string) {
+    async manualFinalize(marketId: string, outcome: string, adminId: string, notes?: string) {
         const supabase = await createClient();
 
-        // Fetch Request
-        const { data: request } = await supabase.from('oracle_requests').select('*').eq('id', requestId).single();
-        if (!request) throw new Error('Request not found');
+        const { data, error } = await supabase.rpc('manual_resolve_market', {
+            p_market_id: marketId,
+            p_outcome: outcome,
+            p_admin_id: adminId,
+            p_notes: notes
+        });
 
-        if (request.status !== 'proposed') throw new Error('Can only challenge proposed requests');
-
-        if (new Date() > new Date(request.challenge_window_ends_at)) {
-            throw new Error('Challenge window has expired');
-        }
-
-        // Lock Challenger Funds (Logic placeholder)
-        // await this.walletService.lockFunds(challengerId, request.bond_amount);
-
-        // Create Dispute
-        const { error: disputeError } = await supabase
-            .from('oracle_disputes')
-            .insert({
-                request_id: requestId,
-                disputer_id: challengerId,
-                bond_amount: request.bond_amount, // Match the bond
-                reason: reason,
-                status: 'open'
-            });
-
-        if (disputeError) throw disputeError;
-
-        // Update Request Status
-        await supabase
-            .from('oracle_requests')
-            .update({ status: 'disputed' })
-            .eq('id', requestId);
-
-        return { success: true };
-    }
-
-    /**
-     * 3. FINALIZE: If window passed and no challenge, resolve market.
-     * Or if Disputed and Admin solved it.
-     */
-    async finalizeRequest(requestId: string) {
-        const supabase = await createClient();
-
-        const { data: request } = await supabase.from('oracle_requests').select('*').eq('id', requestId).single();
-        if (!request) throw new Error('Request not found');
-
-        // Case A: Optimistic Success (No Dispute)
-        if (request.status === 'proposed') {
-            if (new Date() < new Date(request.challenge_window_ends_at)) {
-                throw new Error('Challenge window active');
-            }
-
-            // Auto-Resolve Market
-            await this.resolveMarketInDb(supabase, request.market_id, request.proposed_outcome);
-
-            // Update Request
-            await supabase
-                .from('oracle_requests')
-                .update({ status: 'finalized', finalized_at: new Date().toISOString() })
-                .eq('id', requestId);
-
-            // TODO: Return Bond to Proposer + Reward?
-        }
+        if (error) throw error;
+        return data;
     }
 
     private async resolveMarketInDb(supabase: any, marketId: string, outcome: string) {
-        // 1. Fetch market to get event_id
-        const { data: market } = await supabase
-            .from('markets')
-            .select('event_id')
-            .eq('id', marketId)
-            .single();
-
-        // 2. Update Market
+        // This is now largely handled by the DB trigger `tr_auto_resolve`,
+        // but keeping a manual helper for edge cases or non-pipeline resolutions.
         const { error: mError } = await supabase
             .from('markets')
             .update({
@@ -176,23 +121,6 @@ export class OracleService {
             .eq('id', marketId);
 
         if (mError) throw mError;
-
-        // 3. Update Event (if linked)
-        if (market?.event_id) {
-            const { error: eError } = await supabase
-                .from('events')
-                .update({
-                    status: 'resolved',
-                    resolved_outcome: outcome === 'হ্যাঁ (Yes)' || outcome === 'Yes' ? 1 : 2,
-                    resolved_at: new Date().toISOString()
-                })
-                .eq('id', market.event_id);
-
-            if (eError) {
-                console.error('Failed to update linked event status:', eError);
-                // We don't throw here to avoid failing the whole process if market updated successfully
-            }
-        }
     }
 
     // Alias for backward compatibility / API triggering

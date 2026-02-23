@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 
 // POST /api/admin/deposits/verify
@@ -6,10 +6,10 @@ import { NextResponse } from 'next/server';
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
-    
+
     // Get user session
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
+
     if (authError || !user) {
       return NextResponse.json(
         { error: 'Authentication required' },
@@ -41,8 +41,10 @@ export async function POST(request: Request) {
       );
     }
 
+    const service = await createServiceClient();
+
     // Get deposit request
-    const { data: deposit, error: depositError } = await supabase
+    const { data: deposit, error: depositError } = await service
       .from('deposit_requests')
       .select('*')
       .eq('id', depositId)
@@ -63,7 +65,7 @@ export async function POST(request: Request) {
     }
 
     // Call Supabase function to verify and credit deposit
-    const { data: result, error: functionError } = await supabase
+    const { data: result, error: functionError } = await service
       .rpc('verify_and_credit_deposit', {
         p_deposit_id: depositId,
         p_user_id: deposit.user_id,

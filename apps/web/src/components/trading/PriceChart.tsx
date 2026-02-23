@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useStore } from '@/store/useStore';
+import { useRealtimeTrades } from '@/hooks/useRealtime';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   AreaChart,
@@ -25,22 +26,13 @@ interface ChartDataPoint {
 }
 
 export function PriceChart({ marketId }: PriceChartProps) {
-  const { trades, fetchTrades, subscribeToMarket, markets } = useStore();
+  const { markets } = useStore();
+  const trades = useRealtimeTrades(marketId);
   const { t } = useTranslation();
   const [timeRange, setTimeRange] = useState<'1H' | '24H' | '7D' | '30D'>('24H');
   const [outcome, setOutcome] = useState<'YES' | 'NO'>('YES');
 
   const market = markets.find(m => m.id === marketId);
-
-  useEffect(() => {
-    fetchTrades(marketId);
-
-    // Subscribe to market updates
-    // Assuming subscribeToMarket manages state updates internally via Supabase realtime
-    const unsubscribe = subscribeToMarket(marketId);
-
-    return () => unsubscribe();
-  }, [marketId, fetchTrades, subscribeToMarket]);
 
   // Generate chart data from trades
   const chartData = useMemo(() => {

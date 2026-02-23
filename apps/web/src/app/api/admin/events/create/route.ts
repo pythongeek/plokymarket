@@ -4,18 +4,14 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createServiceClient } from '@/lib/supabase/server';
 import { eventService } from '@/lib/services/EventService';
 import { marketService } from '@/lib/services/MarketService';
 
 export const runtime = 'edge';
 export const preferredRegion = 'iad1';
 
-const getSupabase = () => createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { persistSession: false } }
-);
+// Initialize Supabase admin client is managed via createServiceClient
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
@@ -28,7 +24,7 @@ export async function POST(request: NextRequest) {
     }
 
     const token = authHeader.split(' ')[1];
-    const supabase = getSupabase();
+    const supabase = await createServiceClient();
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     if (authError || !user) {

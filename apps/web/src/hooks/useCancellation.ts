@@ -48,20 +48,20 @@ interface UseCancellationOptions {
 interface UseCancellationReturn {
   // Single order cancellation
   cancelOrder: (orderId: string, userId: string) => Promise<CancelResult>;
-  
+
   // Batch cancellation
   cancelMultipleOrders: (orderIds: string[], userId: string) => Promise<CancelResult[]>;
-  
+
   // State reconciliation
   reconcileOrders: (orderIds: string[], lastSequence?: number) => Promise<ReconcileOrderState[]>;
-  
+
   // Confirmation
   getConfirmation: (cancelRecordId: string) => Promise<any>;
-  
+
   // State
   cancellationState: CancellationState;
   resetState: () => void;
-  
+
   // Metrics
   getMetrics: () => any;
 }
@@ -74,7 +74,7 @@ export function useCancellation(
   options: UseCancellationOptions = {}
 ): UseCancellationReturn {
   const { onSuccess, onError, onRaceCondition } = options;
-  
+
   const [state, setState] = useState<CancellationState>({
     isCancelling: false,
     progress: 0,
@@ -113,7 +113,7 @@ export function useCancellation(
     // Cancel any ongoing operation
     abortControllerRef.current?.abort();
     abortControllerRef.current = new AbortController();
-    
+
     setState({
       isCancelling: true,
       progress: 10,
@@ -134,8 +134,8 @@ export function useCancellation(
       const result = await cancelWithInflightHandling(orderId, userId);
 
       // Check for race condition
-      const hasRaceCondition = result.filledDuringCancel && result.filledDuringCancel > 0;
-      
+      const hasRaceCondition = (result.filledDuringCancel || 0) > 0;
+
       if (hasRaceCondition) {
         setState({
           isCancelling: false,
@@ -179,7 +179,7 @@ export function useCancellation(
         message: errorMessage,
       });
       onError?.(errorMessage);
-      
+
       return {
         success: false,
         sequenceNumber: 0,
@@ -206,11 +206,11 @@ export function useCancellation(
     });
 
     const results: CancelResult[] = [];
-    
+
     for (let i = 0; i < orderIds.length; i++) {
       const orderId = orderIds[i];
       const progress = Math.round(((i + 1) / orderIds.length) * 100);
-      
+
       setState(prev => ({
         ...prev,
         progress,
@@ -222,7 +222,7 @@ export function useCancellation(
     }
 
     const successCount = results.filter(r => r.success).length;
-    
+
     setState({
       isCancelling: false,
       progress: 100,
@@ -336,15 +336,15 @@ export function useBatchCancellation(maxConcurrent: number = 5) {
     setResults([]);
 
     const allResults: CancelResult[] = [];
-    
+
     // Process in chunks
     for (let i = 0; i < orderIds.length; i += maxConcurrent) {
       const chunk = orderIds.slice(i, i + maxConcurrent);
       const chunkPromises = chunk.map(id => cancelWithInflightHandling(id, userId));
-      
+
       const chunkResults = await Promise.all(chunkPromises);
       allResults.push(...chunkResults);
-      
+
       setProgress(Math.round(((i + chunk.length) / orderIds.length) * 100));
       setResults([...allResults]);
     }

@@ -27,9 +27,14 @@ export function useExchangeRateSSE(enabled: boolean = true) {
     setError(null);
 
     try {
-      // First, try to get initial rate from API
-      const initialRate = await getExchangeRate();
-      setRate(initialRate);
+      // First, try to get initial rate from our own API to avoid CORS
+      const response = await fetch('/api/exchange-rate/current');
+      if (!response.ok) throw new Error('Failed to fetch initial rate');
+      const data = await response.json();
+
+      if (data.success && data.rate) {
+        setRate(data.rate);
+      }
       setLastUpdated(new Date());
 
       // Then connect to SSE for real-time updates
@@ -39,7 +44,7 @@ export function useExchangeRateSSE(enabled: boolean = true) {
       eventSource.onmessage = (event) => {
         try {
           const data: SSERateUpdate = JSON.parse(event.data);
-          
+
           if (data.type === 'rate_update' && data.rate) {
             setRate(data.rate);
             setLastUpdated(new Date());
@@ -56,7 +61,7 @@ export function useExchangeRateSSE(enabled: boolean = true) {
         setError('SSE connection lost, falling back to polling');
         eventSource.close();
         eventSourceRef.current = null;
-        
+
         // Fall back to polling
         startPolling();
       };
@@ -74,9 +79,12 @@ export function useExchangeRateSSE(enabled: boolean = true) {
   const startPolling = useCallback(async () => {
     const poll = async () => {
       try {
-        const newRate = await fetchBinanceP2PRates();
-        if (newRate) {
-          setRate(newRate);
+        const response = await fetch('/api/exchange-rate/current');
+        if (!response.ok) throw new Error('Polling fetch failed');
+        const data = await response.json();
+
+        if (data.success && data.rate) {
+          setRate(data.rate);
           setLastUpdated(new Date());
           setError(null);
         }
@@ -108,8 +116,13 @@ export function useExchangeRateSSE(enabled: boolean = true) {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const newRate = await getExchangeRate();
-      setRate(newRate);
+      const response = await fetch('/api/exchange-rate/current');
+      if (!response.ok) throw new Error('Manual refresh failed');
+      const data = await response.json();
+
+      if (data.success && data.rate) {
+        setRate(data.rate);
+      }
       setLastUpdated(new Date());
       setError(null);
     } catch (e: any) {
@@ -139,9 +152,12 @@ export function useAutoRefreshRate(intervalSeconds: number = 300) {
   const fetchRate = useCallback(async () => {
     setLoading(true);
     try {
-      const newRate = await fetchBinanceP2PRates();
-      if (newRate) {
-        setRate(newRate);
+      const response = await fetch('/api/exchange-rate/current');
+      if (!response.ok) throw new Error('Auto refresh failed');
+      const data = await response.json();
+
+      if (data.success && data.rate) {
+        setRate(data.rate);
         setLastUpdated(new Date());
         setError(null);
       }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { inngest } from '@/lib/inngest/client';
 
 /**
@@ -32,9 +32,11 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Missing eventId or winner' }, { status: 400 });
         }
 
+        const service = await createServiceClient();
+
         // 3. Call RPC function resolve_market
         // Function signature: resolve_market(p_event_id UUID, p_winner INTEGER, p_resolver_id UUID)
-        const { error } = await supabase.rpc('resolve_market', {
+        const { error } = await service.rpc('resolve_market', {
             p_event_id: eventId,
             p_winner: winner,
             p_resolver_id: profile.id

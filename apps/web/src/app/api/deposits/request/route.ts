@@ -5,11 +5,11 @@ import { NextResponse } from 'next/server';
 // Create a new deposit request
 export async function POST(request: Request) {
   try {
-    const supabase = createClient();
-    
+    const supabase = await createClient();
+
     // Get user session
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
+
     if (authError || !user) {
       return NextResponse.json(
         { error: 'Authentication required' },
@@ -166,11 +166,11 @@ export async function POST(request: Request) {
 // Get user's deposit requests
 export async function GET(request: Request) {
   try {
-    const supabase = createClient();
-    
+    const supabase = await createClient();
+
     // Get user session
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
+
     if (authError || !user) {
       return NextResponse.json(
         { error: 'Authentication required' },

@@ -13,6 +13,8 @@ export interface User {
   idExpiry?: string;
   accountStatus?: string;
   lastLoginAt?: string;
+  current_level_id?: number;
+  current_level_name?: string;
 }
 
 export function useUser() {
@@ -44,7 +46,9 @@ export function useUser() {
             created_at: session.user.created_at,
             kycLevel: profile?.kyc_level || 0,
             lastLoginAt: profile?.last_login_at,
-            accountStatus: 'active'
+            accountStatus: 'active',
+            current_level_id: profile?.current_level_id || 1,
+            current_level_name: profile?.current_level_name || 'Novice'
           });
         } else {
           // Demo user for development

@@ -169,6 +169,20 @@ export class KycService {
 
         if (subError) throw subError;
 
+        // Trigger Upstash Workflow
+        try {
+            fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/upstash-workflow-kyc`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    step: "ai-analysis",
+                    data: { userId: userId }
+                })
+            }).catch(e => console.error("Failed to trigger AI Workflow post-submit:", e));
+        } catch (e) {
+            console.error("KYC Trigger error:", e);
+        }
+
         return { success: true, profile };
     }
 

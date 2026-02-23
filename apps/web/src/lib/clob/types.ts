@@ -1,9 +1,15 @@
 import { DoublyLinkedList } from './ds/DoublyLinkedList';
 
-export type Side = 'bid' | 'ask';
+export type Side = "buy" | "sell";
 export type OrderType = 'LIMIT' | 'MARKET'; // Type wasn't specified in strict list but implied? "timeInForce" is. "type" field check? Req doesn't show "type". Wait. "timeInForce" is there. "type" is likely needed for logic. I will keep it but maybe default? User list didn't explicitly forbid extra fields but showed specific ones. I will keep existing "type" but fix "side".
 export type TimeInForce = 'GTC' | 'IOC' | 'FOK' | 'GTD';
-export type OrderStatus = 'pending' | 'open' | 'partial' | 'filled' | 'cancelled';
+export type OrderStatus =
+    | "open"
+    | "filled"
+    | "cancelled"
+    | "partially_filled"
+    | "expired"
+    | "cancelling"; // Ensure 'cancelling' is present to prevent state-transition errors
 export type STPFlag = 'none' | 'decrease' | 'cancel' | 'both';
 
 // Core Order Structure

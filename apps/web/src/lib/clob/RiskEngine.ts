@@ -37,7 +37,7 @@ export class RiskEngine {
         // We reuse the central RateLimiter but strictly for "New Order" events here if needed.
         // The Engine calls RateLimiter before this? 
         // Actually, Design says "Layer 3: Rate limiting" inside validateOrderRisk.
-        if (!RateLimiter.check(order.userId, 'place')) {
+        if (!(await RateLimiter.check(order.userId, 'place'))) {
             return {
                 passed: false,
                 failedCheck: 'RATE_LIMIT',

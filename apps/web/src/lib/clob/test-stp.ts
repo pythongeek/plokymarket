@@ -48,7 +48,7 @@ async function runTests() {
     if (snap1.bids.length !== 1) throw new Error('Bid b1 should be added');
     console.log('PASS: STP_CANCEL_OLDER');
 
-    engine.cancelOrder('b1', 'BUY'); // Cleanup
+    await engine.cancelOrder('b1'); // Cleanup
 
     // TEST 2: STP_CANCEL_BOTH
     console.log('Test 2: STP_CANCEL_BOTH');

@@ -4,6 +4,15 @@
  * across the new Service Layer Architecture.
  */
 
+export type ResolutionMethod = 'manual_admin' | 'ai_oracle' | 'expert_panel' | 'community_vote';
+
+export interface ResolutionConfig {
+    method: ResolutionMethod;
+    ai_keywords?: string[];
+    confidence_threshold?: number;
+    resolver_address?: string;
+}
+
 export type EventStatus = 'pending' | 'active' | 'resolved' | 'cancelled';
 export type MarketStatus = 'pending' | 'active' | 'resolved' | 'cancelled';
 

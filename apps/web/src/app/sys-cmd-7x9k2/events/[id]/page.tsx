@@ -218,7 +218,7 @@ export default function EventDetailsPage() {
                     <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => window.open(`/market/${eventId}`, '_blank')}
+                        onClick={() => window.open(`/markets/${eventId}`, '_blank')}
                         className="border-blue-500/30 text-blue-400 hover:bg-blue-950/30 hover:text-blue-300"
                     >
                         <Globe className="w-4 h-4 mr-2" />

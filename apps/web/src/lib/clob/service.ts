@@ -37,8 +37,8 @@ export class OrderBookService {
     }
 
     public static getDepthDTO(engine: OrderBookEngine, granularity: Granularity): any {
-        const bids = engine.depthManager.getDepth('bid', granularity);
-        const asks = engine.depthManager.getDepth('ask', granularity);
+        const bids = engine.depthManager.getDepth('buy', granularity);
+        const asks = engine.depthManager.getDepth('sell', granularity);
 
         return {
             marketId: (engine as any).marketId,
@@ -93,12 +93,12 @@ export class OrderBookService {
             .from('order_book')
             .select('*')
             .eq('market_id', marketId)
-            .in('status', ['OPEN', 'PARTIAL']);
+            .in('status', ['open', 'partially_filled']);
 
         if (error) throw error;
 
-        const bids = orders.filter((o: any) => o.side === 'BUY').map(mapDbOrderToMemory);
-        const asks = orders.filter((o: any) => o.side === 'SELL').map(mapDbOrderToMemory);
+        const bids = orders.filter((o: any) => o.side === 'buy').map(mapDbOrderToMemory);
+        const asks = orders.filter((o: any) => o.side === 'sell').map(mapDbOrderToMemory);
 
         return new OrderBookEngine(marketId, bids, asks);
     }
@@ -133,11 +133,11 @@ export class OrderBookService {
         // For SELL orders, we should check Asset Balance (handled by `user_positions` or similar, but let's stick to Cash for now or Mock).
         // Let's implement Cash Freeze for BUY.
         // CORRECTION: Map input side to lowercase bid/ask if needed
-        if (orderInput.side === 'BUY') order.side = 'bid';
-        else if (orderInput.side === 'SELL') order.side = 'ask';
+        if (orderInput.side === 'buy') order.side = 'buy';
+        else if (orderInput.side === 'sell') order.side = 'sell';
 
         // RISK ENGINE: Check Balance & Freeze Funds
-        if (order.side === 'bid') {
+        if (order.side === 'buy') {
             const cost = Number(order.price * order.quantity) / 1e12; // Correct scaling (1e6 * 1e6 = 1e12)
             // Call checking function
             const { data: success, error } = await supabase.rpc('freeze_funds', {
@@ -156,7 +156,7 @@ export class OrderBookService {
         const result: FillResult = await engine.placeOrder(order);
 
         // Handle Immediate Cancellations (FOK/IOC) -> Unfreeze
-        if (order.status === 'cancelled' && order.side === 'bid') { // Map 'CANCELED' -> 'cancelled'
+        if (order.status === 'cancelled' && order.side === 'buy') { // Map 'CANCELED' -> 'cancelled'
             // Calculate refund (Frozen - Spent). 
             // If CANCELED immediately (FOK failed), refund element.
             // If PARTIAL (IOC), filled part is settled, remaining is cancelled (refunded).
@@ -184,11 +184,11 @@ export class OrderBookService {
             id: result.order.id,
             market_id: result.order.marketId,
             user_id: result.order.userId,
-            side: result.order.side === 'bid' ? 'BUY' : 'SELL', // Map back to DB enum
+            side: result.order.side === 'buy' ? 'buy' : 'sell', // Map back to DB enum
             price: this.toNumber(result.order.price),
             size: this.toNumber(result.order.quantity),
             filled: this.toNumber(result.order.filledQuantity),
-            status: result.order.status === 'cancelled' ? 'CANCELED' : result.order.status.toUpperCase(), // Map status
+            status: result.order.status === 'cancelled' ? 'cancelled' : result.order.status, // Map status
             order_type: result.order.type,
             time_in_force: result.order.timeInForce,
             post_only: result.order.postOnly,
@@ -204,10 +204,10 @@ export class OrderBookService {
                 market_id: f.marketId,
                 maker_order_id: f.makerOrderId,
                 taker_order_id: f.takerOrderId,
-                buyer_id: f.side === 'bid' ? result.order.userId : 'unknown',
+                buyer_id: f.side === 'buy' ? result.order.userId : 'unknown',
                 price: this.toNumber(f.price),
                 size: this.toNumber(f.size),
-                taker_side: f.side === 'bid' ? 'BUY' : 'SELL',
+                taker_side: f.side === 'buy' ? 'buy' : 'sell',
                 created_at: new Date(f.createdAt).toISOString()
             }));
 
@@ -362,7 +362,7 @@ function mapDbOrderToMemory(dbOrder: any): Order {
         id: dbOrder.id,
         marketId: dbOrder.market_id,
         userId: dbOrder.user_id,
-        side: dbOrder.side === 'BUY' ? 'bid' : 'ask',
+        side: dbOrder.side === 'buy' ? 'buy' : 'sell',
         price: BigInt(Math.round(Number(dbOrder.price) * 1_000_000)),
         quantity: BigInt(Math.round(Number(dbOrder.size) * 1_000_000)),
         filledQuantity: BigInt(Math.round(Number(dbOrder.filled) * 1_000_000)),

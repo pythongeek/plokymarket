@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
 
 /**
  * POST /api/admin/usdt/debit
@@ -35,10 +35,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid parameters' }, { status: 400 });
     }
 
-    // Get current wallet balance
-    const { data: wallet, error: walletError } = await supabase
+    const service = await createServiceClient();
+
+    // Get current wallet balance and version
+    const { data: wallet, error: walletError } = await service
       .from('wallets')
-      .select('usdt_balance, locked_usdt')
+      .select('usdt_balance, locked_usdt, version')
       .eq('user_id', userId)
       .single();
 
@@ -54,19 +56,27 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Update wallet balance
+    // Update wallet balance with optimistic locking
     const newBalance = (wallet.usdt_balance || 0) - amount;
-    await supabase
+    const { error: updateError, count } = await service
       .from('wallets')
       .update({
         usdt_balance: newBalance,
         total_withdrawn: amount,
+        version: (wallet.version || 0) + 1,
         updated_at: new Date().toISOString()
       })
-      .eq('user_id', userId);
+      .eq('user_id', userId)
+      .eq('version', wallet.version || 0);
+
+    if (updateError || count === 0) {
+      return NextResponse.json({
+        error: 'Concurrency error: The wallet was updated by another process. Please try again.'
+      }, { status: 409 });
+    }
 
     // Log transaction
-    await supabase.from('usdt_transactions').insert({
+    await service.from('usdt_transactions').insert({
       user_id: userId,
       type: 'admin_debit',
       amount: -amount,
@@ -77,7 +87,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Log admin action
-    await supabase.from('admin_audit_log').insert({
+    await service.from('admin_audit_log').insert({
       admin_id: user.id,
       action: 'usdt_debit',
       target_user_id: userId,

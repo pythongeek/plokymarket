@@ -1,14 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createServiceClient } from '@/lib/supabase/server';
 
 export const runtime = 'edge';
 
-// Initialize Supabase with service role for administrative tasks
-const getSupabase = () => createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { persistSession: false, autoRefreshToken: false } }
-);
+// Initialize Supabase admin client is managed via createServiceClient
+
+import { NextRequest, NextResponse } from 'next/server';
 
 /**
  * POST /api/upstash-workflow/settlement
@@ -21,7 +17,7 @@ export async function POST(request: NextRequest) {
         const payload = await request.json();
         const { eventId, winner, step, data } = payload;
 
-        const supabase = getSupabase();
+        const supabase = await createServiceClient();
 
         // Step 1: Validate and fetch event details
         if (step === 'validate' || !step) {

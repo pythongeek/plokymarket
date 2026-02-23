@@ -23,6 +23,7 @@ export interface PnLData {
   avgWin: number;
   avgLoss: number;
   profitFactor: number;
+  history: Array<{ date: string; value: number; bdtValue: number }>;
 }
 
 export interface PnLAttribution {
@@ -244,10 +245,37 @@ export function usePnL(userId?: string, timeHorizon: TimeHorizon = 'allTime') {
       const sharpeRatio = 0; // Would need historical returns data
       const maxDrawdown = 0; // Would need equity curve data
 
-      // Mock return percentage (would calculate from initial investment)
       const totalInvested = openPositions?.reduce((sum: number, pos: any) =>
         sum + ((pos.average_price || 0) * (pos.quantity || 0)), 0) || 10000;
       const returnPercentage = totalInvested > 0 ? ((realized + unrealized) / totalInvested) * 100 : 0;
+
+      // Generate history (mock for now, ideally derived from historic balances)
+      const history = [];
+      const days = timeHorizon === 'intraday' ? 24 :
+        timeHorizon === 'daily' ? 24 :
+          timeHorizon === 'weekly' ? 7 :
+            timeHorizon === 'monthly' ? 30 :
+              timeHorizon === 'quarterly' ? 90 :
+                timeHorizon === 'annual' ? 365 : 180;
+
+      let runningVal = realized + unrealized;
+      for (let i = days; i >= 0; i--) {
+        const date = new Date();
+        if (timeHorizon === 'intraday' || timeHorizon === 'daily') {
+          date.setHours(date.getHours() - i);
+        } else {
+          date.setDate(date.getDate() - i);
+        }
+
+        // Add some random noise to the running value
+        runningVal = runningVal * (0.995 + Math.random() * 0.01);
+
+        history.push({
+          date: date.toISOString(),
+          value: runningVal,
+          bdtValue: runningVal * USD_TO_BDT
+        });
+      }
 
       setPnlData({
         realized,
@@ -265,7 +293,8 @@ export function usePnL(userId?: string, timeHorizon: TimeHorizon = 'allTime') {
         losingTrades,
         avgWin,
         avgLoss,
-        profitFactor
+        profitFactor,
+        history
       });
 
       // Set attribution data

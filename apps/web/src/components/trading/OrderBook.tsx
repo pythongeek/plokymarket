@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from 'react';
-import { useStore } from '@/store/useStore';
+import { motion } from 'framer-motion';
+import { useRealtimeOrders } from '@/hooks/useRealtime';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { TrendingUp, TrendingDown } from 'lucide-react';
@@ -12,17 +13,8 @@ interface OrderBookProps {
 }
 
 export function OrderBook({ marketId }: OrderBookProps) {
-  const { orders, fetchOrders, subscribeToMarket } = useStore();
+  const orders = useRealtimeOrders(marketId);
   const { t } = useTranslation();
-
-  useEffect(() => {
-    fetchOrders(marketId);
-
-    // Subscribe to real-time updates
-    const unsubscribe = subscribeToMarket(marketId);
-
-    return () => unsubscribe();
-  }, [marketId, fetchOrders, subscribeToMarket]);
 
   // Group and sort orders
   const { yesBids, yesAsks, noBids, noAsks, spread } = useMemo(() => {
@@ -75,7 +67,11 @@ export function OrderBook({ marketId }: OrderBookProps) {
     const depthPercent = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
 
     return (
-      <div className="relative grid grid-cols-3 gap-2 py-1 text-sm hover:bg-muted/50 cursor-pointer">
+      <motion.div
+        initial={{ opacity: 0, x: side === 'buy' ? -10 : 10 }}
+        animate={{ opacity: 1, x: 0 }}
+        className="relative grid grid-cols-3 gap-2 py-1 text-sm hover:bg-muted/50 cursor-pointer"
+      >
         {/* Depth bar */}
         <div
           className={cn(
@@ -97,7 +93,7 @@ export function OrderBook({ marketId }: OrderBookProps) {
         <span className="relative z-10 text-right text-muted-foreground">
           {total.toLocaleString()}
         </span>
-      </div>
+      </motion.div>
     );
   };
 
@@ -190,8 +186,8 @@ export function OrderBook({ marketId }: OrderBookProps) {
         <CardTitle className="text-lg">{t('order_book.title')}</CardTitle>
       </CardHeader>
       <CardContent>
-        {/* Header */}
-        <div className="grid grid-cols-2 gap-6 mb-4">
+        {/* Header - Hidden on mobile, shown on md+ if needed, or adjusted */}
+        <div className="hidden md:grid grid-cols-2 gap-6 mb-4">
           <div className="grid grid-cols-3 gap-2 text-xs text-muted-foreground font-medium">
             <span>{t('order_book.price')}</span>
             <span className="text-right">{t('order_book.size')}</span>
@@ -205,14 +201,15 @@ export function OrderBook({ marketId }: OrderBookProps) {
         </div>
 
         {/* Order Books */}
-        <div className="flex gap-6">
+        <div className="flex flex-col md:flex-row gap-6">
           <OrderBookSide
             title="YES"
             bids={yesBids}
             asks={yesAsks}
             outcome="YES"
           />
-          <div className="w-px bg-border" />
+          <div className="hidden md:block w-px bg-border" />
+          <div className="md:hidden h-px bg-border my-4" />
           <OrderBookSide
             title="NO"
             bids={noBids}

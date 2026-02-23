@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createServiceClient } from '@/lib/supabase/server';
 import {
   DEFAULT_WORKFLOWS,
   VerificationWorkflow,
@@ -15,10 +15,7 @@ import { executeVerificationWorkflow } from '@/lib/workflows/UpstashOrchestrator
 
 export const runtime = 'edge';
 
-const getSupabase = () =>
-  createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
-    auth: { persistSession: false },
-  });
+// Initialize Supabase admin client is managed via createServiceClient
 
 /**
  * GET /api/workflows
@@ -30,7 +27,7 @@ export async function GET(request: NextRequest) {
     const category = searchParams.get('category');
     const enabled = searchParams.get('enabled');
 
-    const supabase = getSupabase();
+    const supabase = await createServiceClient();
 
     let query = supabase.from('verification_workflows').select('*');
 
@@ -77,7 +74,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const supabase = getSupabase();
+    const supabase = await createServiceClient();
 
     // Build workflow
     const workflow = buildWorkflow({
@@ -129,7 +126,7 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const body = await request.json();
-    const supabase = getSupabase();
+    const supabase = await createServiceClient();
 
     const { data, error } = await supabase
       .from('verification_workflows')
@@ -156,7 +153,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
  */
 export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const supabase = getSupabase();
+    const supabase = await createServiceClient();
 
     // Prevent deleting default workflows
     if (Object.values(DEFAULT_WORKFLOWS).some((w) => w.id === params.id)) {
@@ -203,7 +200,7 @@ export async function executeWorkflowForEvent(
  */
 export async function getWorkflowHistory(workflowId: string, limit: number = 20) {
   try {
-    const supabase = getSupabase();
+    const supabase = await createServiceClient();
 
     const { data, error } = await supabase
       .from('workflow_executions')
@@ -241,7 +238,7 @@ export async function getWorkflowHistory(workflowId: string, limit: number = 20)
  */
 export async function getWorkflowStats(workflowId?: string) {
   try {
-    const supabase = getSupabase();
+    const supabase = await createServiceClient();
 
     let query = supabase.from('workflow_executions').select('outcome, confidence', {
       count: 'exact',

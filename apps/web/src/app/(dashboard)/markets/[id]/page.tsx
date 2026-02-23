@@ -3,13 +3,14 @@
 import { useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useStore } from '@/store/useStore';
-import { OrderBook } from '@/components/clob/OrderBook';
+import { OrderBook } from '@/components/trading/OrderBook';
 import { DepthChart } from '@/components/clob/DepthChart';
 import { LiquidityHeatMap } from '@/components/clob/LiquidityHeatMap';
 import { MarketStatusDisplay } from '@/components/market/MarketStatusDisplay';
 import { CommentSection } from '@/components/social/CommentSection';
 import { TradingPanel } from '@/components/trading/TradingPanel';
 import { PriceChart } from '@/components/trading/PriceChart';
+import { MyPositions } from '@/components/trading/MyPositions';
 import { PauseBanner } from '@/components/trading/PauseBanner';
 import { MarketInfoPanel } from '@/components/market/MarketInfoPanel';
 import { useMarketStore } from '@/store/marketStore';
@@ -305,16 +306,20 @@ export default function MarketDetailPage() {
                 <div className="flex justify-between items-center border-b border-primary/5 pb-2">
                   <span className="text-muted-foreground font-medium">{t('market_detail.trading_closes')}:</span>
                   <span className="font-bold text-red-500/80">
-                    {format(new Date(market.trading_closes_at), 'MMMM d, yyyy h:mm a', { locale: dateLocale })}
+                    {market.trading_closes_at ? format(new Date(market.trading_closes_at), 'MMMM d, yyyy h:mm a', { locale: dateLocale }) : 'TBD'}
                   </span>
                 </div>
                 <div className="flex justify-between items-center border-b border-primary/5 pb-2">
                   <span className="text-muted-foreground font-medium">{t('market_detail.event_date')}:</span>
-                  <span className="font-bold text-foreground/80">{format(new Date(market.event_date), 'MMMM d, yyyy', { locale: dateLocale })}</span>
+                  <span className="font-bold text-foreground/80">
+                    {market.event_date ? format(new Date(market.event_date), 'MMMM d, yyyy', { locale: dateLocale }) : 'TBD'}
+                  </span>
                 </div>
                 <div className="flex justify-between items-center border-b border-primary/5 pb-2">
                   <span className="text-muted-foreground font-medium">{t('market_detail.created')}:</span>
-                  <span className="font-bold text-foreground/80">{format(new Date(market.created_at), 'MMMM d, yyyy', { locale: dateLocale })}</span>
+                  <span className="font-bold text-foreground/80">
+                    {market.created_at ? format(new Date(market.created_at), 'MMMM d, yyyy', { locale: dateLocale }) : 'TBD'}
+                  </span>
                 </div>
                 {market.resolution_source && (
                   <div className="flex justify-between items-center border-b border-primary/5 pb-2">
@@ -339,7 +344,8 @@ export default function MarketDetailPage() {
 
         {/* Right Column - Trading Panel */}
         <div className="lg:col-span-1">
-          <div className="sticky top-24">
+          <div className="sticky top-24 space-y-6">
+            <MyPositions marketId={market.id} />
             <TradingPanel
               market={market}
               isPaused={isPlatformPaused || (market ? (categoryPauseStatus.get(market.category)?.paused || market.trading_status === 'paused') : false)}

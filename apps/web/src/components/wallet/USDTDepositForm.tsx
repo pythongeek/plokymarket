@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
-    Wallet, Copy, Send, CheckCircle, Loader2, Info, ExternalLink
+    Wallet, Copy, Send, CheckCircle, Loader2, Info, ExternalLink, TrendingUp
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +11,8 @@ import { Label } from '@/components/ui/label';
 import { toast } from '@/components/ui/use-toast';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
+import { useTranslation } from 'react-i18next';
+import { useExchangeRateSSE, formatRateWithCurrency } from '@/lib/realtime/exchange-rate-sse';
 
 type USDTNetwork = 'usdt_trc20' | 'usdt_erc20' | 'usdt_bep20';
 
@@ -28,12 +30,15 @@ interface PlatformWallet {
 }
 
 export function USDTDepositForm() {
+    const { t } = useTranslation();
     const [network, setNetwork] = useState<USDTNetwork>('usdt_trc20');
     const [platformWallet, setPlatformWallet] = useState<PlatformWallet | null>(null);
     const [form, setForm] = useState({ usdt_amount: '', txn_hash: '' });
     const [submitting, setSubmitting] = useState(false);
     const [submitted, setSubmitted] = useState(false);
     const supabase = createClient();
+    // Fetch dynamic real-time exchange rate
+    const { rate, isConnected } = useExchangeRateSSE(true);
 
     useEffect(() => {
         fetchWallet();
@@ -137,6 +142,39 @@ export function USDTDepositForm() {
                     })}
                 </div>
             </div>
+
+            {/* Live Exchange Rate Display */}
+            <AnimatePresence>
+                {rate && (
+                    <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        className="bg-slate-800/50 border border-slate-700 rounded-lg p-3 flex items-center justify-between"
+                    >
+                        <div className="flex items-center gap-2">
+                            <TrendingUp className="w-4 h-4 text-emerald-400" />
+                            <span className="text-sm text-slate-300">{t('wallet.live_exchange_rate')}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold text-white">
+                                {formatRateWithCurrency(rate.usdt_to_bdt, 'USDT', 'BDT')}
+                            </span>
+                            {!isConnected && (
+                                <span className="flex h-2 w-2 relative">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-slate-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-slate-500"></span>
+                                </span>
+                            )}
+                            {isConnected && (
+                                <span className="flex h-2 w-2 relative">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                                </span>
+                            )}
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {/* Warning */}
             <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 flex gap-2">

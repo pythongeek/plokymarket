@@ -32,6 +32,7 @@ import { useTranslation } from 'react-i18next';
 import { DepositForm } from '@/components/wallet/DepositForm';
 import { WithdrawalForm } from '@/components/wallet/WithdrawalForm';
 import { P2PRateDisplay } from '@/components/wallet/P2PRateDisplay';
+import { ExchangeRateBadge } from '@/components/ExchangeRateBadge';
 
 
 function TransactionList({ transactions }: { transactions: any[] }) {
@@ -102,11 +103,11 @@ function TransactionList({ transactions }: { transactions: any[] }) {
                 </div>
               </div>
               <div className="text-right">
-                <div className={cn('font-semibold', txn.amount > 0 ? 'text-green-500' : 'text-red-500')}>
-                  {txn.amount > 0 ? '+' : ''}৳{Math.abs(txn.amount).toLocaleString()}
+                <div className={cn('font-semibold', (txn.amount || 0) > 0 ? 'text-green-500' : 'text-red-500')}>
+                  {(txn.amount || 0) > 0 ? '+' : ''}৳{Math.abs(txn.amount || 0).toLocaleString()}
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  {t('wallet.balance_after')}: ৳{txn.balance_after.toLocaleString()}
+                  {t('wallet.balance_after')}: ৳{Number(txn.balance_after || 0).toLocaleString()}
                 </div>
               </div>
             </div>
@@ -197,8 +198,13 @@ export default function WalletPage() {
         <p className="text-muted-foreground">{t('wallet.subtitle')}</p>
       </div>
 
-      {/* Real-time P2P Exchange Rate */}
-      <P2PRateDisplay showCalculator />
+      {/* Real-time Exchange Rates */}
+      <div className="flex flex-wrap items-center gap-4">
+        <P2PRateDisplay showCalculator />
+        <div className="flex-1 flex justify-end">
+          <ExchangeRateBadge />
+        </div>
+      </div>
 
       {/* Smart Withdraw Limits Progress Bar */}
       {kycGate && (
@@ -212,15 +218,15 @@ export default function WalletPage() {
                 </span>
               </div>
               <span className="text-xs font-medium text-amber-700 dark:text-amber-500">
-                ৳{kycGate.total_withdrawn.toLocaleString()} / ৳{kycGate.threshold.toLocaleString()}
+                ৳{Number(kycGate.total_withdrawn || 0).toLocaleString()} / ৳{Number(kycGate.threshold || 0).toLocaleString()}
               </span>
             </div>
             <Progress
-              value={(kycGate.total_withdrawn / kycGate.threshold) * 100}
+              value={(Number(kycGate.total_withdrawn || 0) / Number(kycGate.threshold || 1)) * 100}
               className="h-2 bg-amber-200 dark:bg-amber-900/40"
             />
             <p className="text-[10px] text-amber-700 dark:text-amber-500 mt-2">
-              আপনার বর্তমান KYC লেভেলে আপনি দৈনিক সর্বোচ্চ ৳{kycGate.threshold.toLocaleString()} তুলতে পারবেন।
+              আপনার বর্তমান KYC লেভেলে আপনি দৈনিক সর্বোচ্চ ৳{Number(kycGate.threshold || 0).toLocaleString()} তুলতে পারবেন।
               {kycGate.kyc_status !== 'verified' && (
                 <> লিট বাড়াতে <Link href="/kyc" className="underline font-bold">এখানে ক্লিক করে KYC সম্পন্ন করুন</Link>।</>
               )}
@@ -255,24 +261,35 @@ export default function WalletPage() {
               </motion.div>
             )}
 
-            {(user as any)?.id_expiry && (new Date((user as any).id_expiry).getTime() - new Date().getTime()) / (1000 * 3600 * 24) <= 30 && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-red-50 border border-red-200 rounded-lg p-4 flex gap-3 items-start"
-              >
-                <ShieldAlert className="w-5 h-5 text-red-600 mt-0.5" />
-                <div>
-                  <h3 className="font-bold text-red-800">কেওয়াইসি (KYC) মেয়াদ শেষ হতে চলেছে</h3>
-                  <p className="text-sm text-red-700">
-                    আপনার এনআইডি বা পাসপোর্টের মেয়ার আগামী {Math.ceil((new Date((user as any).id_expiry).getTime() - new Date().getTime()) / (1000 * 3600 * 24))} দিনের মধ্যে শেষ হবে। নিরবচ্ছিন্ন সেবার জন্য ডকুমেন্ট আপডেট করুন।
-                  </p>
-                  <Button variant="outline" size="sm" className="mt-2 border-red-200 hover:bg-red-100 text-red-700" asChild>
-                    <Link href="/portfolio">আপডেট করুন</Link>
-                  </Button>
-                </div>
-              </motion.div>
-            )}
+            {(() => {
+              if (!(user as any)?.id_expiry) return null;
+
+              const expiryDate = new Date((user as any).id_expiry);
+              if (isNaN(expiryDate.getTime())) return null; // Safe check for invalid date strings
+
+              const daysRemaining = Math.ceil((expiryDate.getTime() - new Date().getTime()) / (1000 * 3600 * 24));
+
+              if (daysRemaining > 30) return null;
+
+              return (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-red-50 border border-red-200 rounded-lg p-4 flex gap-3 items-start"
+                >
+                  <ShieldAlert className="w-5 h-5 text-red-600 mt-0.5" />
+                  <div>
+                    <h3 className="font-bold text-red-800">কেওয়াইসি (KYC) মেয়াদ শেষ হতে চলেছে</h3>
+                    <p className="text-sm text-red-700">
+                      আপনার এনআইডি বা পাসপোর্টের মেয়ার আগামী {daysRemaining} দিনের মধ্যে শেষ হবে। নিরবচ্ছিন্ন সেবার জন্য ডকুমেন্ট আপডেট করুন।
+                    </p>
+                    <Button variant="outline" size="sm" className="mt-2 border-red-200 hover:bg-red-100 text-red-700" asChild>
+                      <Link href="/portfolio">আপডেট করুন</Link>
+                    </Button>
+                  </div>
+                </motion.div>
+              );
+            })()}
           </div>
         )}
       </motion.div>
@@ -287,7 +304,7 @@ export default function WalletPage() {
                 <WalletIcon className="h-5 w-5" />
               </div>
             </div>
-            <div className="text-3xl font-bold">৳{totalBalance.toLocaleString()}</div>
+            <div className="text-3xl font-bold">৳{Number(totalBalance || 0).toLocaleString()}</div>
           </CardContent>
         </Card>
 
@@ -299,7 +316,7 @@ export default function WalletPage() {
                 <CheckCircle2 className="h-5 w-5 text-green-500" />
               </div>
             </div>
-            <div className="text-3xl font-bold text-green-500">৳{availableBalance.toLocaleString()}</div>
+            <div className="text-3xl font-bold text-green-500">৳{Number(availableBalance || 0).toLocaleString()}</div>
           </CardContent>
         </Card>
 
@@ -311,7 +328,7 @@ export default function WalletPage() {
                 <Clock className="h-5 w-5 text-amber-500" />
               </div>
             </div>
-            <div className="text-3xl font-bold text-amber-500">৳{lockedBalance.toLocaleString()}</div>
+            <div className="text-3xl font-bold text-amber-500">৳{Number(lockedBalance || 0).toLocaleString()}</div>
           </CardContent>
         </Card>
       </div>
@@ -329,7 +346,7 @@ export default function WalletPage() {
           <div>
             <p className="font-semibold text-sm">অর্ডার ম্যাচ হচ্ছে না? / Order not matching?</p>
             <p className="text-xs text-muted-foreground mt-1">
-              আপনার ৳{lockedBalance.toLocaleString()} বর্তমানে অর্ডারগুলোতে লক করা আছে। যদি আপনার অর্ডার ম্যাচ না হয়, তবে মার্কেটের বর্তমান প্রাইস চেক করুন এবং প্রয়োজনে অর্ডার বাতিল করে নতুন প্রাইসে প্লেস করুন।
+              আপনার ৳{Number(lockedBalance || 0).toLocaleString()} বর্তমানে অর্ডারগুলোতে লক করা আছে। যদি আপনার অর্ডার ম্যাচ না হয়, তবে মার্কেটের বর্তমান প্রাইস চেক করুন এবং প্রয়োজনে অর্ডার বাতিল করে নতুন প্রাইসে প্লেস করুন।
             </p>
             <Link href="/portfolio">
               <Button variant="link" size="sm" className="h-auto p-0 text-xs mt-2 underline">

@@ -5,7 +5,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createServiceClient } from '@/lib/supabase/server';
 
 export const runtime = 'edge';
 export const preferredRegion = 'iad1';
@@ -13,31 +13,31 @@ export const preferredRegion = 'iad1';
 // Verify QStash signature
 async function verifyQStashSignature(request: Request): Promise<boolean> {
   const signature = request.headers.get('upstash-signature');
-  
+
   if (process.env.NODE_ENV === 'development' && !signature) {
     return true;
   }
-  
+
   if (!signature) {
     console.warn('[DailyTopics] Missing QStash signature');
     return false;
   }
-  
+
   return true;
 }
 
 // Fetch news from RSS feeds
 async function fetchRSSNews(sources: any[]): Promise<string> {
   const headlines: string[] = [];
-  
+
   for (const source of sources.slice(0, 3)) {
     try {
       if (source.type === 'rss') {
-        const response = await fetch(source.url, { 
+        const response = await fetch(source.url, {
           headers: { 'User-Agent': 'Plokymarket Bot' },
           signal: AbortSignal.timeout(5000)
         });
-        
+
         if (response.ok) {
           const xml = await response.text();
           // Extract titles from RSS XML (basic parsing)
@@ -49,7 +49,7 @@ async function fetchRSSNews(sources: any[]): Promise<string> {
       console.warn(`[DailyTopics] Failed to fetch from ${source.name}:`, e);
     }
   }
-  
+
   return headlines.join('. ');
 }
 
@@ -58,13 +58,13 @@ async function fetchNewsAPI(keywords: string[]): Promise<string> {
   try {
     const apiKey = process.env.NEWS_API_KEY;
     if (!apiKey) return '';
-    
+
     const query = keywords.slice(0, 3).join(' OR ');
     const response = await fetch(
       `https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&sortBy=relevancy&pageSize=5&apiKey=${apiKey}`,
       { signal: AbortSignal.timeout(5000) }
     );
-    
+
     if (response.ok) {
       const data = await response.json();
       return data.articles?.map((a: any) => a.title).join('. ') || '';
@@ -84,11 +84,11 @@ async function generateTopicsWithConfig(config: any): Promise<any[]> {
 
   // Fetch news from configured sources
   let newsContext = '';
-  
+
   if (config.news_sources && config.news_sources.length > 0) {
     newsContext = await fetchRSSNews(config.news_sources);
   }
-  
+
   if (!newsContext && config.search_keywords) {
     newsContext = await fetchNewsAPI(config.search_keywords);
   }
@@ -123,7 +123,7 @@ async function generateTopicsWithConfig(config: any): Promise<any[]> {
 
   const geminiData = await geminiResponse.json();
   const generatedText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '';
-  
+
   // Parse JSON from response
   let topics = [];
   try {
@@ -141,18 +141,14 @@ async function generateTopicsWithConfig(config: any): Promise<any[]> {
 
 export async function GET(request: Request) {
   const startTime = Date.now();
-  
+
   // Verify QStash signature
   const isValid = await verifyQStashSignature(request);
   if (!isValid) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { persistSession: false, autoRefreshToken: false } }
-  );
+  const supabase = await createServiceClient();
 
   try {
     // Get active configurations
@@ -172,7 +168,7 @@ export async function GET(request: Request) {
     // Generate topics for each config
     for (const config of configs) {
       const jobStartTime = Date.now();
-      
+
       try {
         // Create job record
         const { data: job } = await supabase
@@ -244,7 +240,7 @@ export async function GET(request: Request) {
 
       } catch (configError: any) {
         console.error(`[DailyTopics] Config ${config.name} failed:`, configError);
-        
+
         // Log failed job
         await supabase
           .from('ai_topic_generation_jobs')
@@ -278,16 +274,12 @@ export async function GET(request: Request) {
 // Manual trigger endpoint for admin
 export async function POST(request: Request) {
   const authHeader = request.headers.get('authorization');
-  
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { persistSession: false, autoRefreshToken: false } }
-  );
+
+  const supabase = await createServiceClient();
 
   try {
     const { data: { user } } = await supabase.auth.getUser(authHeader?.replace('Bearer ', '') || '');
-    
+
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -314,7 +306,7 @@ export async function POST(request: Request) {
         .select('*')
         .eq('id', configId)
         .single();
-      
+
       if (!config) {
         return NextResponse.json({ error: 'Config not found' }, { status: 404 });
       }
@@ -322,7 +314,7 @@ export async function POST(request: Request) {
 
     // Trigger the same logic as GET
     return GET(request);
-    
+
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

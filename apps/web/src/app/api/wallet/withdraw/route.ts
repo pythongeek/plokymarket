@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { withdrawalRateLimiter } from '@/lib/security';
 
 export async function POST(req: Request) {
     try {
@@ -7,92 +8,105 @@ export async function POST(req: Request) {
 
         // 1. Authenticate User
         const { data: { user }, error: authError } = await supabase.auth.getUser();
-
         if (authError || !user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // 2. Parse payload
+        // 2. Initial Rate Limit Check
+        const isLimited = await withdrawalRateLimiter.isRateLimited(user.id);
+        if (isLimited) {
+            return NextResponse.json({ error: 'Too many withdrawal requests. Please try again later.' }, { status: 429 });
+        }
+
+        // 3. Parse payload
         const body = await req.json();
-        const { usdt_amount, mfs_provider, recipient_number } = body;
+        const { amount, method, phoneNumber, accountName } = body;
 
-        if (!usdt_amount || !mfs_provider || !recipient_number) {
-            return NextResponse.json({ error: 'Missing required configuration fields.' }, { status: 400 });
+        // 4. Validation Rules
+        if (!amount || amount < 500) {
+            return NextResponse.json({ error: 'Minimum withdrawal is ৳500' }, { status: 400 });
         }
 
-        if (usdt_amount < 5) {
-            return NextResponse.json({ error: 'Minimum withdrawal is 5 USDT.' }, { status: 400 });
+        const validMethods = ['bkash', 'nagad', 'rocket', 'bank'];
+        if (!method || !validMethods.includes(method.toLowerCase())) {
+            return NextResponse.json({ error: 'Invalid withdrawal method' }, { status: 400 });
         }
 
-        // 3. Check Wallet Balance before queueing
-        const { data: walletData, error: walletError } = await supabase
-            .from('wallets')
-            .select('balance')
+        if (!phoneNumber) {
+            return NextResponse.json({ error: 'Phone number is required' }, { status: 400 });
+        }
+
+        // 5. KYC Tiered Daily Limit Check
+        const { data: profile } = await supabase
+            .from('user_profiles')
+            .select('kyc_verified, kyc_level')
+            .eq('id', user.id)
+            .single();
+
+        const dailyLimit = profile?.kyc_verified ? 50000 : 10000;
+        const today = new Date().toISOString().split('T')[0];
+
+        // Fetch today's approved/pending total
+        const { data: todayRequests } = await supabase
+            .from('withdrawal_requests')
+            .select('amount')
             .eq('user_id', user.id)
-            .single();
+            .gte('created_at', today)
+            .in('status', ['pending', 'approved']);
 
-        if (walletError || !walletData) {
-            return NextResponse.json({ error: 'Could not fetch wallet balance.' }, { status: 400 });
+        const todayTotal = (todayRequests || []).reduce((sum, req) => sum + Number(req.amount || 0), 0);
+
+        if (todayTotal + amount > dailyLimit) {
+            return NextResponse.json({ error: `Daily withdrawal limit exceeded. Limit: ৳${dailyLimit}` }, { status: 400 });
         }
 
-        if (walletData.balance < usdt_amount) {
-            return NextResponse.json({ error: 'Insufficient available balance.' }, { status: 400 });
+
+
+        // 7. Fund Locking RPC
+        // NOTE: lock_withdrawal_funds and unlock_withdrawal_funds must be implemented as SQL functions on the DB
+        const { error: lockError } = await supabase.rpc('lock_withdrawal_funds', {
+            p_user_id: user.id,
+            p_amount: amount
+        });
+
+        if (lockError) {
+            // Usually indicates insufficient DB-level spendable balance or missing RPC function
+            return NextResponse.json({ error: 'Failed to lock funds' }, { status: 500 });
         }
 
-        // 4. Fetch Live Exchange Rate mapping
-        const { data: exchangeRate, error: rateError } = await supabase
-            .from('exchange_rates')
-            .select('usdt_to_bdt')
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .single();
-
-        if (rateError || !exchangeRate) {
-            return NextResponse.json({ error: 'Exchange rate unavailable. Try again later.' }, { status: 500 });
-        }
-
-        const currentRate = exchangeRate.usdt_to_bdt;
-
-        // Calculate BDT Equivalent (e.g. 5 USDT * 115 BDT = 575 BDT)
-        const bdt_amount = Number((usdt_amount * currentRate).toFixed(2));
-
-        // 5. Trigger RPC `freeze_funds`
-        const { data: freezeSuccess, error: freezeError } = await supabase
-            .rpc('freeze_funds', { p_user_id: user.id, p_amount: usdt_amount });
-
-        if (freezeError || !freezeSuccess) {
-            console.error("Freeze RPC Failed:", freezeError);
-            return NextResponse.json({ error: 'Failed to reserve funds for withdrawal. Balance may be insufficient.' }, { status: 400 });
-        }
-
-        // 6. Insert Withdrawal Request Queue
-        const { data: request, error: withdrawError } = await supabase
+        // 8. Withdrawal Record Creation
+        const { data: withdrawal, error: withdrawError } = await supabase
             .from('withdrawal_requests')
             .insert({
                 user_id: user.id,
-                usdt_amount,
-                bdt_amount,
-                exchange_rate: currentRate,
-                mfs_provider,
-                recipient_number,
+                amount: amount,
+                method: method.toLowerCase(),
+                phone_number: phoneNumber,
+                account_name: accountName,
                 status: 'pending'
             })
             .select()
             .single();
 
         if (withdrawError) {
-            console.error('Withdrawal Insert Error:', withdrawError);
-
-            // Attempt manual rollback if queueing fails but lock succeeded
-            await supabase.rpc('unfreeze_funds', { p_user_id: user.id, p_amount: usdt_amount });
-
-            return NextResponse.json({ error: 'Failed to submit withdrawal request.' }, { status: 500 });
+            // Critical Rollback
+            await supabase.rpc('unlock_withdrawal_funds', { p_user_id: user.id, p_amount: amount });
+            throw withdrawError; // escalate to top-level catch
         }
 
-        return NextResponse.json({ success: true, request });
+        // 9. Record the rate limit attempt
+        await withdrawalRateLimiter.recordAttempt(user.id);
 
-    } catch (err: any) {
-        console.error('Unhandled Withdrawal Error:', err);
-        return NextResponse.json({ error: 'Internal server error occurred.' }, { status: 500 });
+        // 10. Success Response
+        return NextResponse.json({
+            success: true,
+            withdrawal,
+            message: 'Withdrawal request submitted. It will be processed within 24 hours.'
+        });
+
+    } catch (error: any) {
+        // 11. Top-Level Catch
+        console.error('Withdrawal error:', error);
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
     }
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createServiceClient } from '@/lib/supabase/server';
 import { OrderBookService } from '@/lib/clob/service';
 
 export async function GET(request: NextRequest) {
@@ -10,10 +10,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: 'Unauthorized. Please provide ?key=polymarket-bangladesh-verify-99' }, { status: 401 });
     }
 
-    const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const supabaseKey = process.env.SUPABASE_SECRET_KEY || process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY!;
-
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabase = await createServiceClient();
 
     const TEST_USER_ID = '51bedd0f-3476-4350-88d5-428c9794f448'; // Valid production user
     const TEST_MARKET_ID = '3574357a-0b1e-40c3-bb8d-614bf33b4224';

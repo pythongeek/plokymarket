@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, Suspense } from 'react';
+import Link from 'next/link';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -29,6 +30,7 @@ import { useUser } from '@/hooks/useUser';
 import { PnLDashboard } from '@/components/portfolio/PnLDashboard';
 import { PositionHistory } from '@/components/portfolio/PositionHistory';
 import { PerformanceCharts } from '@/components/portfolio/PerformanceCharts';
+import { TransactionHistory } from '@/components/portfolio/TransactionHistory';
 import { PortfolioErrorBoundary } from '@/components/portfolio/ErrorBoundary';
 import { cn } from '@/lib/utils';
 
@@ -50,7 +52,7 @@ const achievements = [
   { id: 'master', name: 'মাস্টার ট্রেডার', icon: Crown, color: 'rose', requirement: '১০০টি সফল ট্রেড' }
 ];
 
-const pageVariants = {
+const pageVariants: any = {
   initial: { opacity: 0, y: 20 },
   animate: {
     opacity: 1,
@@ -60,7 +62,7 @@ const pageVariants = {
   exit: { opacity: 0, y: -20 }
 };
 
-const containerVariants = {
+const containerVariants: any = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
@@ -68,7 +70,7 @@ const containerVariants = {
   }
 };
 
-const itemVariants = {
+const itemVariants: any = {
   hidden: { opacity: 0, y: 20 },
   visible: {
     opacity: 1,
@@ -383,6 +385,10 @@ export default function PortfolioPage() {
                       <PieChart className="w-4 h-4" />
                       <span className="hidden sm:inline">পারফরম্যান্স</span>
                     </TabsTrigger>
+                    <TabsTrigger value="transactions" className="gap-2">
+                      <Wallet className="w-4 h-4" />
+                      <span className="hidden sm:inline">লেনদেনসমূহ</span>
+                    </TabsTrigger>
                   </TabsList>
                 </div>
 
@@ -419,6 +425,18 @@ export default function PortfolioPage() {
                     >
                       <PortfolioErrorBoundary>
                         <PerformanceCharts userId={user?.id} />
+                      </PortfolioErrorBoundary>
+                    </motion.div>
+                  </TabsContent>
+
+                  <TabsContent value="transactions" className="mt-0">
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                    >
+                      <PortfolioErrorBoundary>
+                        <TransactionHistory userId={user?.id} />
                       </PortfolioErrorBoundary>
                     </motion.div>
                   </TabsContent>
@@ -509,6 +527,3 @@ function QuickStatCard({
   );
 }
 
-function cn(...classes: (string | undefined | false)[]) {
-  return classes.filter(Boolean).join(' ');
-}

@@ -13,6 +13,8 @@ import { useToast } from '@/components/ui/use-toast';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useStore } from '@/store/useStore';
+import { useExchangeRate } from '@/hooks/useExchangeRate';
+import { ExchangeRateBadge } from '@/components/ExchangeRateBadge';
 
 const withdrawSchema = z.object({
     mfs_provider: z.enum(['bkash', 'nagad', 'rocket', 'upay']),
@@ -28,7 +30,7 @@ interface WithdrawalFormProps {
 
 export function WithdrawalForm({ onSuccess }: WithdrawalFormProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [currentRate, setCurrentRate] = useState<number>(100);
+    const { rate, isLoading: isRateLoading } = useExchangeRate();
     const { toast } = useToast();
     const { wallet, fetchWallet, fetchTransactions } = useStore();
 
@@ -45,19 +47,6 @@ export function WithdrawalForm({ onSuccess }: WithdrawalFormProps) {
     });
 
     const watchAmount = form.watch('usdt_amount');
-
-    useEffect(() => {
-        const fetchRate = async () => {
-            const { data } = await supabase
-                .from('exchange_rates')
-                .select('usdt_to_bdt')
-                .order('created_at', { ascending: false })
-                .limit(1)
-                .single();
-            if (data) setCurrentRate(data.usdt_to_bdt);
-        };
-        fetchRate();
-    }, [supabase]);
 
     const onSubmit = async (data: WithdrawFormValues) => {
         if (data.usdt_amount > availableBalance) {
@@ -79,7 +68,7 @@ export function WithdrawalForm({ onSuccess }: WithdrawalFormProps) {
 
             toast({
                 title: 'Withdrawal Initiated',
-                description: `Funds locked. You will receive ${Number((data.usdt_amount * currentRate).toFixed(2))} BDT to your MFS address shortly.`,
+                description: `Funds locked. You will receive ${Number((data.usdt_amount * rate).toFixed(2))} BDT to your MFS address shortly.`,
             });
 
             form.reset();
@@ -100,7 +89,10 @@ export function WithdrawalForm({ onSuccess }: WithdrawalFormProps) {
     return (
         <Card className="w-full max-w-md mx-auto">
             <CardHeader>
-                <CardTitle>Withdraw to MFS</CardTitle>
+                <div className="flex items-center justify-between">
+                    <CardTitle>Withdraw to MFS</CardTitle>
+                    <ExchangeRateBadge />
+                </div>
                 <CardDescription>Available Balance: {availableBalance.toFixed(2)} USDT</CardDescription>
             </CardHeader>
             <CardContent>
@@ -134,7 +126,7 @@ export function WithdrawalForm({ onSuccess }: WithdrawalFormProps) {
                         )}
                         <p className="text-xs text-muted-foreground flex items-center gap-1">
                             <AlertCircle className="w-3 h-3" />
-                            You will receive exactly: <strong>{watchAmount ? (watchAmount * currentRate).toFixed(2) : 0} BDT</strong>
+                            You will receive exactly: <strong>{watchAmount ? (watchAmount * rate).toFixed(2) : 0} BDT</strong>
                         </p>
                     </div>
 

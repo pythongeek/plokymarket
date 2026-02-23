@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: 'Invalid method' }, { status: 400 });
     }
 
-    const supabase = createClient();
+    const supabase = await createClient();
 
     try {
         // 1. Check cache first (less than 5 minutes old)

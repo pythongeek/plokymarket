@@ -43,10 +43,10 @@ export class DepthManager {
         return sum;
     }
 
-    update(side: 'bid' | 'ask', price: bigint, delta: bigint) {
+    update(side: 'buy' | 'sell', price: bigint, delta: bigint) {
         const baseIndex = Number(price / DepthManager.TICK_SCALE);
-        const map = side === 'bid' ? this.bids : this.asks;
-        const ftMap = side === 'bid' ? this.bidsFT : this.asksFT;
+        const map = side === 'buy' ? this.bids : this.asks;
+        const ftMap = side === 'buy' ? this.bidsFT : this.asksFT;
 
         for (const g of this.granularities) {
             const index = Math.floor(baseIndex / g);
@@ -60,13 +60,13 @@ export class DepthManager {
         }
     }
 
-    getDepth(side: 'bid' | 'ask', granularity: Granularity) {
+    getDepth(side: 'buy' | 'sell', granularity: Granularity) {
         if (!this.granularities.includes(granularity)) {
             throw new Error(`Invalid granularity: ${granularity}`);
         }
 
-        const buffer = (side === 'bid' ? this.bids : this.asks).get(granularity)!;
-        const ft = (side === 'bid' ? this.bidsFT : this.asksFT).get(granularity)!;
+        const buffer = (side === 'buy' ? this.bids : this.asks).get(granularity)!;
+        const ft = (side === 'buy' ? this.bidsFT : this.asksFT).get(granularity)!;
         const result: { price: bigint, size: bigint, total: bigint }[] = [];
 
         const gBig = BigInt(granularity);
@@ -76,7 +76,7 @@ export class DepthManager {
         // For asks, we calculate cumulative total from the *lowest* price up.
 
         let cumulative = 0n;
-        if (side === 'ask') {
+        if (side === 'sell') {
             for (let i = 0; i < buffer.length; i++) {
                 const size = buffer[i];
                 if (size > 0n) {
@@ -86,7 +86,7 @@ export class DepthManager {
                 }
             }
         } else {
-            // side === 'bid'
+            // side === 'buy'
             // To get cumulative from HIGHEST price, we need high-to-low sum.
             // Fenwick Tree gives sum(0...i). Total - sum(0...i-1) gives sum(i...max).
             const totalVolume = this.ftQuery(ft, buffer.length - 1);
@@ -106,11 +106,11 @@ export class DepthManager {
         return result;
     }
 
-    getCumulativeVolume(side: 'bid' | 'ask', price: bigint, granularity: Granularity): bigint {
+    getCumulativeVolume(side: 'buy' | 'sell', price: bigint, granularity: Granularity): bigint {
         const index = Math.floor(Number(price / DepthManager.TICK_SCALE) / granularity);
-        const ft = (side === 'bid' ? this.bidsFT : this.asksFT).get(granularity)!;
+        const ft = (side === 'buy' ? this.bidsFT : this.asksFT).get(granularity)!;
 
-        if (side === 'ask') {
+        if (side === 'sell') {
             // Asks: total volume AT OR BELOW price (closest to spread)
             return this.ftQuery(ft, index);
         } else {

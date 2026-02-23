@@ -4,7 +4,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createServiceClient } from '@/lib/supabase/server';
 
 export const runtime = 'edge';
 
@@ -12,17 +12,17 @@ export const runtime = 'edge';
 function verifyN8NAuth(request: Request): boolean {
   const apiKey = request.headers.get('x-n8n-api-key');
   const expectedKey = process.env.N8N_API_KEY;
-  
+
   // In development, allow without key
   if (process.env.NODE_ENV === 'development' && !expectedKey) {
     return true;
   }
-  
+
   if (!expectedKey) {
     console.warn('[n8n Webhook] N8N_API_KEY not configured');
     return false;
   }
-  
+
   return apiKey === expectedKey;
 }
 
@@ -47,7 +47,7 @@ interface ResolutionPayload {
  */
 export async function POST(request: Request) {
   const startTime = Date.now();
-  
+
   // Verify authentication
   if (!verifyN8NAuth(request)) {
     return NextResponse.json(
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
 
   try {
     const payload: ResolutionPayload = await request.json();
-    
+
     // Validate required fields
     if (!payload.market_id || !payload.outcome) {
       return NextResponse.json(
@@ -67,16 +67,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        auth: {
-          persistSession: false,
-          autoRefreshToken: false,
-        },
-      }
-    );
+    const supabase = await createServiceClient();
 
     const now = new Date().toISOString();
     const confidenceThreshold = 90;
@@ -91,8 +82,8 @@ export async function POST(request: Request) {
     const threshold = resolutionConfig?.ai_oracle_config?.confidence_threshold || confidenceThreshold;
 
     // Determine resolution status based on confidence
-    const canAutoResolve = 
-      payload.confidence_score >= threshold && 
+    const canAutoResolve =
+      payload.confidence_score >= threshold &&
       payload.outcome !== 'UNCERTAIN';
 
     // Update resolution_systems table
@@ -125,7 +116,7 @@ export async function POST(request: Request) {
     // If confidence is high enough, auto-resolve the market
     if (canAutoResolve) {
       const finalOutcome = payload.outcome === 'YES' ? 1 : 2;
-      
+
       // Update market status
       const { error: marketError } = await supabase
         .from('markets')
@@ -175,7 +166,7 @@ export async function POST(request: Request) {
   } catch (error: any) {
     console.error('[n8n Webhook] Error:', error);
     return NextResponse.json(
-      { 
+      {
         error: error.message || 'Internal Server Error',
         execution_time_ms: Date.now() - startTime,
       },
