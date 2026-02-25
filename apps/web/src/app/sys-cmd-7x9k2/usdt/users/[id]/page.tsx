@@ -12,8 +12,9 @@ import Link from 'next/link';
 export default async function UserDetailPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
+  const { id } = await params;
   const supabase = await createClient();
 
   // Get user info
@@ -33,7 +34,7 @@ export default async function UserDetailPage({
         updated_at
       )
     `)
-    .eq('id', params.id)
+    .eq('id', id)
     .single();
 
   // Get exchange rate
@@ -48,14 +49,14 @@ export default async function UserDetailPage({
   const { data: deposits } = await supabase
     .from('deposit_requests')
     .select('*')
-    .eq('user_id', params.id)
+    .eq('user_id', id)
     .order('created_at', { ascending: false })
     .limit(10);
 
   const { data: withdrawals } = await supabase
     .from('withdrawal_requests')
     .select('*')
-    .eq('user_id', params.id)
+    .eq('user_id', id)
     .order('created_at', { ascending: false })
     .limit(10);
 

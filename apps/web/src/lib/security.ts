@@ -139,18 +139,24 @@ class RateLimiter {
     }
 }
 
-// Initialize Redis silently, avoiding crashes if env variables are missing
+// Lazy initialization of Redis to avoid env var warnings at build time
 let redis: Redis | undefined;
-try {
-    redis = Redis.fromEnv();
-} catch (e) {
-    console.warn('Redis for rate limiting is not configured.');
-}
+const getRedis = (): Redis | undefined => {
+    if (!redis) {
+        const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+        const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+        if (url && token) {
+            redis = new Redis({ url, token });
+        }
+    }
+    return redis;
+};
 
 // Global rate limiter instances
 export const loginRateLimiter = {
     isRateLimited: async (key: string): Promise<boolean> => {
         try {
+            const redis = getRedis();
             if (!redis) return false;
             const count = await redis.get<number>(`ratelimit:login:${key}`);
             return (count ?? 0) >= 5; // Limit to 5 attempts
@@ -159,6 +165,7 @@ export const loginRateLimiter = {
 
     recordAttempt: async (key: string): Promise<void> => {
         try {
+            const redis = getRedis();
             if (!redis) return;
             const k = `ratelimit:login:${key}`;
             await redis.incr(k);
@@ -168,6 +175,7 @@ export const loginRateLimiter = {
 
     reset: async (key: string): Promise<void> => {
         try {
+            const redis = getRedis();
             if (!redis) return;
             await redis.del(`ratelimit:login:${key}`);
         } catch (e) { console.error('Redis error', e); }
@@ -175,6 +183,7 @@ export const loginRateLimiter = {
 
     getRemainingTime: async (key: string): Promise<number> => {
         try {
+            const redis = getRedis();
             if (!redis) return 0;
             const ttl = await redis.pttl(`ratelimit:login:${key}`);
             return ttl > 0 ? Math.ceil(ttl / 1000) : 0;
@@ -188,6 +197,7 @@ export const loginRateLimiter = {
 export const withdrawalRateLimiter = {
     isRateLimited: async (userId: string): Promise<boolean> => {
         try {
+            const redis = getRedis();
             if (!redis) return false;
             const count = await redis.get<number>(`ratelimit:withdrawal:${userId}`);
             return (count ?? 0) >= 3; // Strict: Max 3 withdrawals per hour
@@ -196,6 +206,7 @@ export const withdrawalRateLimiter = {
 
     recordAttempt: async (userId: string): Promise<void> => {
         try {
+            const redis = getRedis();
             if (!redis) return;
             const k = `ratelimit:withdrawal:${userId}`;
             await redis.incr(k);

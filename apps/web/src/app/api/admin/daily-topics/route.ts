@@ -32,7 +32,7 @@ async function verifyAdmin(request: Request): Promise<{ isAdmin: boolean; userId
     .eq('id', user.id)
     .single();
 
-  if (profile?.role !== 'admin') {
+  if ((profile as any)?.role !== 'admin') {
     return { isAdmin: false, error: 'Not an admin' };
   }
 
@@ -57,7 +57,7 @@ export async function GET(request: Request) {
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
 
-    const supabase = await createServiceClient();
+    const supabase = await createServiceClient() as any;
 
     let query = supabase
       .from('ai_daily_topics')
@@ -110,7 +110,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    const supabase = await createServiceClient();
+    const supabase = await createServiceClient() as any;
 
     if (action === 'approve') {
       // Get topic details
@@ -204,7 +204,7 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Missing topic ID' }, { status: 400 });
     }
 
-    const supabase = await createServiceClient();
+    const supabase = await createServiceClient() as any;
 
     const { error } = await supabase
       .from('ai_daily_topics')

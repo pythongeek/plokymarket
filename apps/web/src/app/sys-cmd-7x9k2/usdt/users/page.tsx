@@ -9,10 +9,11 @@ import { Search, ArrowUpDown, Eye } from 'lucide-react';
 export default async function UsersPage({
   searchParams,
 }: {
-  searchParams: { q?: string; sort?: string };
+  searchParams: Promise<{ q?: string; sort?: string }>;
 }) {
   const supabase = await createClient();
-  const query = searchParams.q || '';
+  const params = await searchParams;
+  const query = params.q || '';
 
   // Get users with wallet info
   let usersQuery = supabase

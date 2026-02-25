@@ -161,16 +161,12 @@ export function EventCreationPanel({ onEventCreated }: EventCreationPanelProps) 
     }
 
     setIsCreating(true);
-    const supabase = createClient();
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-
       const response = await fetch('/api/admin/events/create', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session?.access_token}`
         },
         body: JSON.stringify({
           event_data: eventData,

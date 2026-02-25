@@ -8,7 +8,7 @@ import { createClient } from '@/lib/supabase/server';
  */
 export async function POST(
     req: NextRequest,
-    { params }: { params: { requestId: string } }
+    { params }: { params: Promise<{ requestId: string }> }
 ) {
     try {
         const supabase = await createClient();
@@ -27,7 +27,7 @@ export async function POST(
 
         const body = await req.json();
         const { winning_outcome, reason } = body;
-        const requestId = params.requestId;
+        const { requestId } = await params;
 
         if (!winning_outcome || !reason) {
             return NextResponse.json({ error: 'winning_outcome and reason are required' }, { status: 400 });

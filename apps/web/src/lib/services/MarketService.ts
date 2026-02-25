@@ -40,7 +40,7 @@ export class MarketService implements IMarketService {
                 .insert({
                     ...marketData,
                     event_id: eventId,
-                    status: marketData.status || 'pending',
+                    status: marketData.status || 'active',
                 })
                 .select()
                 .single();
@@ -62,7 +62,7 @@ export class MarketService implements IMarketService {
                 const { error: resSysError } = await getSupabaseAdmin()
                     .from('resolution_systems')
                     .insert({
-                        event_id: newMarket.id, // Note: resolution_systems.event_id maps to markets.id
+                        event_id: eventId, // FIXED: Use the eventId parameter, not market.id
                         primary_method: primaryMethod,
                         ai_keywords: aiKeywords,
                         confidence_threshold: confidenceThreshold,

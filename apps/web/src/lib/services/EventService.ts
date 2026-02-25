@@ -33,22 +33,64 @@ export class EventService {
 
     /**
      * Normalizes event data and inserts it into the database.
+     * Only whitelisted columns are sent to Supabase to prevent invalid-column errors.
      */
-    async createEvent(eventData: Partial<Event>): Promise<Event> {
-        console.log(`[EventService] Creating event: ${eventData.title}`);
+    async createEvent(eventData: Partial<Event> & Record<string, any>): Promise<Event> {
+        console.log(`🔥 [EventService] Creating event: ${eventData.title}`);
 
         try {
             const title = eventData.title || eventData.question || 'Untitled Event';
             const slug = eventData.slug || this.generateSlug(title);
 
-            const payload = {
-                ...eventData,
+            // Check for duplicate slug
+            const { data: existingEvent } = await getSupabaseAdmin()
+                .from('events')
+                .select('id, slug, status')
+                .eq('slug', slug)
+                .maybeSingle();
+
+            if (existingEvent) {
+                console.warn(`🔥 [EventService] Event with slug "${slug}" already exists, appending timestamp`);
+            }
+
+            const finalSlug = existingEvent ? `${slug}-${Date.now().toString(36)}` : slug;
+
+            // ✅ WHITELIST: Only send valid events table columns
+            const payload: Record<string, any> = {
                 title,
-                slug,
+                question: eventData.question || title,
+                slug: finalSlug,
+                description: eventData.description || '',
+                category: eventData.category || 'general',
+                subcategory: eventData.subcategory || null,
+                tags: eventData.tags || [],
                 status: eventData.status || 'active',
+                starts_at: eventData.starts_at || new Date().toISOString(),
+                ends_at: eventData.ends_at || null,
+                trading_opens_at: eventData.trading_opens_at || new Date().toISOString(),
+                trading_closes_at: eventData.trading_closes_at || null,
+                image_url: eventData.image_url || null,
+                is_featured: eventData.is_featured || false,
+                resolution_source: eventData.resolution_source || null,
+                resolution_method: eventData.resolution_method || 'manual_admin',
+                resolution_delay: eventData.resolution_delay ?? 1440,
+                ai_keywords: eventData.ai_keywords || [],
+                ai_sources: eventData.ai_sources || [],
+                ai_confidence_threshold: eventData.ai_confidence_threshold || 85,
+                initial_liquidity: eventData.initial_liquidity || 1000,
+                answer1: eventData.answer1 || 'হ্যাঁ (YES)',
+                answer2: eventData.answer2 || 'না (NO)',
+                created_by: eventData.created_by || null,
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
             };
+
+            // Remove null/undefined values to let DB defaults handle them
+            Object.keys(payload).forEach(key => {
+                if (payload[key] === undefined) delete payload[key];
+            });
+
+            console.log(`🔥 [EventService] Insert payload keys:`, Object.keys(payload).join(', '));
 
             const { data, error } = await getSupabaseAdmin()
                 .from('events')
@@ -57,14 +99,23 @@ export class EventService {
                 .single();
 
             if (error) {
-                console.error('[EventService] Insert error:', error);
+                console.error('🔥 [EventService] Insert error:', {
+                    code: error.code,
+                    message: error.message,
+                    details: error.details,
+                    hint: error.hint
+                });
                 throw new Error(error.message);
             }
 
-            console.log(`[EventService] Event created: ${data.id}`);
+            console.log(`🔥 [EventService] Event created successfully:`, {
+                id: data.id,
+                slug: data.slug,
+                status: data.status,
+            });
             return data as Event;
         } catch (err: any) {
-            console.error('[EventService] createEvent failed:', err);
+            console.error('🔥 [EventService] createEvent failed:', err.message);
             throw err;
         }
     }

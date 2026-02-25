@@ -1,0 +1,65 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e4]:
+    - link "Plokymarket" [ref=e6] [cursor=pointer]:
+      - /url: /
+      - img [ref=e8]
+      - generic [ref=e11]: Plokymarket
+    - generic [ref=e12]:
+      - generic [ref=e13]:
+        - generic [ref=e14]: একটি অ্যাকাউন্ট তৈরি করুন
+        - generic [ref=e15]: আজই প্রেডিকশন মার্কেটে ট্রেডিং শুরু করুন
+      - generic [ref=e16]:
+        - generic [ref=e17]:
+          - generic [ref=e18]:
+            - generic [ref=e19]: পুরো নাম
+            - generic [ref=e20]:
+              - img [ref=e21]
+              - textbox "পুরো নাম" [ref=e24]:
+                - /placeholder: রহিম উদ্দিন
+          - generic [ref=e25]:
+            - generic [ref=e26]: ইমেইল
+            - generic [ref=e27]:
+              - img [ref=e28]
+              - textbox "ইমেইল" [ref=e31]:
+                - /placeholder: name@example.com
+          - generic [ref=e32]:
+            - generic [ref=e33]: পাসওয়ার্ড
+            - generic [ref=e34]:
+              - img [ref=e35]
+              - textbox "পাসওয়ার্ড" [ref=e38]:
+                - /placeholder: একটি শক্তিশালী পাসওয়ার্ড তৈরি করুন
+              - button [ref=e39] [cursor=pointer]:
+                - img [ref=e40]
+          - generic [ref=e43]:
+            - generic [ref=e44]: পাসওয়ার্ড নিশ্চিত করুন
+            - generic [ref=e45]:
+              - img [ref=e46]
+              - textbox "পাসওয়ার্ড নিশ্চিত করুন" [ref=e49]:
+                - /placeholder: আপনার পাসওয়ার্ড নিশ্চিত করুন
+          - generic [ref=e50]:
+            - checkbox "আমি সেবার শর্তাবলী এবং গোপনীয়তা নীতি তে সম্মত। আমি নিশ্চিত করছি আমার বয়স ১৮ বছর বা তার বেশি।" [ref=e51] [cursor=pointer]
+            - checkbox
+            - generic [ref=e52]:
+              - text: আমি
+              - link "সেবার শর্তাবলী" [ref=e53] [cursor=pointer]:
+                - /url: /terms
+              - text: এবং
+              - link "গোপনীয়তা নীতি" [ref=e54] [cursor=pointer]:
+                - /url: /privacy
+              - text: তে সম্মত। আমি নিশ্চিত করছি আমার বয়স ১৮ বছর বা তার বেশি।
+          - button "অ্যাকাউন্ট তৈরি করুন" [ref=e55] [cursor=pointer]:
+            - text: অ্যাকাউন্ট তৈরি করুন
+            - img
+          - generic [ref=e60]: অথবা এর মাধ্যমে চালিয়ে যান
+          - button "Google Sign up with Google" [ref=e61] [cursor=pointer]:
+            - img "Google" [ref=e62]
+            - text: Sign up with Google
+        - generic [ref=e63]:
+          - text: ইতিমধ্যে অ্যাকাউন্ট আছে?
+          - link "লগইন করুন" [ref=e64] [cursor=pointer]:
+            - /url: /login
+  - alert [ref=e65]
+```

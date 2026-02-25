@@ -4,7 +4,7 @@
  * across the new Service Layer Architecture.
  */
 
-export type ResolutionMethod = 'manual_admin' | 'ai_oracle' | 'expert_panel' | 'community_vote';
+export type ResolutionMethod = 'manual_admin' | 'ai_oracle' | 'expert_panel' | 'external_api' | 'community_vote' | 'hybrid';
 
 export interface ResolutionConfig {
     method: ResolutionMethod;
@@ -24,13 +24,25 @@ export interface Event {
     status: EventStatus;
     starts_at?: string;
     ends_at: string;
+    trading_closes_at?: string;
+    trading_opens_at?: string;
     category?: string;
+    subcategory?: string;
+    tags?: string[];
     created_at?: string;
     updated_at?: string;
     total_volume?: number;
     question?: string;
     image_url?: string;
     created_by?: string;
+    is_featured?: boolean;
+    is_private?: boolean;
+    resolution_source?: string;
+    resolution_method?: ResolutionMethod;
+    ai_keywords?: string[];
+    ai_sources?: string[];
+    ai_confidence_threshold?: number;
+    initial_liquidity?: number;
 }
 
 export interface Market {

@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase/server';
  */
 export async function PATCH(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         const supabase = await createClient();
@@ -30,7 +30,7 @@ export async function PATCH(
         }
 
         const body = await request.json();
-        const marketId = params.id;
+        const { id: marketId } = await params;
 
         // Whitelist allowed fields
         const allowedFields = [
@@ -88,7 +88,7 @@ export async function PATCH(
  */
 export async function GET(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         const supabase = await createClient();
@@ -106,6 +106,8 @@ export async function GET(
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
+        const { id } = await params;
+
         const { data: market, error } = await supabase
             .from('markets')
             .select(`
@@ -114,7 +116,7 @@ export async function GET(
         condition_id, token1, token2, neg_risk, resolver_reference,
         created_at, updated_at
       `)
-            .eq('id', params.id)
+            .eq('id', id)
             .single();
 
         if (error || !market) {

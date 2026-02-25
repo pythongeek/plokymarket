@@ -9,11 +9,11 @@ export async function GET() {
     try {
         const supabase = await createClient();
 
-        const { data, error } = await supabase
+        const { data, error } = await (supabase
             .from('platform_wallets')
             .select('method, wallet_number, wallet_name, instructions')
             .eq('is_active', true)
-            .order('display_order');
+            .order('display_order') as any);
 
         if (error) throw error;
 
@@ -34,13 +34,13 @@ export async function POST(request: NextRequest) {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-        const { data: profile } = await supabase
+        const { data: profile } = await (supabase
             .from('user_profiles')
             .select('is_admin, is_super_admin')
             .eq('id', user.id)
-            .single();
+            .single() as any);
 
-        if (!profile?.is_admin && !profile?.is_super_admin) {
+        if (!(profile as any)?.is_admin && !(profile as any)?.is_super_admin) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
         const { method, wallet_number, wallet_name, instructions, is_active, display_order } = body;
 
         // Upsert by method
-        const { data, error } = await supabase
+        const { data, error } = await (supabase
             .from('platform_wallets')
             .upsert({
                 method,
@@ -58,9 +58,9 @@ export async function POST(request: NextRequest) {
                 is_active: is_active ?? true,
                 display_order: display_order ?? 0,
                 updated_at: new Date().toISOString(),
-            }, { onConflict: 'method' })
+            } as any, { onConflict: 'method' })
             .select()
-            .single();
+            .single() as any);
 
         if (error) throw error;
 

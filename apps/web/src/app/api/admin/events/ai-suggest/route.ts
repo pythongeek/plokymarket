@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
             .select('is_admin, is_super_admin')
             .eq('id', user.id)
             .single();
-        if (!profile?.is_admin && !profile?.is_super_admin) {
+        if (!(profile as any)?.is_admin && !(profile as any)?.is_super_admin) {
             return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
         }
 

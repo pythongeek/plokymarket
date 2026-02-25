@@ -1,7 +1,19 @@
 import { Redis } from '@upstash/redis';
 import { createClient } from '@/lib/supabase/server';
 
-const redis = Redis.fromEnv();
+// Lazy initialization of Redis client to avoid env var warnings at build time
+let redisClient: Redis | null = null;
+const getRedis = (): Redis | null => {
+  if (!redisClient) {
+    const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+    const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+    if (url && token) {
+      redisClient = new Redis({ url, token });
+    }
+  }
+  return redisClient;
+};
+
 const CACHE_TTL = 1; // 1 second for near real-time
 
 export interface OrderBookLevel {
@@ -21,11 +33,14 @@ export interface OrderBookSnapshot {
 export class OrderBookService {
     async getOrderBook(marketId: string): Promise<OrderBookSnapshot> {
         const cacheKey = `orderbook:${marketId}`;
+        const redis = getRedis();
 
         // Try cache first — avoids DB query on every request
-        const cached = await redis.get<OrderBookSnapshot>(cacheKey);
-        if (cached) {
-            return cached;
+        if (redis) {
+            const cached = await redis.get<OrderBookSnapshot>(cacheKey);
+            if (cached) {
+                return cached;
+            }
         }
 
         // Cache miss — reconstruct from database
@@ -89,7 +104,9 @@ export class OrderBookService {
         };
 
         // Write to Redis cache; expires after CACHE_TTL seconds
-        await redis.setex(cacheKey, CACHE_TTL, snapshot);
+        if (redis) {
+            await redis.setex(cacheKey, CACHE_TTL, snapshot);
+        }
 
         return snapshot;
     }
@@ -126,7 +143,10 @@ export class OrderBookService {
 
     // Call this after any order mutation (create, cancel, fill) to force DB re-read
     async invalidateCache(marketId: string): Promise<void> {
-        await redis.del(`orderbook:${marketId}`);
+        const redis = getRedis();
+        if (redis) {
+            await redis.del(`orderbook:${marketId}`);
+        }
     }
 }
 

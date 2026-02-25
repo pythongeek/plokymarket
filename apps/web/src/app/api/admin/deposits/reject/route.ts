@@ -48,7 +48,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const service = await createServiceClient();
+    const service = await createServiceClient() as any;
 
     // Get deposit request
     const { data: deposit, error: depositError } = await service
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (deposit.status !== 'pending') {
+    if ((deposit as any).status !== 'pending') {
       return NextResponse.json(
         { error: 'Deposit already processed' },
         { status: 400 }
@@ -93,15 +93,15 @@ export async function POST(request: Request) {
 
     // Create notification for user
     await service.from('notifications').insert({
-      user_id: deposit.user_id,
+      user_id: (deposit as any).user_id,
       type: 'deposit_rejected',
       title: 'ডিপোজিট বাতিল হয়েছে',
-      message: `আপনার ৳${deposit.bdt_amount} ডিপোজিট রিকোয়েস্ট বাতিল করা হয়েছে। কারণ: ${rejectionReason}`,
+      message: `আপনার ৳${(deposit as any).bdt_amount} ডিপোজিট রিকোয়েস্ট বাতিল করা হয়েছে। কারণ: ${rejectionReason}`,
       metadata: {
         deposit_id: depositId,
         rejection_reason: rejectionReason
       }
-    });
+    } as any);
 
     return NextResponse.json({
       success: true,

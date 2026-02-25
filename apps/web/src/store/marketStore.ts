@@ -208,9 +208,9 @@ export const useMarketStore = create<MarketState & MarketActions>()(
               // 3. আশবাদী নিশ্চিতকৃত দ্বারা প্রতিস্থাপন
               set((state) => {
                 state.events.delete(tempId);
-                state.events.set(result.event.id, { ...result.event, is_pending: false });
+                state.events.set(result.event!.id, { ...result.event!, is_pending: false } as any);
                 state.pendingCreations = state.pendingCreations.filter((id: string) => id !== tempId);
-                state.filteredEventIds = state.filteredEventIds.map((id: string) => id === tempId ? result.event.id : id);
+                state.filteredEventIds = state.filteredEventIds.map((id: string) => id === tempId ? result.event!.id : id);
               });
 
               return { success: true, event: result.event };

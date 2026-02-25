@@ -76,12 +76,24 @@ export async function fetchMarkets() {
 
 export async function fetchMarketById(id: string) {
   if (!supabase) return null;
+  // Try by market ID first
   const { data, error } = await supabase
     .from('markets')
     .select('*')
     .eq('id', id)
     .single();
-  if (error && error.code !== 'PGRST116') throw error;
+  if (data) return data;
+  // Fallback: try by event_id (homepage links use event IDs)
+  if (error && error.code === 'PGRST116') {
+    const { data: eventMarket } = await supabase
+      .from('markets')
+      .select('*')
+      .eq('event_id', id)
+      .limit(1)
+      .single();
+    return eventMarket || null;
+  }
+  if (error) throw error;
   return data;
 }
 

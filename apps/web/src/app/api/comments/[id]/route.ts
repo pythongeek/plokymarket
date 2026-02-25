@@ -7,10 +7,10 @@ const commentsService = new CommentsService();
 // PATCH /api/comments/[id] - Edit comment
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const commentId = params.id;
+    const { id: commentId } = await params;
     const body = await req.json();
     const { content } = body;
 
@@ -46,10 +46,10 @@ export async function PATCH(
 // DELETE /api/comments/[id] - Delete comment
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const commentId = params.id;
+    const { id: commentId } = await params;
 
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();

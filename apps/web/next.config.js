@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-    // Relaxing some checks to ensure build proceeds
+    // Build checks - temporarily allowing TypeScript errors
+    // TODO: Generate fresh Supabase types to fix all type errors
     typescript: {
         ignoreBuildErrors: true,
     },

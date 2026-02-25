@@ -1,4 +1,4 @@
-import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import type { Database } from '@/types/database.types';
 
@@ -22,22 +22,17 @@ export async function createClient() {
     supabaseAnonKey,
     {
       cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
+        getAll() {
+          return cookieStore.getAll();
         },
-        set(name: string, value: string, options: CookieOptions) {
+        setAll(cookiesToSet) {
           try {
-            cookieStore.set({ name, value, ...options });
+            cookiesToSet.forEach(({ name, value, options }) => {
+              cookieStore.set(name, value, options);
+            });
           } catch (error) {
             // Handle cookie setting in Server Components
             // This can happen when the cookie is being set during SSR
-          }
-        },
-        remove(name: string, options: CookieOptions) {
-          try {
-            cookieStore.set({ name, value: '', ...options });
-          } catch (error) {
-            // Handle cookie removal in Server Components
           }
         },
       },
@@ -55,6 +50,7 @@ export async function createClient() {
  */
 export async function createServiceClient() {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const cookieStore = await cookies();
   
   if (!supabaseUrl || !serviceRoleKey) {
     console.error('Service role key not configured');
@@ -65,6 +61,21 @@ export async function createServiceClient() {
     supabaseUrl,
     serviceRoleKey,
     {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) => {
+              cookieStore.set(name, value, options);
+            });
+          } catch (error) {
+            // Handle cookie setting in Server Components
+            // This can happen when the cookie is being set during SSR
+          }
+        },
+      },
       auth: {
         autoRefreshToken: false,
         persistSession: false,

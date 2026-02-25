@@ -92,7 +92,9 @@ import { useUser } from '@/hooks/useUser';
 // ANIMATION VARIANTS
 // ============================================
 
-const containerVariants = {
+import type { Variants } from 'framer-motion';
+
+const containerVariants: Variants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
@@ -100,7 +102,7 @@ const containerVariants = {
   },
 };
 
-const itemVariants = {
+const itemVariants: Variants = {
   hidden: { opacity: 0, y: 20 },
   visible: {
     opacity: 1,
@@ -109,7 +111,7 @@ const itemVariants = {
   },
 };
 
-const podiumVariants = {
+const podiumVariants: Variants = {
   hidden: { scale: 0.8, opacity: 0 },
   visible: (i: number) => ({
     scale: 1,
@@ -405,7 +407,7 @@ function RewardTierCard({ tier, percentile }: { tier: RewardTier; percentile: nu
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      transition={{ type: 'spring', stiffness: 200 }}
+      transition={{ type: 'spring' as const, stiffness: 200 }}
       className={cn(
         "relative overflow-hidden rounded-2xl p-6 bg-gradient-to-br",
         tier.gradient

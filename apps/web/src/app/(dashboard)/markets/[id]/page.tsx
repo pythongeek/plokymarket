@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useStore } from '@/store/useStore';
 import { OrderBook } from '@/components/trading/OrderBook';
@@ -54,18 +54,66 @@ export default function MarketDetailPage() {
     events
   } = useMarketStore();
 
-  useEffect(() => {
-    fetchMarkets();
-    if (params.id) fetchOrders(params.id);
-    subscribeToEmergencySettings();
-    return () => unsubscribeAll();
-  }, [fetchMarkets, fetchOrders, params.id, subscribeToEmergencySettings, unsubscribeAll]);
+  const [resolvedMarket, setResolvedMarket] = useState<Market | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Use event from marketStore if available for real-time pause updates
   const event = marketId ? events.get(marketId) : undefined;
-  const market = (event as unknown as Market) || (marketId ? markets.find((m) => m.id === marketId) : undefined);
+  // Look up by market ID first, then by event_id (homepage links use event IDs)
+  const storeMarket = (event as unknown as Market) || (marketId
+    ? markets.find((m) => m.id === marketId) || markets.find((m) => (m as any).event_id === marketId)
+    : undefined);
+
+  const market = storeMarket || resolvedMarket;
+
+  useEffect(() => {
+    fetchMarkets();
+    subscribeToEmergencySettings();
+    return () => unsubscribeAll();
+  }, [fetchMarkets, subscribeToEmergencySettings, unsubscribeAll]);
+
+  // If store lookup fails, fetch from server API (bypasses RLS, supports event_id)
+  useEffect(() => {
+    if (!marketId) { setIsLoading(false); return; }
+    if (storeMarket) { setIsLoading(false); return; }
+
+    let cancelled = false;
+    const resolve = async () => {
+      try {
+        const res = await fetch(`/api/markets/${marketId}`);
+        if (res.ok) {
+          const m = await res.json();
+          if (!cancelled && m && !m.error) {
+            setResolvedMarket(m as Market);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to resolve market:', err);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+    resolve();
+    return () => { cancelled = true; };
+  }, [marketId, storeMarket]);
+
+  // Fetch orders using the resolved market ID
+  useEffect(() => {
+    if (market?.id) {
+      fetchOrders(market.id);
+    }
+  }, [market?.id, fetchOrders]);
 
   const dateLocale = i18n.language === 'bn' ? bn : enUS;
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mb-4" />
+        <p className="text-muted-foreground">লোড হচ্ছে...</p>
+      </div>
+    );
+  }
 
   if (!market) {
     return (

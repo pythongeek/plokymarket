@@ -30,11 +30,11 @@ export class OracleService {
         const supabase = await createClient();
 
         // Fetch Market & Resolution Config
-        const { data: market, error } = await supabase
+        const { data: market, error } = await (supabase
             .from('markets')
             .select('*, resolution_systems(*)')
             .eq('id', marketId)
-            .single();
+            .single() as any);
 
         if (error || !market) throw new Error('Market or resolution system not found');
 
@@ -52,7 +52,7 @@ export class OracleService {
         const pipelineId = `pipe_${Date.now()}_${marketId.slice(0, 8)}`;
         const aiData = result.evidence.aiAnalysis || {};
 
-        const { data: pipeline, error: pipeError } = await supabase
+        const { data: pipeline, error: pipeError } = await (supabase
             .from('ai_resolution_pipelines')
             .insert({
                 pipeline_id: pipelineId,
@@ -61,12 +61,12 @@ export class OracleService {
                 recommended_action: aiData.recommendedAction || 'HUMAN_REVIEW'
             })
             .select()
-            .single();
+            .single() as any);
 
         if (pipeError) throw new Error('Database error creating resolution pipeline');
 
         // Update Pipeline (to 'completed' to trigger tr_auto_resolve)
-        const { data: updatedPipeline, error: updateError } = await supabase
+        const { data: updatedPipeline, error: updateError } = await (supabase
             .from('ai_resolution_pipelines')
             .update({
                 query: aiData.query || { marketId, context },
@@ -81,7 +81,7 @@ export class OracleService {
             })
             .eq('id', pipeline.id)
             .select()
-            .single();
+            .single() as any);
 
         if (updateError) {
             console.error('Failed to update resolution pipeline', updateError);
@@ -97,12 +97,12 @@ export class OracleService {
     async manualFinalize(marketId: string, outcome: string, adminId: string, notes?: string) {
         const supabase = await createClient();
 
-        const { data, error } = await supabase.rpc('manual_resolve_market', {
+        const { data, error } = await (supabase.rpc('manual_resolve_market', {
             p_market_id: marketId,
             p_outcome: outcome,
             p_admin_id: adminId,
             p_notes: notes
-        });
+        }) as any);
 
         if (error) throw error;
         return data;
@@ -111,14 +111,14 @@ export class OracleService {
     private async resolveMarketInDb(supabase: any, marketId: string, outcome: string) {
         // This is now largely handled by the DB trigger `tr_auto_resolve`,
         // but keeping a manual helper for edge cases or non-pipeline resolutions.
-        const { error: mError } = await supabase
+        const { error: mError } = await (supabase
             .from('markets')
             .update({
                 status: 'resolved',
                 winning_outcome: outcome,
                 resolved_at: new Date().toISOString()
             })
-            .eq('id', marketId);
+            .eq('id', marketId) as any);
 
         if (mError) throw mError;
     }
@@ -126,5 +126,69 @@ export class OracleService {
     // Alias for backward compatibility / API triggering
     async requestResolution(marketId: string, context?: any) {
         return this.proposeOutcome(marketId, context);
+    }
+
+    /**
+     * 3. FINALIZE REQUEST: Finalize an oracle request and resolve the market.
+     * Looks up the oracle_request, gets its proposed outcome, and resolves the market.
+     */
+    async finalizeRequest(requestId: string) {
+        const supabase = await createClient();
+
+        // Fetch the oracle request
+        const { data: request, error } = await (supabase
+            .from('oracle_requests')
+            .select('*')
+            .eq('id', requestId)
+            .single() as any);
+
+        if (error || !request) throw new Error('Oracle request not found');
+
+        if (request.status === 'resolved') {
+            throw new Error('Oracle request is already resolved');
+        }
+
+        const outcome = request.proposed_outcome || request.final_outcome;
+        if (!outcome) throw new Error('No proposed outcome found on this request');
+
+        // Resolve the market via the DB helper
+        await this.resolveMarketInDb(supabase, request.market_id, outcome);
+
+        // Update the oracle request status
+        await (supabase
+            .from('oracle_requests')
+            .update({ status: 'resolved', resolved_at: new Date().toISOString() })
+            .eq('id', requestId) as any);
+
+        return { success: true, market_id: request.market_id, outcome };
+    }
+
+    /**
+     * 4. CHALLENGE: Record a challenge/dispute against a proposed outcome.
+     */
+    async challengeOutcome(requestId: string, userId: string, reason: string) {
+        const supabase = await createClient();
+
+        const { data: dispute, error } = await (supabase
+            .from('oracle_disputes')
+            .insert({
+                request_id: requestId,
+                challenger_id: userId,
+                reason,
+                status: 'pending',
+                created_at: new Date().toISOString(),
+            })
+            .select()
+            .single() as any);
+
+        if (error) throw new Error(`Failed to create dispute: ${error.message}`);
+
+        // Update oracle request status to 'disputed'
+        await (supabase
+            .from('oracle_requests')
+            .update({ status: 'disputed' })
+            .eq('id', requestId) as any);
+
+        return dispute;
     }
 }

@@ -24,20 +24,20 @@ export async function GET(request: Request) {
             const now = new Date().toISOString();
 
             // Subquery to find market_ids that already have requests
-            const { data: existingRequests } = await supabase
+            const { data: existingRequests } = await (supabase
                 .from('oracle_requests')
-                .select('market_id');
+                .select('market_id') as any);
 
-            const excludedIds = existingRequests?.map(r => r.market_id) || [];
+            const excludedIds = (existingRequests as any[])?.map((r: any) => r.market_id) || [];
 
-            let pendingQuery = supabase
+            let pendingQuery = (supabase
                 .from('markets')
-                .select('id, question, category, status, trading_closes_at')
+                .select('id, question, category, status, trading_closes_at') as any)
                 .lt('trading_closes_at', now)
                 .not('status', 'in', '("resolved","cancelled")');
 
             if (excludedIds.length > 0) {
-                pendingQuery = pendingQuery.not('id', 'in', `(${excludedIds.map(id => `"${id}"`).join(',')})`);
+                pendingQuery = pendingQuery.not('id', 'in', `(${excludedIds.map((id: string) => `"${id}"`).join(',')})`);
             }
 
             const { data: pendingMarkets, error: pendingError } = await pendingQuery.limit(20);
@@ -46,9 +46,9 @@ export async function GET(request: Request) {
             return NextResponse.json({ data: pendingMarkets });
         }
 
-        let query = supabase
+        let query = (supabase
             .from('oracle_requests')
-            .select('*, markets!inner(question, status, category)')
+            .select('*, markets!inner(question, status, category)') as any)
             .order('created_at', { ascending: false });
 
         if (marketId) query = query.eq('market_id', marketId);
@@ -74,12 +74,12 @@ export async function POST(req: NextRequest) {
         if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
         // Admin check
-        const { data: profile } = await supabase
+        const { data: profile } = await (supabase
             .from('user_profiles')
             .select('is_admin, is_super_admin')
             .eq('id', user.id)
-            .single();
-        if (!profile?.is_admin && !profile?.is_super_admin) {
+            .single() as any);
+        if (!(profile as any)?.is_admin && !(profile as any)?.is_super_admin) {
             return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
         }
 
@@ -91,10 +91,10 @@ export async function POST(req: NextRequest) {
         }
 
         // Update market status to AWAITING_RESOLUTION
-        await supabase
+        await (supabase
             .from('markets')
-            .update({ status: 'awaiting_resolution' })
-            .eq('id', market_id);
+            .update({ status: 'awaiting_resolution' } as any)
+            .eq('id', market_id) as any);
 
         const proposal = await oracleService.proposeOutcome(market_id, context);
 

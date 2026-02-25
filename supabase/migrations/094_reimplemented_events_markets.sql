@@ -53,7 +53,7 @@ CREATE TABLE public.events (
     -- Resolution Configuration
     resolution_source TEXT,
     resolution_method VARCHAR(50) DEFAULT 'manual_admin'
-        CHECK (resolution_method IN ('manual_admin', 'ai_oracle', 'expert_panel', 'external_api')),
+        CHECK (resolution_method IN ('manual_admin', 'ai_oracle', 'expert_panel', 'external_api', 'community_vote', 'hybrid')),
     resolution_delay_hours INTEGER DEFAULT 24 CHECK (resolution_delay_hours >= 0 AND resolution_delay_hours <= 720),
     resolved_outcome INTEGER CHECK (resolved_outcome IN (1, 2)),
     resolved_by UUID REFERENCES auth.users(id),
@@ -364,6 +364,9 @@ END;
 $$;
 
 -- Get events for admin with market counts
+-- Drop existing function first to avoid return type conflicts
+DROP FUNCTION IF EXISTS get_admin_events(VARCHAR, VARCHAR, TEXT, INTEGER, INTEGER);
+
 CREATE OR REPLACE FUNCTION get_admin_events(
     p_status VARCHAR DEFAULT NULL,
     p_category VARCHAR DEFAULT NULL,

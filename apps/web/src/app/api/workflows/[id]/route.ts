@@ -7,19 +7,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { DEFAULT_WORKFLOWS } from '@/lib/workflows/WorkflowBuilder';
 
-interface RouteParams {
-  params: {
-    id: string;
-  };
-}
-
 /**
  * GET /api/workflows/[id]
  * Get specific workflow with execution history
  */
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const workflowId = params.id;
+    const { id: workflowId } = await params;
     const supabase = await createClient();
     const url = new URL(request.url);
     const historyLimit = parseInt(url.searchParams.get('historyLimit') || '20');
@@ -108,9 +102,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
  * PUT /api/workflows/[id]
  * Update workflow configuration
  */
-export async function PUT(request: NextRequest, { params }: RouteParams) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const workflowId = params.id;
+    const { id: workflowId } = await params;
     const body = await request.json();
     const supabase = await createClient();
 
@@ -186,9 +180,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
  * DELETE /api/workflows/[id]
  * Delete custom workflow (prevents deletion of defaults)
  */
-export async function DELETE(request: NextRequest, { params }: RouteParams) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const workflowId = params.id;
+    const { id: workflowId } = await params;
     const supabase = await createClient();
 
     // Authenticate

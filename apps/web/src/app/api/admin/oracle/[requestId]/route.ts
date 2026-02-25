@@ -9,29 +9,29 @@ const oracleService = new OracleService();
  */
 export async function GET(
     request: Request,
-    { params }: { params: { requestId: string } }
+    { params }: { params: Promise<{ requestId: string }> }
 ) {
     try {
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-        const requestId = params.requestId;
+        const { requestId } = await params;
 
-        const { data, error } = await supabase
+        const { data, error } = await (supabase
             .from('oracle_requests')
             .select('*, markets(question, status, category, winning_outcome)')
             .eq('id', requestId)
-            .single();
+            .single() as any);
 
         if (error) throw error;
 
         // Also fetch related disputes
-        const { data: disputes } = await supabase
+        const { data: disputes } = await (supabase
             .from('oracle_disputes')
             .select('*')
             .eq('request_id', requestId)
-            .order('created_at', { ascending: false });
+            .order('created_at', { ascending: false }) as any);
 
         return NextResponse.json({ data: { ...data, disputes: disputes || [] } });
     } catch (error: any) {
@@ -45,25 +45,26 @@ export async function GET(
  */
 export async function POST(
     req: NextRequest,
-    { params }: { params: { requestId: string } }
+    { params }: { params: Promise<{ requestId: string }> }
 ) {
     try {
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-        const { data: profile } = await supabase
+        const { requestId } = await params;
+
+        const { data: profile } = await (supabase
             .from('user_profiles')
             .select('is_admin, is_super_admin')
             .eq('id', user.id)
-            .single();
-        if (!profile?.is_admin && !profile?.is_super_admin) {
+            .single() as any);
+        if (!(profile as any)?.is_admin && !(profile as any)?.is_super_admin) {
             return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
         }
 
         const body = await req.json();
         const { action } = body;
-        const requestId = params.requestId;
 
         switch (action) {
             case 'finalize': {

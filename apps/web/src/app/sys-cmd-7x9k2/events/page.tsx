@@ -112,27 +112,40 @@ export default function EventsPage() {
     else setLoading(true);
 
     try {
-      let query = supabase
-        .from('events')
-        .select('*')
-        .order('created_at', { ascending: false });
+      // 🔍 DEBUG: Log fetch attempt
+      console.log('🔥 [DEBUG] Fetching events with filters:', { statusFilter, categoryFilter, searchQuery });
 
-      if (statusFilter) {
-        query = query.eq('status', statusFilter);
-      }
-      if (categoryFilter) {
-        query = query.eq('category', categoryFilter);
-      }
-      if (searchQuery) {
-        query = query.or(`title.ilike.%${searchQuery}%,question.ilike.%${searchQuery}%`);
+      // Use admin API route to bypass RLS
+      const params = new URLSearchParams();
+      if (statusFilter) params.set('status', statusFilter);
+      if (categoryFilter) params.set('category', categoryFilter);
+      if (searchQuery) params.set('search', searchQuery);
+      params.set('limit', '200');
+
+      const response = await fetch(`/api/admin/events?${params.toString()}`);
+      const result = await response.json();
+
+      // 🔍 DEBUG: Log results
+      console.log('🔥 [DEBUG] Events fetched:', { count: result.data?.length, error: result.error });
+
+      if (!response.ok || result.error) {
+        throw new Error(result.error || 'Failed to fetch events');
       }
 
-      const { data, error } = await query;
+      const data = result.data || [];
+      if (data.length > 0) {
+        console.log('🔥 [DEBUG] Sample event:', {
+          id: data[0].id,
+          title: data[0].title,
+          status: data[0].status,
+          slug: data[0].slug,
+          created_at: data[0].created_at
+        });
+      }
 
-      if (error) throw error;
-      setEvents(data || []);
+      setEvents(data);
     } catch (error) {
-      console.error('Error fetching events:', error);
+      console.error('🔥 [DEBUG] Error fetching events:', error);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -253,13 +266,13 @@ export default function EventsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-gradient-to-br from-blue-500/20 to-cyan-500/20 border border-blue-500/30">
-              <Calendar className="w-7 h-7 text-blue-400" />
+          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-gradient-to-br from-blue-50 to-cyan-50 border border-blue-200">
+              <Calendar className="w-7 h-7 text-blue-600" />
             </div>
             ইভেন্ট ম্যানেজমেন্ট
           </h1>
-          <p className="text-slate-400 mt-1">
+          <p className="text-gray-500 mt-1">
             সকল প্রিডিকশন মার্কেট ইভেন্ট পরিচালনা করুন
           </p>
         </div>
@@ -269,7 +282,7 @@ export default function EventsPage() {
             size="sm"
             onClick={() => fetchEvents(true)}
             disabled={refreshing}
-            className="border-slate-700 text-slate-300 hover:text-white hover:border-slate-500"
+            className="border-gray-300 text-gray-700 hover:text-gray-900 hover:border-gray-400"
           >
             <RefreshCw className={cn("w-4 h-4 mr-1", refreshing && "animate-spin")} />
             রিফ্রেশ
@@ -287,19 +300,19 @@ export default function EventsPage() {
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         {[
-          { label: 'মোট ইভেন্ট', value: stats.total, icon: BarChart3, color: 'from-blue-500/10 to-blue-600/10', border: 'border-blue-500/20', iconColor: 'text-blue-400' },
-          { label: 'সক্রিয়', value: stats.active, icon: Activity, color: 'from-emerald-500/10 to-emerald-600/10', border: 'border-emerald-500/20', iconColor: 'text-emerald-400' },
-          { label: 'অপেক্ষমাণ', value: stats.pending, icon: Clock, color: 'from-amber-500/10 to-amber-600/10', border: 'border-amber-500/20', iconColor: 'text-amber-400' },
-          { label: 'সমাধান', value: stats.resolved, icon: CheckCircle2, color: 'from-purple-500/10 to-purple-600/10', border: 'border-purple-500/20', iconColor: 'text-purple-400' },
-          { label: 'মোট ভলিউম', value: `৳${stats.totalVolume.toLocaleString()}`, icon: DollarSign, color: 'from-cyan-500/10 to-cyan-600/10', border: 'border-cyan-500/20', iconColor: 'text-cyan-400' },
+          { label: 'মোট ইভেন্ট', value: stats.total, icon: BarChart3, color: 'from-blue-50 to-blue-100', border: 'border-blue-200', iconColor: 'text-blue-600' },
+          { label: 'সক্রিয়', value: stats.active, icon: Activity, color: 'from-emerald-50 to-emerald-100', border: 'border-emerald-200', iconColor: 'text-emerald-600' },
+          { label: 'অপেক্ষমাণ', value: stats.pending, icon: Clock, color: 'from-amber-50 to-amber-100', border: 'border-amber-200', iconColor: 'text-amber-600' },
+          { label: 'সমাধান', value: stats.resolved, icon: CheckCircle2, color: 'from-purple-50 to-purple-100', border: 'border-purple-200', iconColor: 'text-purple-600' },
+          { label: 'মোট ভলিউম', value: `৳${stats.totalVolume.toLocaleString()}`, icon: DollarSign, color: 'from-cyan-50 to-cyan-100', border: 'border-cyan-200', iconColor: 'text-cyan-600' },
         ].map((stat) => (
           <Card key={stat.label} className={cn("bg-gradient-to-br border", stat.color, stat.border)}>
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-2">
                 <stat.icon className={cn("w-5 h-5", stat.iconColor)} />
               </div>
-              <div className="text-2xl font-bold text-white">{stat.value}</div>
-              <div className="text-xs text-slate-400 mt-0.5">{stat.label}</div>
+              <div className="text-2xl font-bold text-gray-900">{stat.value}</div>
+              <div className="text-xs text-gray-500 mt-0.5">{stat.label}</div>
             </CardContent>
           </Card>
         ))}
@@ -313,7 +326,7 @@ export default function EventsPage() {
             placeholder="ইভেন্ট খুঁজুন..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 bg-slate-900/50 border-slate-700/50 text-white placeholder:text-slate-500 focus:border-blue-500/50"
+            className="pl-10 bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 focus:border-blue-500"
           />
         </div>
         <div className="flex gap-2 overflow-x-auto pb-1">
@@ -327,7 +340,7 @@ export default function EventsPage() {
                 "whitespace-nowrap",
                 statusFilter === key
                   ? "bg-blue-600 text-white border-blue-500"
-                  : "border-slate-700 text-slate-400 hover:text-white hover:border-slate-500"
+                  : "border-gray-300 text-gray-600 hover:text-gray-900 hover:border-gray-400"
               )}
             >
               <config.icon className="w-3.5 h-3.5 mr-1" />
@@ -348,8 +361,8 @@ export default function EventsPage() {
             className={cn(
               "whitespace-nowrap",
               (categoryFilter === cat.id || (cat.id === 'all' && !categoryFilter))
-                ? "bg-slate-700/50 text-white"
-                : "text-slate-400 hover:text-white"
+                ? "bg-gray-200 text-gray-900"
+                : "text-gray-500 hover:text-gray-900"
             )}
           >
             <span className="mr-1">{cat.icon}</span>
@@ -366,15 +379,15 @@ export default function EventsPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
             >
-              <Card className="bg-slate-900/50 border-slate-700/50">
+              <Card className="bg-white border-gray-200">
                 <CardContent className="py-16 text-center">
-                  <div className="p-4 rounded-full bg-slate-800/50 w-fit mx-auto mb-4">
-                    <Calendar className="w-12 h-12 text-slate-600" />
+                  <div className="p-4 rounded-full bg-gray-100 w-fit mx-auto mb-4">
+                    <Calendar className="w-12 h-12 text-gray-400" />
                   </div>
-                  <h3 className="text-xl font-semibold text-slate-300 mb-2">
+                  <h3 className="text-xl font-semibold text-gray-700 mb-2">
                     কোনো ইভেন্ট খুঁজে পাওয়া যায়নি
                   </h3>
-                  <p className="text-slate-500 mb-6 max-w-md mx-auto">
+                  <p className="text-gray-500 mb-6 max-w-md mx-auto">
                     {searchQuery || statusFilter || categoryFilter
                       ? 'আপনার ফিল্টার পরিবর্তন করে আবার চেষ্টা করুন'
                       : 'শুরু করতে একটি নতুন ইভেন্ট তৈরি করুন'}
@@ -405,14 +418,14 @@ export default function EventsPage() {
                   exit={{ opacity: 0, scale: 0.95 }}
                   transition={{ delay: index * 0.03 }}
                 >
-                  <Card className="bg-slate-900/60 border-slate-700/40 hover:border-slate-600/60 transition-all duration-200 group">
+                  <Card className="bg-white border-gray-200 hover:border-gray-300 hover:shadow-md transition-all duration-200 group">
                     <CardContent className="p-5">
                       <div className="flex flex-col lg:flex-row lg:items-start gap-4">
                         {/* Main Content */}
                         <div className="flex-1 min-w-0">
                           {/* Top Row: Title + Badges */}
                           <div className="flex flex-wrap items-center gap-2 mb-2">
-                            <h3 className="text-lg font-semibold text-white truncate max-w-lg">
+                            <h3 className="text-lg font-semibold text-gray-900 truncate max-w-lg">
                               {event.title || event.question}
                             </h3>
                             <Badge className={cn("text-xs", statusConfig.bgClass)}>
@@ -435,15 +448,15 @@ export default function EventsPage() {
 
                           {/* Question */}
                           {event.question && event.question !== event.title && (
-                            <p className="text-sm text-slate-400 mb-3 line-clamp-2">
+                            <p className="text-sm text-gray-500 mb-3 line-clamp-2">
                               {event.question}
                             </p>
                           )}
 
                           {/* Info Grid */}
                           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-                            <div className="flex items-center gap-1.5 text-slate-400">
-                              <Tag className="w-3.5 h-3.5 text-slate-500" />
+                            <div className="flex items-center gap-1.5 text-gray-500">
+                              <Tag className="w-3.5 h-3.5 text-gray-400" />
                               <span>{event.category}</span>
                             </div>
                             {event.resolver_reference && (
@@ -452,20 +465,20 @@ export default function EventsPage() {
                                 <span className="text-xs truncate max-w-[100px]">{event.resolver_reference}</span>
                               </div>
                             )}
-                            <div className="flex items-center gap-1.5 text-slate-400">
-                              <Clock className="w-3.5 h-3.5 text-slate-500" />
+                            <div className="flex items-center gap-1.5 text-gray-500">
+                              <Clock className="w-3.5 h-3.5 text-gray-400" />
                               <span>{formatTimeLeft(event.trading_closes_at)}</span>
                             </div>
-                            <div className="flex items-center gap-1.5 text-slate-400">
-                              <DollarSign className="w-3.5 h-3.5 text-slate-500" />
+                            <div className="flex items-center gap-1.5 text-gray-500">
+                              <DollarSign className="w-3.5 h-3.5 text-gray-400" />
                               <span>৳{(event.initial_liquidity || 0).toLocaleString()}</span>
                             </div>
-                            <div className="flex items-center gap-1.5 text-slate-400">
-                              <Shield className="w-3.5 h-3.5 text-slate-500" />
+                            <div className="flex items-center gap-1.5 text-gray-500">
+                              <Shield className="w-3.5 h-3.5 text-gray-400" />
                               <span className="truncate max-w-[100px]">{event.resolution_method || 'অজানা'}</span>
                             </div>
-                            <div className="flex items-center gap-1.5 text-slate-400">
-                              <Users className="w-3.5 h-3.5 text-slate-500" />
+                            <div className="flex items-center gap-1.5 text-gray-500">
+                              <Users className="w-3.5 h-3.5 text-gray-400" />
                               <span>{event.unique_traders || 0} traders</span>
                             </div>
                           </div>
@@ -474,12 +487,12 @@ export default function EventsPage() {
                           {event.tags && event.tags.length > 0 && (
                             <div className="flex flex-wrap gap-1.5 mt-3">
                               {event.tags.slice(0, 4).map((tag) => (
-                                <span key={tag} className="px-2 py-0.5 text-xs bg-slate-800/80 text-slate-400 rounded-full border border-slate-700/50">
+                                <span key={tag} className="px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-full border border-gray-200">
                                   {tag}
                                 </span>
                               ))}
                               {event.tags.length > 4 && (
-                                <span className="px-2 py-0.5 text-xs text-slate-500">
+                                <span className="px-2 py-0.5 text-xs text-gray-400">
                                   +{event.tags.length - 4}
                                 </span>
                               )}
@@ -487,7 +500,7 @@ export default function EventsPage() {
                           )}
 
                           {/* Date Footer */}
-                          <div className="flex items-center gap-4 mt-3 text-xs text-slate-500">
+                          <div className="flex items-center gap-4 mt-3 text-xs text-gray-400">
                             <span>তৈরি: {formatDateTime(event.created_at)}</span>
                             {event.trading_closes_at && (
                               <span>শেষ: {formatDateTime(event.trading_closes_at)}</span>
@@ -501,7 +514,7 @@ export default function EventsPage() {
                             variant="outline"
                             size="sm"
                             onClick={() => window.open(`/markets/${event.id}`, '_blank')}
-                            className="border-blue-700/50 text-blue-400 hover:text-white hover:bg-blue-600/20 hover:border-blue-500"
+                            className="border-blue-200 text-blue-600 hover:text-white hover:bg-blue-600 hover:border-blue-600"
                           >
                             <Globe className="w-3.5 h-3.5 mr-1" />
                             দেখুন
@@ -510,7 +523,7 @@ export default function EventsPage() {
                             variant="outline"
                             size="sm"
                             onClick={() => router.push(`/sys-cmd-7x9k2/events/${event.id}`)}
-                            className="border-slate-700/50 text-slate-300 hover:text-white hover:border-slate-500"
+                            className="border-gray-300 text-gray-600 hover:text-gray-900 hover:border-gray-400"
                           >
                             <ExternalLink className="w-3.5 h-3.5 mr-1" />
                             ডিটেইল
@@ -520,10 +533,10 @@ export default function EventsPage() {
                             size="sm"
                             onClick={() => handleToggleFeatured(event.id, event.is_featured)}
                             className={cn(
-                              "border-slate-700/50",
+                              "border-gray-300",
                               event.is_featured
-                                ? "text-yellow-400 hover:text-yellow-300 border-yellow-600/30"
-                                : "text-slate-400 hover:text-white hover:border-slate-500"
+                                ? "text-yellow-600 hover:text-yellow-700 border-yellow-400"
+                                : "text-gray-500 hover:text-gray-900 hover:border-gray-400"
                             )}
                           >
                             <Sparkles className="w-3.5 h-3.5 mr-1" />
@@ -534,7 +547,7 @@ export default function EventsPage() {
                               variant="outline"
                               size="sm"
                               onClick={() => handleStatusChange(event.id, 'paused')}
-                              className="border-orange-700/50 text-orange-400 hover:text-white hover:bg-orange-600/20"
+                              className="border-orange-200 text-orange-600 hover:text-white hover:bg-orange-600"
                             >
                               <Pause className="w-3.5 h-3.5 mr-1" />
                               পজ
@@ -545,7 +558,7 @@ export default function EventsPage() {
                               variant="outline"
                               size="sm"
                               onClick={() => handleStatusChange(event.id, 'active')}
-                              className="border-emerald-700/50 text-emerald-400 hover:text-white hover:bg-emerald-600/20"
+                              className="border-emerald-200 text-emerald-600 hover:text-white hover:bg-emerald-600"
                             >
                               <Play className="w-3.5 h-3.5 mr-1" />
                               চালু
@@ -565,7 +578,7 @@ export default function EventsPage() {
                                 variant="outline"
                                 size="sm"
                                 onClick={() => setDeleteConfirm(null)}
-                                className="border-slate-700 text-slate-400 text-xs"
+                                className="border-gray-300 text-gray-600 text-xs"
                               >
                                 বাতিল
                               </Button>
@@ -575,7 +588,7 @@ export default function EventsPage() {
                               variant="outline"
                               size="sm"
                               onClick={() => setDeleteConfirm(event.id)}
-                              className="border-red-700/50 text-red-400 hover:text-white hover:bg-red-600/20"
+                              className="border-red-200 text-red-600 hover:text-white hover:bg-red-600"
                             >
                               <Trash2 className="w-3.5 h-3.5 mr-1" />
                               ডিলিট

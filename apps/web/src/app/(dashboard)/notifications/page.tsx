@@ -88,6 +88,7 @@ function NotificationSection({
   availableChannels,
   children
 }: NotificationSectionProps) {
+  const { t } = useTranslation();
   return (
     <div className={cn(
       'p-6 rounded-xl border-2 transition-colors mb-4',

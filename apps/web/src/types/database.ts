@@ -23,7 +23,7 @@ export type NotificationType =
   | 'market_ending'
   | 'position_update';
 
-export type ResolutionMethod = 'manual_admin' | 'ai_oracle' | 'expert_panel' | 'external_api';
+export type ResolutionMethod = 'manual_admin' | 'ai_oracle' | 'expert_panel' | 'external_api' | 'community_vote' | 'hybrid';
 export type ResolutionSystemStatus = 'pending' | 'active' | 'completed' | 'failed';
 export type PipelineStatus = 'running' | 'completed' | 'failed' | 'paused';
 

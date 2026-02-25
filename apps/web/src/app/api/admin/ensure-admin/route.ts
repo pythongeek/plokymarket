@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     const service = await createServiceClient();
     const { data: created, error: createErr } = await service
       .from('user_profiles')
-      .insert({ id: user.id, email: user.email, is_admin: true, is_super_admin: true })
+      .insert({ id: user.id, email: user.email, is_admin: true, is_super_admin: true } as any)
       .select()
       .maybeSingle();
 

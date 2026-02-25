@@ -57,7 +57,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (deposit.status !== 'pending') {
+    if ((deposit as any).status !== 'pending') {
       return NextResponse.json(
         { error: 'Deposit already processed' },
         { status: 400 }
@@ -68,10 +68,10 @@ export async function POST(request: Request) {
     const { data: result, error: functionError } = await service
       .rpc('verify_and_credit_deposit', {
         p_deposit_id: depositId,
-        p_user_id: deposit.user_id,
-        p_usdt_amount: deposit.usdt_amount,
+        p_user_id: (deposit as any).user_id,
+        p_usdt_amount: (deposit as any).usdt_amount,
         p_admin_notes: adminNotes || null
-      });
+      } as any);
 
     if (functionError) {
       console.error('Failed to verify deposit:', functionError);

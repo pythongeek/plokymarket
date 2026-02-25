@@ -123,8 +123,9 @@ export async function POST(request: NextRequest) {
  * PUT /api/workflows/[id]
  * Update workflow
  */
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await params;
     const body = await request.json();
     const supabase = await createServiceClient();
 
@@ -134,7 +135,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
         ...body,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', params.id)
+      .eq('id', id)
       .select()
       .single();
 
@@ -151,12 +152,13 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
  * DELETE /api/workflows/[id]
  * Delete workflow
  */
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await params;
     const supabase = await createServiceClient();
 
     // Prevent deleting default workflows
-    if (Object.values(DEFAULT_WORKFLOWS).some((w) => w.id === params.id)) {
+    if (Object.values(DEFAULT_WORKFLOWS).some((w) => w.id === id)) {
       return NextResponse.json(
         { error: 'Cannot delete default workflow' },
         { status: 403 }
@@ -166,7 +168,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     const { error } = await supabase
       .from('verification_workflows')
       .delete()
-      .eq('id', params.id);
+      .eq('id', id);
 
     if (error) throw error;
 

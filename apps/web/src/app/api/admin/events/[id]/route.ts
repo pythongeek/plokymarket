@@ -3,10 +3,10 @@ import { NextResponse } from 'next/server';
 
 export async function GET(
     request: Request,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
-    const supabase = await createClient();
-    const id = params.id;
+    const supabase = await createClient() as any;
+    const { id } = await params;
 
     try {
         // Try events table first (events created via the event creation flow)
@@ -25,7 +25,7 @@ export async function GET(
 
             return NextResponse.json({
                 data: {
-                    ...eventData,
+                    ...(eventData as any),
                     title: eventData.name || eventData.question || eventData.title,
                     markets: markets || []
                 }
@@ -46,7 +46,7 @@ export async function GET(
         // Map for frontend compatibility
         return NextResponse.json({
             data: {
-                ...market,
+                ...(market as any),
                 title: market.question || market.name,
                 markets: [] // standalone market, no nested markets
             }
@@ -59,10 +59,10 @@ export async function GET(
 
 export async function PATCH(
     request: Request,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
-    const supabase = await createClient();
-    const id = params.id;
+    const supabase = await createClient() as any;
+    const { id } = await params;
 
     // Check auth
     const { data: { user } } = await supabase.auth.getUser();
@@ -127,10 +127,10 @@ export async function PATCH(
 
 export async function DELETE(
     request: Request,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
-    const supabase = await createClient();
-    const id = params.id;
+    const supabase = await createClient() as any;
+    const { id } = await params;
 
     // Check auth
     const { data: { user } } = await supabase.auth.getUser();
