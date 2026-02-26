@@ -7,10 +7,36 @@
   "regions": [
     "sin1"
   ],
+  "functions": {
+    "app/api/ai/event-processor/route.ts": {
+      "maxDuration": 120,
+      "memory": 1024
+    },
+    "app/api/ai/event-workflow/route.ts": {
+      "maxDuration": 180,
+      "memory": 1024
+    },
+    "app/api/ai-oracle/resolve/route.ts": {
+      "maxDuration": 60,
+      "memory": 1024
+    },
+    "app/api/ai/validate-event/route.ts": {
+      "maxDuration": 60,
+      "memory": 512
+    },
+    "app/api/ai/auto-fill-form/route.ts": {
+      "maxDuration": 60,
+      "memory": 512
+    }
+  },
   "crons": [
     {
       "path": "/api/cron/master?secret=${MASTER_CRON_SECRET}",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/daily-ai-topics?secret=${CRON_SECRET}",
+      "schedule": "0 6 * * *"
     }
   ]
 }

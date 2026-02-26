@@ -13,14 +13,20 @@ export function useAuth() {
     const getSession = async () => {
       try {
         const { data: { user: currentUser }, error } = await supabase.auth.getUser();
-        
+
         if (error) {
+          // If it's a refresh token error, sign out to clear everything
+          if (error.message.includes('refresh_token') || error.message.includes('not found')) {
+            console.warn('Refresh token lost, signing out...');
+            await supabase.auth.signOut();
+            setUser(null);
+          }
           throw error;
         }
-        
+
         setUser(currentUser);
       } catch (err) {
-        console.error('Auth error:', err);
+        console.error('Auth error in useAuth:', err);
         setError(err instanceof Error ? err.message : 'Authentication failed');
       } finally {
         setIsLoading(false);
@@ -92,7 +98,7 @@ export function useAuth() {
     setIsLoading(true);
     try {
       const { error } = await supabase.auth.signOut();
-      
+
       if (error) {
         throw error;
       }

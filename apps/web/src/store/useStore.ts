@@ -339,8 +339,20 @@ export const useStore = create<StoreState>()(
       initializeAuth: () => {
         if (!supabase) return;
 
+        // Manual check on startup to catch expired/invalid sessions immediately
+        supabase.auth.getUser().then(({ data: { user }, error }: { data: { user: any }; error: any }) => {
+          if (error && (error.message.includes('refresh_token') || error.message.includes('not found'))) {
+            console.error('Initial session check failed:', error.message);
+            get().logout();
+          }
+        });
+
         // Set up the listener
         supabase.auth.onAuthStateChange(async (event: string, session: any) => {
+          if (event === 'TOKEN_REFRESHED') {
+            console.log('Session token refreshed successfully');
+          }
+
           if (session?.user) {
             // Fetch user profile (simple query — no joins to non-existent tables)
             const { data: profile } = await supabase
@@ -392,7 +404,8 @@ export const useStore = create<StoreState>()(
                 console.error('Initial data load error:', err);
               }
             }
-          } else if (event === 'SIGNED_OUT') {
+          } else if (event === 'SIGNED_OUT' || event === 'USER_UPDATED') {
+            // Ensure state is cleared on sign out or if user is lost
             set({
               currentUser: null,
               isAuthenticated: false,

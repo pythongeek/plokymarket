@@ -2,15 +2,20 @@
 
 ## Project Overview
 
-Plokymarket is a Polymarket-style prediction marketplace built for the Bangladesh market. It allows users to trade on the outcome of future events (sports, crypto, politics, etc.) using a CLOB (Central Limit Order Book) matching engine.
+Plokymarket is a Polymarket-style prediction marketplace built for the Bangladesh market. It allows users to trade on the outcome of future events (sports, crypto, politics, weather, etc.) using a CLOB (Central Limit Order Book) matching engine.
 
 **Key Features:**
 - Binary outcome markets (YES/NO predictions)
 - Real-time order book with limit and market orders
-- Wallet management with local payment methods (bKash, Nagad)
+- Wallet management with local payment methods (bKash, Nagad, bank transfer)
+- USDT deposit/withdrawal system with manual verification
 - AI-powered oracle system for market resolution
 - Multi-language support (Bangla default, English, Hindi)
-- Admin panel for market creation and resolution
+- Admin panel for market creation, resolution, and user management
+- KYC verification system
+- Leaderboard and gamification
+- Social features (comments, follows, activity feed)
+- Workflow automation via QStash
 
 ---
 
@@ -21,21 +26,26 @@ Plokymarket is a Polymarket-style prediction marketplace built for the Banglades
 - **Language**: TypeScript 5.5
 - **Styling**: Tailwind CSS 3.4 + shadcn/ui components
 - **State Management**: Zustand (with persistence)
-- **Authentication**: Supabase Auth
+- **Authentication**: Supabase Auth with email/password and Google OAuth
 - **Icons**: Lucide React
-- **Charts**: Recharts
+- **Charts**: Recharts, Chart.js
 - **Animations**: Framer Motion
+- **Internationalization**: i18next with react-i18next
 
 ### Backend & Database
-- **Database**: PostgreSQL 15 (via Supabase)
-- **API**: PostgREST + Supabase client
-- **Authentication**: Supabase Auth with email/password
+- **Database**: PostgreSQL 15 (via Supabase Cloud)
+- **API**: Next.js API Routes + PostgREST + Supabase client
+- **Authentication**: Supabase Auth with JWT
 - **Row Level Security (RLS)**: Enabled on all tables
+- **Real-time**: Supabase Realtime for live data
 
-### Infrastructure
+### Infrastructure & Services
 - **Deployment**: Vercel (frontend)
 - **Database Hosting**: Supabase Cloud
-- **Docker**: Local development setup for PostgreSQL
+- **Workflow Automation**: Upstash QStash
+- **Redis**: Upstash Redis for caching
+- **AI/ML**: Google Gemini API for AI oracle and content generation
+- **Container Services**: Docker Compose for local development (n8n, PostgreSQL)
 
 ---
 
@@ -48,14 +58,26 @@ plokymarket/
 │       ├── src/
 │       │   ├── app/                  # Next.js App Router
 │       │   │   ├── (auth)/           # Auth routes (login, register)
-│       │   │   ├── (dashboard)/      # Main app routes
+│       │   │   │   ├── login/
+│       │   │   │   └── register/
+│       │   │   ├── (dashboard)/      # Main app routes (authenticated)
 │       │   │   │   ├── markets/      # Market list & details
-│       │   │   │   ├── portfolio/    # User positions
+│       │   │   │   ├── portfolio/    # User positions & analytics
 │       │   │   │   ├── wallet/       # Wallet management
 │       │   │   │   ├── activity/     # Activity feed
-│       │   │   │   └── leaderboard/  # User rankings
-│       │   │   ├── admin/            # Admin panel
-│       │   │   ├── api/              # API routes (AI oracle, etc.)
+│       │   │   │   ├── leaderboard/  # User rankings
+│       │   │   │   ├── kyc/          # KYC verification
+│       │   │   │   ├── rebates/      # Maker rebates
+│       │   │   │   ├── levels/       # User levels
+│       │   │   │   └── events/       # Event creation
+│       │   │   ├── api/              # API routes
+│       │   │   │   ├── admin/        # Admin API endpoints
+│       │   │   │   ├── auth/         # Auth callbacks
+│       │   │   │   ├── cron/         # Cron job endpoints
+│       │   │   │   ├── workflows/    # Workflow automation
+│       │   │   │   └── ...
+│       │   │   ├── sys-cmd-7x9k2/    # Secure admin panel
+│       │   │   ├── auth-portal-3m5n8/# Secure auth portal
 │       │   │   ├── layout.tsx        # Root layout
 │       │   │   ├── page.tsx          # Home page
 │       │   │   └── globals.css       # Global styles
@@ -64,6 +86,10 @@ plokymarket/
 │       │   │   ├── trading/          # Trading components
 │       │   │   ├── market/           # Market display components
 │       │   │   ├── portfolio/        # Portfolio components
+│       │   │   ├── admin/            # Admin panel components
+│       │   │   ├── wallet/           # Wallet components
+│       │   │   ├── clob/             # Order book components
+│       │   │   ├── social/           # Social features
 │       │   │   ├── layout/           # Layout components
 │       │   │   └── providers/        # Context providers
 │       │   ├── lib/                  # Utilities & services
@@ -71,6 +97,10 @@ plokymarket/
 │       │   │   ├── clob/             # Order book engine
 │       │   │   ├── oracle/           # AI oracle system
 │       │   │   ├── wallet/           # Wallet services
+│       │   │   ├── matching/         # Matching engine
+│       │   │   ├── workflows/        # Workflow management
+│       │   │   ├── kyc/              # KYC services
+│       │   │   ├── social/           # Social services
 │       │   │   └── utils.ts          # Utility functions
 │       │   ├── hooks/                # Custom React hooks
 │       │   ├── store/                # Zustand store
@@ -79,7 +109,8 @@ plokymarket/
 │       ├── package.json
 │       ├── next.config.js
 │       ├── tailwind.config.js
-│       └── tsconfig.json
+│       ├── tsconfig.json
+│       └── middleware.ts             # Next.js middleware
 │
 ├── supabase/                         # Database configuration
 │   ├── docker-compose.yml            # Local PostgreSQL setup
@@ -87,11 +118,11 @@ plokymarket/
 │   │   ├── init.sql                  # Database schema
 │   │   ├── matching_engine.sql       # Order matching functions
 │   │   └── schema_production.sql     # Production schema
-│   └── migrations/                   # Database migrations (001-028)
+│   └── migrations/                   # Database migrations (001-122+)
 │
-├── automation/                       # Automation scripts
 ├── docs/                             # Documentation
-└── instructions/                     # Project instructions
+├── automation/                       # Automation scripts
+└── scripts/                          # Utility scripts
 ```
 
 ---
@@ -117,6 +148,16 @@ npm run start
 
 # Linting
 npm run lint
+
+# QStash Workflow Setup
+npm run qstash:setup:all           # Setup all QStash schedules
+npm run qstash:setup:batch         # Setup batch markets schedule
+npm run qstash:setup:daily-topics  # Setup daily topics schedule
+npm run qstash:setup:leaderboard   # Setup leaderboard cron
+
+# USDT Workflow Setup
+npm run usdt:setup                 # Setup USDT workflows
+npm run usdt:cleanup               # Cleanup USDT workflows
 ```
 
 ### Database (Local Development)
@@ -158,9 +199,28 @@ docker exec -it polymarket-postgres psql -U postgres -d polymarket
 # Supabase (Required)
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+SUPABASE_JWT_SECRET=your-jwt-secret
 
-# Optional: AI Oracle
+# QStash (Required for workflows)
+QSTASH_URL=https://qstash.upstash.io/v2/publish/
+QSTASH_TOKEN=your-qstash-token
+QSTASH_CURRENT_SIGNING_KEY=your-signing-key
+QSTASH_NEXT_SIGNING_KEY=your-next-signing-key
+
+# AI Services
 GEMINI_API_KEY=your-gemini-api-key
+
+# Redis (Upstash)
+KV_REST_API_URL=your-redis-url
+KV_REST_API_TOKEN=your-redis-token
+
+# Master Cron Secret
+MASTER_CRON_SECRET=your-cron-secret
+
+# Optional: Telegram Notifications
+TELEGRAM_BOT_TOKEN=your-bot-token
+TELEGRAM_CHAT_ID=your-chat-id
 ```
 
 ### Supabase Local (.env)
@@ -216,19 +276,26 @@ JWT_SECRET=your_jwt_secret
 | Table | Description |
 |-------|-------------|
 | `users` | User profiles (linked to Supabase Auth) |
+| `user_profiles` | Extended user profile data |
 | `wallets` | User balances (available & locked) |
 | `markets` | Prediction markets with questions |
+| `events` | Event containers for markets |
 | `orders` | Limit and market orders |
 | `trades` | Completed trades |
 | `positions` | User positions in markets |
 | `transactions` | Wallet transaction history |
 | `oracle_verifications` | AI verification results |
 | `payment_transactions` | Deposit/withdrawal history |
+| `kyc_documents` | KYC verification documents |
+| `workflow_executions` | Workflow execution tracking |
+| `leaderboard` | User rankings |
+| `comments` | User comments on markets |
+| `activity_feed` | User activity tracking |
 
 ### Enums
 
 ```typescript
-market_status: 'active' | 'closed' | 'resolved' | 'cancelled'
+market_status: 'active' | 'closed' | 'resolved' | 'cancelled' | 'paused'
 outcome_type: 'YES' | 'NO'
 order_type: 'limit' | 'market'
 order_side: 'buy' | 'sell'
@@ -269,6 +336,12 @@ AI-powered market resolution:
 - Multi-agent consensus
 - Human review queue
 - Dispute resolution
+
+### Workflow System (`lib/workflows/`)
+Upstash QStash workflow orchestration:
+- Automated cron jobs
+- Manual trigger workflows
+- Execution tracking
 
 ---
 
@@ -325,6 +398,12 @@ To add a new translation key:
 - Row Level Security (RLS) enforced on all tables
 - Rate limiting on login attempts
 
+### Admin Security
+- Admin panel uses randomized paths (`/sys-cmd-7x9k2`)
+- Auth portal uses separate randomized path (`/auth-portal-3m5n8`)
+- IP whitelist support for admin access
+- Admin middleware checks `is_admin` or `is_super_admin` flags
+
 ### Database Security
 - RLS policies ensure users can only access their own data
 - Admin operations require `is_admin = true`
@@ -334,6 +413,10 @@ To add a new translation key:
 - Middleware handles session updates
 - API routes validate user permissions
 - Environment variables for secrets
+- Security headers enforced via middleware:
+  - X-Frame-Options: DENY
+  - X-Content-Type-Options: nosniff
+  - Strict-Transport-Security
 
 ---
 
@@ -346,6 +429,9 @@ To add a new translation key:
 3. Add environment variables:
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+   - `QSTASH_TOKEN`
+   - `GEMINI_API_KEY`
 4. Deploy
 
 ### Database Migration (Production)
@@ -377,5 +463,6 @@ To add a new translation key:
 
 - **Project README**: `README.md`
 - **Database Guide**: `supabase/README.md`
-- **Deployment Guide**: `apps/web/DEPLOYMENT_GUIDE.md`
-- **Database Deployment**: `apps/web/DB_DEPLOYMENT_GUIDE.md`
+- **Deployment Summary**: `DEPLOYMENT_SUMMARY.md`
+- **Testing Guide**: `TEST_EXECUTION_GUIDE.md`
+- **Documentation Index**: `DOCUMENTATION_INDEX.md`

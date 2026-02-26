@@ -41,6 +41,16 @@ CREATE TRIGGER trg_sync_event_name_title
 -- 2. Slug regex CHECK (spec §1.1.1)
 --    Spec: CHECK (slug ~ '^[a-z0-9-]+$')
 -- -----------------------------------------------
+-- First, sanitize existing slugs to match the format
+UPDATE public.events 
+SET slug = lower(regexp_replace(slug, '[^a-zA-Z0-9]+', '-', 'g'))
+WHERE slug !~ '^[a-z0-9-]+$';
+
+-- Ensure no empty slugs after sanitization
+UPDATE public.events 
+SET slug = 'event-' || substr(gen_random_uuid()::text, 1, 8)
+WHERE slug IS NULL OR slug = '';
+
 -- Drop existing check if any, then add
 ALTER TABLE public.events DROP CONSTRAINT IF EXISTS events_slug_format;
 ALTER TABLE public.events ADD CONSTRAINT events_slug_format 

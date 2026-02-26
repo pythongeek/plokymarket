@@ -30,9 +30,9 @@ export async function updateSession(request: NextRequest) {
       getAll() {
         return request.cookies.getAll();
       },
-      setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value, options }) => {
-          request.cookies.set(name, value, options);
+      setAll(cookiesToSet: { name: string; value: string; options: any }[]) {
+        cookiesToSet.forEach(({ name, value }) => {
+          request.cookies.set(name, value);
         });
         response = NextResponse.next({
           request: { headers: request.headers },
@@ -47,6 +47,7 @@ export async function updateSession(request: NextRequest) {
   // Refresh session
   const {
     data: { user },
+    error: authError,
   } = await supabase.auth.getUser();
 
   const pathname = request.nextUrl.pathname;
@@ -58,8 +59,9 @@ export async function updateSession(request: NextRequest) {
   const isAdminRoute = ADMIN_ROUTES.some((route) => pathname.startsWith(route));
   const isAuthRoute = AUTH_ROUTES.some((route) => pathname.startsWith(route));
 
-  // If accessing protected route without authentication, redirect to login
-  if (isProtectedRoute && !user) {
+  // If accessing protected route without authentication or if there's an auth error, redirect to login
+  if ((isProtectedRoute && !user) || (user && authError)) {
+    console.warn(`Auth helper redirecting ${pathname} due to user=${!!user}, error=${authError?.message}`);
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('redirect', pathname);
     return NextResponse.redirect(loginUrl);

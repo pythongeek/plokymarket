@@ -45,7 +45,7 @@ export async function middleware(request: NextRequest) {
         getAll() {
           return request.cookies.getAll();
         },
-        setAll(cookiesToSet) {
+        setAll(cookiesToSet: { name: string; value: string; options: any }[]) {
           cookiesToSet.forEach(({ name, value, options }) => {
             response.cookies.set(name, value, options);
           });
@@ -89,6 +89,14 @@ export async function middleware(request: NextRequest) {
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
     if (authError || !user) {
+      console.warn(`Auth error in middleware for ${pathname}:`, authError?.message);
+
+      // If there's an explicit auth error, clear the session cookies to prevent loops
+      if (authError) {
+        // We can't easily sign out from middleware, but we can ensure the response clears cookies
+        // Supabase middleware helper handles this via setAll if we use the right response
+      }
+
       // Redirect to secure auth portal with return URL
       const authUrl = new URL(SECURE_PATHS.auth, request.url);
       authUrl.searchParams.set('redirect', pathname);

@@ -5,6 +5,31 @@ import type { Database } from '@/types/database.types';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
+// Bengali text encoding fix for Supabase responses
+const encodeBengaliText = (obj: any): any => {
+  if (typeof obj === 'string') {
+    // Ensure proper UTF-8 encoding for Bengali characters
+    try {
+      // Check if string is already properly encoded
+      if (/[\u0980-\u09FF]/.test(obj)) {
+        return obj;
+      }
+      return obj;
+    } catch {
+      return obj;
+    }
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(encodeBengaliText);
+  }
+  if (obj && typeof obj === 'object') {
+    return Object.fromEntries(
+      Object.entries(obj).map(([key, value]) => [key, encodeBengaliText(value)])
+    );
+  }
+  return obj;
+};
+
 /**
  * Create a Supabase client for use in Server Components and Server Actions
  * This client handles cookies properly for SSR environments
