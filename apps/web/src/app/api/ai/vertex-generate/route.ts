@@ -11,6 +11,26 @@ import { createClient } from '@/lib/supabase/server';
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
 
+// Setup conditional authentication options
+function getAuthOptions() {
+  const base64Key = process.env.GOOGLE_SERVICE_ACCOUNT_KEY_BASE64;
+
+  if (base64Key) {
+    try {
+      // Production/Vercel: Use the decoded Base64 key
+      const credentials = JSON.parse(
+        Buffer.from(base64Key, 'base64').toString('utf-8')
+      );
+      return { credentials };
+    } catch (error) {
+      console.error('[Vertex API] Failed to parse Base64 key:', error);
+    }
+  }
+
+  // Local: Return empty object to let the SDK find local 'gcloud' credentials
+  return {};
+}
+
 // Initialize Vertex AI
 function initVertexAI(): VertexAI | null {
   try {
@@ -22,7 +42,11 @@ function initVertexAI(): VertexAI | null {
       return null;
     }
 
-    return new VertexAI({ project, location });
+    return new VertexAI({
+      project,
+      location,
+      googleAuthOptions: getAuthOptions()
+    });
   } catch (error) {
     console.error('[Vertex API] Failed to init:', error);
     return null;
