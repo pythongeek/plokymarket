@@ -13,7 +13,7 @@ SELECT
   e.initial_liquidity,
   e.created_at,
   e.ends_at,
-  COUNT(DISTINCT t.buyer_id) + COUNT(DISTINCT t.seller_id) AS unique_traders,
+  COUNT(DISTINCT t.maker_id) + COUNT(DISTINCT t.taker_id) AS unique_traders,
   COUNT(t.id) AS total_trades,
   AVG(t.price) AS avg_trade_price,
   STDDEV(t.price) AS price_volatility,
@@ -40,6 +40,6 @@ SECURITY DEFINER
 AS $$
 BEGIN
   -- Refresh the materialized view concurrently so we don't block reads
-  REFRESH MATERIALIZED VIEW CONCURRENTLY public.market_metrics;
+  REFRESH MATERIALIZED VIEW public.market_metrics;
 END;
 $$;

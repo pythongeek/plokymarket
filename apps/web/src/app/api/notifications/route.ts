@@ -1,185 +1,115 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
-// GET /api/notifications - Get user's notifications
+/**
+ * GET /api/notifications
+ * Get user notifications
+ * Query params:
+ *   - unread: 'true' to get only unread
+ *   - limit: number (default: 20)
+ * Returns: { data: Notification[] }
+ */
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
-    const limit = parseInt(searchParams.get('limit') || '50');
-    const offset = parseInt(searchParams.get('offset') || '0');
-    const unreadOnly = searchParams.get('unread') === 'true';
-    const category = searchParams.get('category');
-
     const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    if (authError || !user) {
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Build query
+    const { searchParams } = new URL(req.url);
+    const unreadOnly = searchParams.get('unread') === 'true';
+    const limit = parseInt(searchParams.get('limit') || '20');
+
     let query = supabase
       .from('notifications')
       .select('*')
       .eq('user_id', user.id)
-      .eq('is_dismissed', false)
       .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1);
+      .limit(limit);
 
     if (unreadOnly) {
-      query = query.eq('is_read', false);
+      query = query.eq('read', false);
     }
 
-    if (category) {
-      query = query.eq('category', category);
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('[Notifications] Error:', error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    const { data: notifications, error } = await query;
-
-    if (error) throw error;
-
-    // Get unread count
-    const { count: unreadCount, error: countError } = await supabase
-      .from('notifications')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-      .eq('is_read', false)
-      .eq('is_dismissed', false);
-
-    return NextResponse.json({
-      data: notifications || [],
-      unread_count: unreadCount || 0,
-      has_more: (notifications?.length || 0) === limit
-    });
-  } catch (error: any) {
-    console.error('Error fetching notifications:', error);
+    return NextResponse.json({ data: data || [] });
+  } catch (error) {
+    console.error('[Notifications] Unexpected error:', error);
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch notifications' },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }
 }
 
-// POST /api/notifications - Create notification (internal use)
+/**
+ * POST /api/notifications
+ * Create a notification (system use or admin)
+ * Body: {
+ *   userId: string,
+ *   type: string,
+ *   title: string,
+ *   body?: string,
+ *   marketId?: string,
+ *   actionUrl?: string
+ * }
+ */
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { userId, templateId, data, marketId, orderId, senderId, priority } = body;
-
     const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    if (authError || !user) {
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Only admins or system can create notifications for other users
-    // Users can only create for themselves
-    if (user.id !== userId) {
-      const { data: userData } = await supabase
-        .from('users')
-        .select('is_admin')
-        .eq('id', user.id)
-        .single();
+    // Check if admin
+    const { data: profile } = await (supabase
+      .from('user_profiles')
+      .select('is_admin, is_super_admin')
+      .eq('id', user.id)
+      .single() as any);
 
-      if (!userData?.is_admin) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-      }
+    if (!profile?.is_admin && !profile?.is_super_admin) {
+      return NextResponse.json({ error: 'Admin only' }, { status: 403 });
     }
 
-    const { data: notificationId, error } = await supabase.rpc('create_notification', {
-      p_user_id: userId,
-      p_template_id: templateId,
-      p_data: data,
-      p_market_id: marketId,
-      p_order_id: orderId,
-      p_sender_id: senderId,
-      p_priority: priority
-    });
-
-    if (error) throw error;
-
-    return NextResponse.json({ data: { notificationId } });
-  } catch (error: any) {
-    console.error('Error creating notification:', error);
-    return NextResponse.json(
-      { error: error.message || 'Failed to create notification' },
-      { status: 500 }
-    );
-  }
-}
-
-// PATCH /api/notifications - Mark as read, dismiss, or snooze
-export async function PATCH(req: NextRequest) {
-  try {
     const body = await req.json();
-    const { action, notificationIds, snoozeMinutes } = body;
 
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const { data, error } = await supabase
+      .from('notifications')
+      .insert({
+        user_id: body.userId,
+        type: body.type,
+        title: body.title,
+        title_bn: body.titleBn,
+        body: body.body,
+        body_bn: body.bodyBn,
+        market_id: body.marketId,
+        action_url: body.actionUrl,
+        metadata: body.metadata,
+      })
+      .select()
+      .single();
 
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (error) {
+      console.error('[Notification Create] Error:', error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    let result;
-
-    switch (action) {
-      case 'mark_read':
-        if (notificationIds?.length) {
-          const { error } = await supabase
-            .from('notifications')
-            .update({ is_read: true, read_at: new Date().toISOString() })
-            .in('id', notificationIds)
-            .eq('user_id', user.id);
-          if (error) throw error;
-        } else {
-          // Mark all as read
-          const { error } = await supabase
-            .from('notifications')
-            .update({ is_read: true, read_at: new Date().toISOString() })
-            .eq('user_id', user.id)
-            .eq('is_read', false);
-          if (error) throw error;
-        }
-        result = { success: true };
-        break;
-
-      case 'dismiss':
-        if (notificationIds?.length) {
-          const { error } = await supabase
-            .from('notifications')
-            .update({ is_dismissed: true, dismissed_at: new Date().toISOString() })
-            .in('id', notificationIds)
-            .eq('user_id', user.id);
-          if (error) throw error;
-        }
-        result = { success: true };
-        break;
-
-      case 'snooze':
-        let snoozeUntil: string | null = null;
-        if (notificationIds?.length && snoozeMinutes) {
-          snoozeUntil = new Date(Date.now() + snoozeMinutes * 60000).toISOString();
-          const { error } = await supabase
-            .from('notifications')
-            .update({ snoozed_until: snoozeUntil })
-            .in('id', notificationIds)
-            .eq('user_id', user.id);
-          if (error) throw error;
-        }
-        result = { success: true, snoozed_until: snoozeUntil ?? null };
-        break;
-
-      default:
-        return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
-    }
-
-    return NextResponse.json({ data: result });
-  } catch (error: any) {
-    console.error('Error updating notifications:', error);
+    return NextResponse.json({ data });
+  } catch (error) {
+    console.error('[Notification Create] Unexpected error:', error);
     return NextResponse.json(
-      { error: error.message || 'Failed to update notifications' },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }

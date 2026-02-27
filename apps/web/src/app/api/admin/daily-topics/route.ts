@@ -27,12 +27,12 @@ async function verifyAdmin(request: Request): Promise<{ isAdmin: boolean; userId
   }
 
   const { data: profile } = await supabase
-    .from('users')
-    .select('role')
+    .from('user_profiles')
+    .select('is_admin')
     .eq('id', user.id)
     .single();
 
-  if ((profile as any)?.role !== 'admin') {
+  if (!profile?.is_admin) {
     return { isAdmin: false, error: 'Not an admin' };
   }
 

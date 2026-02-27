@@ -107,7 +107,7 @@ export class MarketService implements IMarketService {
 
             if (userError || !users || users.length === 0) {
                 console.warn('[MarketService] No admin user found in user_profiles. Checking auth.users...');
-                const { data: authUsers } = await getSupabaseAdmin().from('users').select('id').limit(1);
+                const { data: authUsers } = await (getSupabaseAdmin().from('user_profiles').select('id').limit(1) as any);
                 systemUserId = authUsers?.[0]?.id;
             } else {
                 systemUserId = users[0].id;

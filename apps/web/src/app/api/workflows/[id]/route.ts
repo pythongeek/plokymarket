@@ -29,7 +29,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     // Check admin
     const { data: user, error: userError } = await supabase
-      .from('users')
+      .from('user_profiles')
       .select('is_admin')
       .eq('id', session.user.id)
       .single();
@@ -119,7 +119,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     // Check admin
     const { data: user, error: userError } = await supabase
-      .from('users')
+      .from('user_profiles')
       .select('is_admin')
       .eq('id', session.user.id)
       .single();
@@ -196,7 +196,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
     // Check admin
     const { data: user, error: userError } = await supabase
-      .from('users')
+      .from('user_profiles')
       .select('is_admin')
       .eq('id', session.user.id)
       .single();

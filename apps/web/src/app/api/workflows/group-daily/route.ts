@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { verifyQStashSignature } from '@/lib/upstash/workflows';
 
 // POST /api/workflows/group-daily
-// Daily at Midnight: News Market, Leaderboard, AI Topics, Cleanup, Daily Report
+// Daily at Midnight: News Market, Leaderboard, AI Topics, Cleanup, Daily Report, Phase2 Cleanup
 export async function POST(request: Request) {
     try {
         const signature = request.headers.get('upstash-signature') || '';
@@ -32,6 +32,7 @@ export async function POST(request: Request) {
         await runTask('Daily AI Topics', '/api/cron/daily-ai-topics');
         await runTask('Cleanup Expired Deposits', '/api/workflows/cleanup-expired');
         await runTask('Daily Platform Report', '/api/workflows/daily-report');
+        await runTask('Phase2 Daily Cleanup', '/api/workflows/cleanup', 'POST'); // Phase 2: Cleanup expired batches and notifications
 
         await supabase.from('workflow_executions').insert({
             workflow_name: 'group-daily',

@@ -34,11 +34,11 @@ export async function POST(req: NextRequest) {
     }
 
     // Check admin permission
-    const { data: userData, error: userError } = await supabase
-      .from('users')
+    const { data: userData, error: userError } = await (supabase
+      .from('user_profiles')
       .select('is_admin, can_create_events')
       .eq('id', user.id)
-      .single();
+      .single() as any);
 
     if (userError || (!userData?.is_admin && !userData?.can_create_events)) {
       return NextResponse.json(
@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
     // STEP 3: Pre-flight Check (Slug Generation & Validation)
     // ============================================================================
     const preFlight = await preFlightCheck(event_data.title);
-    
+
     if (!preFlight.success) {
       return NextResponse.json(
         { error: 'Validation Failed', message: preFlight.error },
@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
     const finalSlug = event_data.slug || preFlight.slug;
 
     // Double-check slug uniqueness
-    const { exists: slugExists } = await supabase
+    const { data: slugExists } = await supabase
       .from('events')
       .select('id')
       .eq('slug', finalSlug)
@@ -90,10 +90,10 @@ export async function POST(req: NextRequest) {
     // ============================================================================
     // STEP 4: Timezone Conversion (Asia/Dhaka → UTC)
     // ============================================================================
-    const tradingClosesAtUTC = event_data.trading_closes_at 
+    const tradingClosesAtUTC = event_data.trading_closes_at
       ? convertToUTC(event_data.trading_closes_at)
       : null;
-    
+
     const resolutionDateUTC = event_data.resolution_date
       ? convertToUTC(event_data.resolution_date)
       : null;
@@ -142,8 +142,8 @@ export async function POST(req: NextRequest) {
         trading_fee: market.trading_fee || 0.02,
         min_trade_amount: market.min_trade_amount || 10,
         max_trade_amount: market.max_trade_amount || 10000,
-        trading_closes_at: market.trading_closes_at 
-          ? convertToUTC(market.trading_closes_at) 
+        trading_closes_at: market.trading_closes_at
+          ? convertToUTC(market.trading_closes_at)
           : tradingClosesAtUTC,
         resolution_date: market.resolution_date
           ? convertToUTC(market.resolution_date)
@@ -155,8 +155,8 @@ export async function POST(req: NextRequest) {
     // STEP 7: Execute Atomic Transaction via RPC
     // ============================================================================
     console.log('[Create Event] Executing atomic transaction...');
-    
-    const { data: result, error: rpcError } = await supabase.rpc(
+
+    const { data: result, error: rpcError } = await (supabase as any).rpc(
       'create_event_with_markets',
       {
         p_event_data: eventDataForRPC,
@@ -167,8 +167,8 @@ export async function POST(req: NextRequest) {
     if (rpcError) {
       console.error('[Create Event] RPC Error:', rpcError);
       return NextResponse.json(
-        { 
-          error: 'Database Error', 
+        {
+          error: 'Database Error',
           message: rpcError.message,
           details: 'Transaction rolled back. Event not created.'
         },
@@ -190,7 +190,7 @@ export async function POST(req: NextRequest) {
     // STEP 8: Success Response
     // ============================================================================
     console.log(`[Create Event] Success: ${resultData.event_id}`);
-    
+
     return NextResponse.json({
       success: true,
       event_id: resultData.event_id,

@@ -68,30 +68,14 @@ async function verifyAdmin(request: Request): Promise<{ isAdmin: boolean; error?
     return { isAdmin: false, error: 'Invalid token' };
   }
 
-  // Check if user is admin (supports both 'users' and 'user_profiles' tables)
-  let isAdmin = false;
-
-  // Try user_profiles table first (most common)
+  // Check if user is admin (canonical user_profiles table)
   const { data: profile } = await supabase
     .from('user_profiles')
     .select('is_admin, is_super_admin')
     .eq('id', user.id)
     .single();
 
-  if (profile?.is_admin || profile?.is_super_admin) {
-    isAdmin = true;
-  } else {
-    // Fallback to users table with role column
-    const { data: userData } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', user.id)
-      .single();
-
-    if (userData?.role === 'admin') {
-      isAdmin = true;
-    }
-  }
+  const isAdmin = !!(profile?.is_admin || profile?.is_super_admin);
 
   if (!isAdmin) {
     return { isAdmin: false, error: 'Not an admin' };

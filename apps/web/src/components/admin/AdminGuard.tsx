@@ -24,20 +24,20 @@ export function AdminGuard({ children }: AdminGuardProps) {
       try {
         // Get current user
         const { data: { user } } = await supabase.auth.getUser();
-        
+
         if (!user) {
           router.push('/login?redirect=/admin/resolutions');
           return;
         }
 
         // Check if user is admin
-        const { data, error } = await supabase
-          .from('users')
-          .select('role')
+        const { data, error } = await (supabase
+          .from('user_profiles')
+          .select('is_admin')
           .eq('id', user.id)
-          .single();
+          .single() as any);
 
-        if (error || data?.role !== 'admin') {
+        if (error || !data?.is_admin) {
           setIsAdmin(false);
         } else {
           setIsAdmin(true);

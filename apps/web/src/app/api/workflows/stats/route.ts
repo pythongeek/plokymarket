@@ -26,11 +26,11 @@ export async function GET(request: NextRequest) {
     }
 
     // Check admin
-    const { data: user } = await supabase
-      .from('users')
+    const { data: user } = await (supabase
+      .from('user_profiles')
       .select('is_admin')
       .eq('id', session.user.id)
-      .single();
+      .single() as any);
 
     if (!user?.is_admin) {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 });

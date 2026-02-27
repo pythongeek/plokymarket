@@ -14,11 +14,28 @@ const client = new Client({
 const migrations = [
     '100_fix_event_schema_and_rls.sql',
     '101_spec_alignment_patch.sql',
+    '102_market_admin_fields.sql',
     '103_mfs_deposit_support.sql',
     '104_market_spec_compliance.sql',
     '105_comments_and_resolvers.sql',
+    '106_event_validation_and_realtime.sql',
     '115_emergency_pause_system.sql',
-    '116_resolution_interface.sql'
+    '116_resolution_interface.sql',
+    '117_market_metrics.sql',
+    '118_clob_industry_standard.sql',
+    '119_events_realtime_rls.sql',
+    '119_secure_atomic_wallet_updates.sql',
+    '120_performance_indexes.sql',
+    '121_system_hardening_indexes.sql',
+    '121_system_hardening_wallets.sql',
+    '123_create_event_with_markets_rpc.sql',
+    '123_phase2_multi_outcome_markets.sql',
+    '123_withdrawal_api_support.sql',
+    '124_phase2_social_layer.sql',
+    '125_phase2_price_history_analytics.sql',
+    '126_phase2_notification_system.sql',
+    '127_phase2_batch_orders.sql',
+    '20260225_add_resolution_delay_to_events.sql'
 ];
 
 async function runMigrations() {

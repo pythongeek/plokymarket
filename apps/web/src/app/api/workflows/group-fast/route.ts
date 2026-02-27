@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { verifyQStashSignature } from '@/lib/upstash/workflows';
 
 // POST /api/workflows/group-fast
-// Every 5 minutes: Crypto, Exchange Rate, Escalations
+// Every 5 minutes: Crypto, Exchange Rate, Escalations, Market Close Check
 export async function POST(request: Request) {
     try {
         const signature = request.headers.get('upstash-signature') || '';
@@ -30,6 +30,7 @@ export async function POST(request: Request) {
         await runTask('Crypto Market Data', '/api/workflows/execute-crypto');
         await runTask('USDT Exchange Rate', '/api/workflows/update-exchange-rate');
         await runTask('Support Escalations', '/api/workflows/check-escalations');
+        await runTask('Market Close Check', '/api/workflows/market-close-check', 'POST'); // Phase 2: Check closing markets every 5 min
 
         await supabase.from('workflow_executions').insert({
             workflow_name: 'group-fast',

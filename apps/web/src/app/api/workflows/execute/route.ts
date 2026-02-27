@@ -31,11 +31,11 @@ export async function POST(request: NextRequest) {
       }
 
       // Check admin for manual trigger
-      const { data: user } = await supabase
-        .from('users')
+      const { data: user } = await (supabase
+        .from('user_profiles')
         .select('is_admin')
         .eq('id', session.user.id)
-        .single();
+        .single() as any);
 
       if (!user?.is_admin) {
         return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     const result = await executeVerificationWorkflow(eventId, workflowId, eventData);
 
     // Store execution result
-    const { error: insertError } = await supabase.from('workflow_executions').insert({
+    const { error: insertError } = await (supabase.from('workflow_executions').insert({
       event_id: eventId,
       workflow_id: workflowId,
       outcome: result.outcome,
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
       sources: result.sources,
       evidence: { reasoning: result.reasoning },
       created_at: new Date().toISOString(),
-    });
+    }) as any);
 
     if (insertError) {
       console.error('Failed to store execution:', insertError);
@@ -108,11 +108,11 @@ export async function GET(request: NextRequest) {
     }
 
     // Check admin
-    const { data: user } = await supabase
-      .from('users')
+    const { data: user } = await (supabase
+      .from('user_profiles')
       .select('is_admin')
       .eq('id', session.user.id)
-      .single();
+      .single() as any);
 
     if (!user?.is_admin) {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 });

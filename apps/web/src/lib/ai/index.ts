@@ -58,7 +58,6 @@ export {
 // Rotation System
 export {
   executeWithRotation,
-  selectProvider,
   getProviderStatus,
   getRotationStats,
   forceProvider,

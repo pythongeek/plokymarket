@@ -292,7 +292,7 @@ export class CommentsService {
     const isCollapsed = depthLevel >= 3;
 
     // Insert comment
-    const { data: comment, error } = await supabase
+    const { data: comment, error } = await (supabase
       .from('market_comments')
       .insert({
         market_id: marketId,
@@ -307,8 +307,8 @@ export class CommentsService {
         is_flagged: this.moderationService.shouldAutoFlag(moderationResult),
         score: this.calculateInitialScore(reputation)
       })
-      .select('*, users(full_name)')
-      .single();
+      .select('*, user_profiles(full_name)')
+      .single() as any);
 
     if (error) throw error;
 
@@ -377,7 +377,7 @@ export class CommentsService {
       .from('market_comments')
       .select(`
         *,
-        users (
+        user_profiles (
           id,
           full_name
         ),
@@ -479,10 +479,10 @@ export class CommentsService {
         ...c,
         user_vote: userVotes.get(c.id) || 'none',
         user: {
-          id: c.users?.id,
-          full_name: c.users?.full_name,
-          username: c.users?.username,
-          avatar_url: c.users?.avatar_url,
+          id: (c as any).user_profiles?.id,
+          full_name: (c as any).user_profiles?.full_name,
+          username: (c as any).user_profiles?.username,
+          avatar_url: (c as any).user_profiles?.avatar_url,
           reputation: reputationMap.get(c.user_id),
           badges: badgesMap.get(c.user_id) || [],
           is_expert: (badgesMap.get(c.user_id) || []).some((b: any) => b.badge?.category === 'expert')
@@ -661,7 +661,7 @@ export class CommentsService {
     // Process new content
     const { html } = this.contentProcessor.processContent(newContent);
 
-    const { data: updated, error } = await supabase
+    const { data: updated, error } = await (supabase
       .from('market_comments')
       .update({
         content: newContent,
@@ -669,8 +669,8 @@ export class CommentsService {
         edited_at: new Date().toISOString()
       })
       .eq('id', commentId)
-      .select('*, users(full_name)')
-      .single();
+      .select('*, user_profiles(full_name)')
+      .single() as any);
 
     if (error) throw error;
     return updated as Comment;
@@ -689,11 +689,11 @@ export class CommentsService {
     if (!comment) return false;
 
     // Check if user is owner or admin
-    const { data: user } = await supabase
-      .from('users')
+    const { data: user } = await (supabase
+      .from('user_profiles')
       .select('is_admin')
       .eq('id', userId)
-      .single();
+      .single() as any);
 
     if (comment.user_id !== userId && !user?.is_admin) {
       throw new Error('Unauthorized');
@@ -768,10 +768,10 @@ export class CommentsService {
     const supabase = await createClient();
 
     // Find users by username
-    const { data: mentionedUsers } = await supabase
-      .from('users')
+    const { data: mentionedUsers } = await (supabase
+      .from('user_profiles')
       .select('id')
-      .in('username', mentions);
+      .in('username', mentions) as any);
 
     if (!mentionedUsers?.length) return;
 

@@ -29,11 +29,11 @@ export async function GET(request: NextRequest) {
     }
 
     // Check if user is admin
-    const { data: user, error: userError } = await supabase
-      .from('users')
+    const { data: user, error: userError } = await (supabase
+      .from('user_profiles')
       .select('is_admin')
       .eq('id', session.user.id)
-      .single();
+      .single() as any);
 
     if (userError || !user?.is_admin) {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
@@ -117,11 +117,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Check admin
-    const { data: user, error: userError } = await supabase
-      .from('users')
+    const { data: user, error: userError } = await (supabase
+      .from('user_profiles')
       .select('is_admin')
       .eq('id', session.user.id)
-      .single();
+      .single() as any);
 
     if (userError || !user?.is_admin) {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create workflow in database
-    const { data: workflow, error } = await supabase
+    const { data: workflow, error } = await (supabase
       .from('verification_workflows')
       .insert({
         name: body.name,
@@ -159,7 +159,7 @@ export async function POST(request: NextRequest) {
         created_by: session.user.id,
       })
       .select()
-      .single();
+      .single() as any);
 
     if (error) {
       console.error('Database error:', error);

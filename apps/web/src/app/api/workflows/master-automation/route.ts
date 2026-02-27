@@ -65,6 +65,7 @@ export async function POST(request: Request) {
         await runTask('Crypto Market Data', '/api/workflows/execute-crypto');
         await runTask('USDT Exchange Rate', '/api/workflows/update-exchange-rate');
         await runTask('Support Escalations', '/api/workflows/check-escalations');
+        await runTask('Market Close Check', '/api/workflows/market-close-check');
 
         // B. MEDIUM TRACK (Every 10 minutes)
         if (minutes % 10 === 0) {
@@ -77,6 +78,7 @@ export async function POST(request: Request) {
             await runTask('Daily Analytics', '/api/workflows/analytics/daily');
             await runTask('Tick Adjustment', '/api/cron/tick-adjustment', 'GET');
             await runTask('Batch Market Processing', '/api/cron/batch-markets', 'GET');
+            await runTask('Price Snapshot', '/api/workflows/price-snapshot');
         }
 
         // D. MANAGEMENT TRACK (Every 6 hours)
@@ -91,6 +93,7 @@ export async function POST(request: Request) {
             await runTask('Daily AI Topics', '/api/cron/daily-ai-topics');
             await runTask('Cleanup Expired Deposits', '/api/workflows/cleanup-expired');
             await runTask('Daily Platform Report', '/api/workflows/daily-report');
+            await runTask('Phase2 Daily Cleanup', '/api/workflows/cleanup');
         }
 
         // Log the master execution

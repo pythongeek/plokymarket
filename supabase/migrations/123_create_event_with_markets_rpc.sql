@@ -93,7 +93,7 @@ BEGIN
                 COALESCE((market_record->>'trading_fee')::DECIMAL, 0.02),
                 COALESCE((market_record->>'min_trade_amount')::DECIMAL, 10),
                 COALESCE((market_record->>'max_trade_amount')::DECIMAL, 10000),
-                'active',
+                'active'::market_status,
                 (market_record->>'trading_closes_at')::TIMESTAMPTZ,
                 (market_record->>'resolution_date')::TIMESTAMPTZ,
                 (p_event_data->>'created_by')::UUID
@@ -127,7 +127,7 @@ BEGIN
             0.02,
             10,
             10000,
-            'active',
+            'active'::market_status,
             (p_event_data->>'trading_closes_at')::TIMESTAMPTZ,
             (p_event_data->>'resolution_date')::TIMESTAMPTZ,
             (p_event_data->>'created_by')::UUID
@@ -152,7 +152,7 @@ BEGIN
                 m.id,
                 COALESCE((p_event_data->>'b_parameter')::DECIMAL, 100),
                 COALESCE((p_event_data->>'initial_liquidity')::DECIMAL, 1000),
-                'active'
+                'active'::market_status
             FROM markets m
             WHERE m.event_id = new_event_id;
             

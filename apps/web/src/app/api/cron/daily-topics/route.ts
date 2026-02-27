@@ -152,10 +152,10 @@ export async function GET(request: Request) {
 
   try {
     // Get active configurations
-    const { data: configs, error: configError } = await supabase
+    const { data: configs, error: configError } = await (supabase
       .from('ai_topic_configs')
       .select('*')
-      .eq('is_active', true);
+      .eq('is_active', true) as any);
 
     if (configError) throw configError;
     if (!configs || configs.length === 0) {
@@ -171,7 +171,7 @@ export async function GET(request: Request) {
 
       try {
         // Create job record
-        const { data: job } = await supabase
+        const { data: job } = await (supabase
           .from('ai_topic_generation_jobs')
           .insert({
             config_id: config.id,
@@ -182,7 +182,7 @@ export async function GET(request: Request) {
             prompt_sent: config.prompt_template?.slice(0, 500)
           })
           .select()
-          .single();
+          .single() as any);
 
         // Generate topics
         const topics = await generateTopicsWithConfig(config);
@@ -190,7 +190,7 @@ export async function GET(request: Request) {
         // Save topics to database
         const savedTopics = [];
         for (const topic of topics) {
-          const { data, error } = await supabase
+          const { data, error } = await (supabase
             .from('ai_daily_topics')
             .insert({
               title: topic.title,
@@ -205,7 +205,7 @@ export async function GET(request: Request) {
               generated_at: new Date().toISOString()
             })
             .select()
-            .single();
+            .single() as any);
 
           if (!error) {
             savedTopics.push(data);
@@ -286,12 +286,12 @@ export async function POST(request: Request) {
 
     // Check admin role
     const { data: profile } = await supabase
-      .from('users')
-      .select('role')
+      .from('user_profiles')
+      .select('is_admin')
       .eq('id', user.id)
       .single();
 
-    if (profile?.role !== 'admin') {
+    if (!profile?.is_admin) {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
     }
 

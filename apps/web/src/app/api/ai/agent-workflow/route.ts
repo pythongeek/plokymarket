@@ -17,7 +17,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(req: NextRequest) {
   const startTime = Date.now();
-  
+
   try {
     // ============================================================================
     // STEP 1: Authentication
@@ -33,11 +33,11 @@ export async function POST(req: NextRequest) {
     }
 
     // Check admin permission
-    const { data: userData, error: userError } = await supabase
-      .from('users')
+    const { data: userData, error: userError } = await (supabase
+      .from('user_profiles')
       .select('is_admin, can_create_events')
       .eq('id', user.id)
-      .single();
+      .single() as any);
 
     if (userError || (!userData?.is_admin && !userData?.can_create_events)) {
       return NextResponse.json(
@@ -72,16 +72,16 @@ export async function POST(req: NextRequest) {
     // STEP 3: Fetch Existing Events for Duplicate Check
     // ============================================================================
     let existingEventTitles: string[] = existing_events;
-    
+
     if (existingEventTitles.length === 0) {
       try {
         const { data: events } = await supabase
           .from('events')
           .select('title')
           .limit(100);
-        
+
         if (events) {
-          existingEventTitles = events.map(e => e.title);
+          existingEventTitles = (events as any[]).map(e => e.title);
         }
       } catch (e) {
         console.warn('[Agent Workflow] Could not fetch existing events:', e);
@@ -106,9 +106,9 @@ export async function POST(req: NextRequest) {
     // STEP 5: Run Agent Workflow
     // ============================================================================
     const orchestrator = new AgentOrchestrator();
-    
+
     let result;
-    
+
     if (mode === 'full') {
       // Run all agents
       result = await orchestrator.runAll(context);
@@ -155,7 +155,7 @@ export async function POST(req: NextRequest) {
 
   } catch (error) {
     console.error('[Agent Workflow] Error:', error);
-    
+
     return NextResponse.json(
       {
         success: false,
@@ -175,7 +175,7 @@ export async function GET() {
   try {
     const { getProviderHealth } = await import('@/lib/ai-agents/provider-switcher');
     const health = getProviderHealth();
-    
+
     return NextResponse.json({
       providers: health,
       timestamp: new Date().toISOString(),

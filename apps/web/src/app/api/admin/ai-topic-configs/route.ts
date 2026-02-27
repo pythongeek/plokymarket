@@ -11,13 +11,13 @@ export const runtime = 'edge';
 // Verify admin authentication
 async function verifyAdmin(request: Request): Promise<{ isAdmin: boolean; userId?: string; error?: string }> {
   const authHeader = request.headers.get('authorization');
-  
+
   if (!authHeader?.startsWith('Bearer ')) {
     return { isAdmin: false, error: 'Missing authorization header' };
   }
 
   const token = authHeader.split(' ')[1];
-  
+
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -25,18 +25,18 @@ async function verifyAdmin(request: Request): Promise<{ isAdmin: boolean; userId
   );
 
   const { data: { user }, error } = await supabase.auth.getUser(token);
-  
+
   if (error || !user) {
     return { isAdmin: false, error: 'Invalid token' };
   }
 
   const { data: profile } = await supabase
-    .from('users')
-    .select('role')
+    .from('user_profiles')
+    .select('is_admin')
     .eq('id', user.id)
     .single();
 
-  if (profile?.role !== 'admin') {
+  if (!profile?.is_admin) {
     return { isAdmin: false, error: 'Not an admin' };
   }
 
@@ -49,7 +49,7 @@ async function verifyAdmin(request: Request): Promise<{ isAdmin: boolean; userId
  */
 export async function GET(request: Request) {
   const adminCheck = await verifyAdmin(request);
-  
+
   if (!adminCheck.isAdmin) {
     return NextResponse.json({ error: adminCheck.error || 'Unauthorized' }, { status: 401 });
   }
@@ -99,7 +99,7 @@ export async function GET(request: Request) {
  */
 export async function POST(request: Request) {
   const adminCheck = await verifyAdmin(request);
-  
+
   if (!adminCheck.isAdmin || !adminCheck.userId) {
     return NextResponse.json({ error: adminCheck.error || 'Unauthorized' }, { status: 401 });
   }
@@ -156,7 +156,7 @@ export async function POST(request: Request) {
  */
 export async function DELETE(request: Request) {
   const adminCheck = await verifyAdmin(request);
-  
+
   if (!adminCheck.isAdmin) {
     return NextResponse.json({ error: adminCheck.error || 'Unauthorized' }, { status: 401 });
   }

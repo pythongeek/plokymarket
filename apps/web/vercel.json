@@ -33,10 +33,6 @@
     {
       "path": "/api/cron/master?secret=${MASTER_CRON_SECRET}",
       "schedule": "0 0 * * *"
-    },
-    {
-      "path": "/api/cron/daily-ai-topics?secret=${CRON_SECRET}",
-      "schedule": "0 6 * * *"
     }
   ]
 }

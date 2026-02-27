@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { verifyQStashSignature } from '@/lib/upstash/workflows';
 
 // POST /api/workflows/group-hourly
-// Every hour: Analytics Daily, Tick Adjustment, Batch Markets
+// Every hour: Analytics Daily, Tick Adjustment, Batch Markets, Price Snapshot
 export async function POST(request: Request) {
     try {
         const signature = request.headers.get('upstash-signature') || '';
@@ -30,6 +30,7 @@ export async function POST(request: Request) {
         await runTask('Daily Analytics', '/api/workflows/analytics/daily');
         await runTask('Tick Adjustment', '/api/cron/tick-adjustment', 'GET');
         await runTask('Batch Market Processing', '/api/cron/batch-markets', 'GET');
+        await runTask('Price Snapshot', '/api/workflows/price-snapshot', 'POST'); // Phase 2: Hourly price snapshots
 
         await supabase.from('workflow_executions').insert({
             workflow_name: 'group-hourly',
