@@ -32,6 +32,7 @@ import {
 import { useTranslation } from 'react-i18next';
 
 export default function RegisterPage() {
+  const { t } = useTranslation();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -45,7 +46,6 @@ export default function RegisterPage() {
 
   const { register, loginWithGoogle } = useStore();
   const router = useRouter();
-  const { t } = useTranslation();
 
   // Password strength validation
   const passwordValidation = useMemo(() => validatePassword(password), [password]);
@@ -57,9 +57,9 @@ export default function RegisterPage() {
 
   const getStrengthLabel = (strength: string) => {
     switch (strength) {
-      case 'weak': return t('auth.password_weak');
-      case 'medium': return t('auth.password_medium');
-      case 'strong': return t('auth.password_strong');
+      case 'weak': return t('auth.strength_weak');
+      case 'medium': return t('auth.strength_medium');
+      case 'strong': return t('auth.strength_strong');
       default: return strength;
     }
   };
@@ -72,7 +72,7 @@ export default function RegisterPage() {
     if (registerRateLimiter.isRateLimited('register')) {
       const remaining = registerRateLimiter.getRemainingTime('register');
       setRateLimitSeconds(remaining);
-      setError(t('auth.too_many_attempts', { seconds: remaining }));
+      setError(t('auth.rate_limited_desc', { seconds: remaining }));
       return;
     }
 
@@ -99,7 +99,7 @@ export default function RegisterPage() {
     }
 
     if (!agreeTerms) {
-      setError(t('auth.agree_terms_error'));
+      setError(t('auth.must_agree_terms'));
       return;
     }
 
@@ -122,7 +122,7 @@ export default function RegisterPage() {
         setError(t('auth.registration_failed'));
       }
     } catch (err) {
-      setError(t('auth.error_occurred'));
+      setError(t('common.error_occurred'));
     } finally {
       setIsLoading(false);
     }
@@ -163,9 +163,9 @@ export default function RegisterPage() {
 
         <Card>
           <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl text-center">{t('auth.create_an_account')}</CardTitle>
+            <CardTitle className="text-2xl text-center">{t('auth.create_account')}</CardTitle>
             <CardDescription className="text-center">
-              {t('auth.start_trading_today')}
+              {t('auth.signup_desc')}
             </CardDescription>
           </CardHeader>
 
@@ -185,7 +185,7 @@ export default function RegisterPage() {
                   <Input
                     id="fullName"
                     type="text"
-                    placeholder={t('auth.full_name_placeholder')}
+                    placeholder={t('auth.name_placeholder')}
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                     className="pl-10"
@@ -217,7 +217,7 @@ export default function RegisterPage() {
                   <Input
                     id="password"
                     type={showPassword ? 'text' : 'password'}
-                    placeholder={t('auth.create_strong_password')}
+                    placeholder={t('auth.password_create_placeholder')}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="pl-10 pr-10"
@@ -251,7 +251,7 @@ export default function RegisterPage() {
                     </div>
                     <div className="flex items-center gap-1 text-xs text-muted-foreground">
                       <ShieldCheck className="h-3 w-3" />
-                      <span>{t('auth.password_hint')}</span>
+                      <span>{t('auth.password_min_length')}</span>
                     </div>
                   </div>
                 )}
@@ -281,7 +281,7 @@ export default function RegisterPage() {
                   className="mt-1"
                 />
                 <Label htmlFor="terms" className="text-sm font-normal leading-relaxed">
-                  {t('auth.i_agree_to')}{' '}
+                  {t('auth.terms_agree_prefix')}{' '}
                   <Link href="/terms" className="text-primary hover:underline">
                     {t('auth.terms')}
                   </Link>{' '}
@@ -289,7 +289,7 @@ export default function RegisterPage() {
                   <Link href="/privacy" className="text-primary hover:underline">
                     {t('auth.privacy')}
                   </Link>
-                  {t('auth.agree_terms_suffix')}
+                  {t('auth.terms_agree_suffix')}
                 </Label>
               </div>
 
@@ -327,7 +327,7 @@ export default function RegisterPage() {
                   alt="Google"
                   className="mr-2 h-4 w-4"
                 />
-                Sign up with Google
+                {t('auth.signup_google')}
               </Button>
             </form>
 

@@ -8,7 +8,7 @@ import { useStore } from '@/store/useStore';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ModeToggle } from '../mode-toggle';
-import { NotificationBell } from '../notifications/NotificationBell';
+import { NotificationBell } from './NotificationBell';
 import { useEffect } from 'react';
 import { Input } from '../ui/input';
 
@@ -106,8 +106,8 @@ export function Navbar() {
                   </span>
                 </div>
               )}
-              <div className="flex items-center gap-2">
-                <NotificationBell onSettingsClick={() => window.location.href = '/notifications'} />
+              <div className="flex items-center gap-3">
+                <NotificationBell />
                 <div className="flex items-center gap-2 group cursor-pointer" onClick={() => window.location.href = '/portfolio'}>
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 border border-primary/20 group-hover:bg-primary/20 transition-all overflow-hidden">
                     {currentUser?.avatar_url ? (

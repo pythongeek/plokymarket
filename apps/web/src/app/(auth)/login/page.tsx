@@ -22,6 +22,7 @@ import {
 import { useTranslation } from 'react-i18next';
 
 export default function LoginPage() {
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -31,7 +32,6 @@ export default function LoginPage() {
 
   const { login, loginWithGoogle } = useStore();
   const router = useRouter();
-  const { t } = useTranslation();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,7 +52,7 @@ export default function LoginPage() {
         setError(t('auth.login_failed'));
       }
     } catch (err) {
-      setError(t('auth.error_occurred'));
+      setError(t('common.error_occurred'));
     } finally {
       setIsLoading(false);
     }
@@ -81,7 +81,7 @@ export default function LoginPage() {
           <CardHeader className="space-y-1">
             <CardTitle className="text-2xl text-center">{t('auth.welcome_back')}</CardTitle>
             <CardDescription className="text-center">
-              {t('auth.enter_credentials')}
+              {t('auth.login_desc')}
             </CardDescription>
           </CardHeader>
 
@@ -151,7 +151,7 @@ export default function LoginPage() {
 
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? (
-                  t('auth.signing_in')
+                  t('auth.logging_in')
                 ) : (
                   <>
                     {t('auth.sign_in')}
@@ -183,15 +183,15 @@ export default function LoginPage() {
                   alt="Google"
                   className="mr-2 h-4 w-4"
                 />
-                Login with Google
+                {t('auth.login_google')}
               </Button>
             </form>
 
             {/* Demo credentials */}
             <div className="mt-4 p-3 rounded-lg bg-muted text-center">
-              <p className="text-sm text-muted-foreground mb-2">{t('auth.demo_credentials')}</p>
+              <p className="text-sm text-muted-foreground mb-2">{t('auth.demo_account')}</p>
               <button onClick={fillDemoCredentials} className="text-sm text-primary hover:underline">
-                {t('auth.click_to_use')}: admin@plokymarket.bd / PlokyAdmin2026!
+                {t('auth.fill_demo')}
               </button>
             </div>
 
@@ -205,7 +205,7 @@ export default function LoginPage() {
         </Card>
 
         <p className="mt-8 text-center text-sm text-muted-foreground">
-          {t('auth.by_signing_in')}{' '}
+          {t('auth.terms_agree_prefix')}{' '}
           <Link href="/terms" className="hover:underline">
             {t('auth.terms')}
           </Link>{' '}
@@ -213,9 +213,9 @@ export default function LoginPage() {
           <Link href="/privacy" className="hover:underline">
             {t('auth.privacy')}
           </Link>
-          {t('auth.agree')}
+          .
         </p>
       </div>
-    </div>
+    </div >
   );
 }

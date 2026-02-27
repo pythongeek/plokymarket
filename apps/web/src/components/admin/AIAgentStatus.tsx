@@ -10,6 +10,9 @@ import React from 'react';
 import { Sparkles, Brain, ShieldCheck, Clock, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import { AgentType, AgentStatus, AgentState } from '@/lib/ai-agents/types';
 import { cn } from '@/lib/utils';
+import { AIRotationToggle } from '@/components/ai/AIRotationToggle';
+import { useAIProviderStore } from '@/store/aiProviderStore';
+import { Settings2 } from 'lucide-react';
 
 interface AIAgentStatusProps {
   agents: AgentState[];
@@ -85,11 +88,14 @@ const statusIcons: Record<AgentStatus, React.ReactNode> = {
   error: <AlertCircle className="w-4 h-4 text-red-500" />,
 };
 
-const providerLabels: Record<string, { name: string; color: string }> = {
-  vertex: { name: 'Vertex AI', color: 'text-blue-600 bg-blue-50' },
-  kimi: { name: 'Kimi API', color: 'text-purple-600 bg-purple-50' },
-  'rule-based': { name: 'Rule-Based', color: 'text-gray-600 bg-gray-50' },
-};
+interface AIAgentStatusProps {
+  agents: AgentState[];
+  currentStep: number;
+  isProcessing: boolean;
+  providerUsed?: 'vertex' | 'kimi' | 'rule-based';
+  onRotateProvider?: () => void;
+  className?: string;
+}
 
 export const AIAgentStatus: React.FC<AIAgentStatusProps> = ({
   agents,
@@ -99,10 +105,12 @@ export const AIAgentStatus: React.FC<AIAgentStatusProps> = ({
   onRotateProvider,
   className,
 }) => {
+  const [showRotation, setShowRotation] = React.useState(false);
+  const { mode } = useAIProviderStore();
   // Ensure all agent types are represented
   const allAgentTypes: AgentType[] = ['content', 'logic', 'timing', 'risk'];
   const agentMap = new Map(agents.map(a => [a.type, a]));
-  
+
   const displayAgents = allAgentTypes.map(type => {
     const existing = agentMap.get(type);
     if (existing) return existing;
@@ -220,8 +228,8 @@ export const AIAgentStatus: React.FC<AIAgentStatusProps> = ({
                   isCompleted
                     ? 'bg-green-100 text-green-600'
                     : isActive
-                    ? 'bg-indigo-100 text-indigo-600'
-                    : 'bg-gray-100 text-gray-400'
+                      ? 'bg-indigo-100 text-indigo-600'
+                      : 'bg-gray-100 text-gray-400'
                 )}
               >
                 {isCompleted ? (
@@ -254,17 +262,24 @@ export const AIAgentStatus: React.FC<AIAgentStatusProps> = ({
           <span className="text-[10px] text-gray-400">
             Step {currentStep} of {allAgentTypes.length}
           </span>
-          {onRotateProvider && (
-            <button
-              onClick={onRotateProvider}
-              disabled={isProcessing}
-              className="text-[10px] font-bold bg-slate-800 text-white px-3 py-1.5 rounded-md hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              Rotate API
-            </button>
-          )}
+          <button
+            onClick={() => setShowRotation(!showRotation)}
+            className={cn(
+              "p-2 rounded-lg transition-colors",
+              showRotation ? "bg-indigo-100 text-indigo-600" : "bg-gray-100 text-gray-400 hover:bg-gray-200"
+            )}
+          >
+            <Settings2 className="w-4 h-4" />
+          </button>
         </div>
       </div>
+
+      {/* Rotation System Overlay */}
+      {showRotation && (
+        <div className="p-4 border-t border-gray-100 animate-in slide-in-from-bottom-2 duration-200">
+          <AIRotationToggle />
+        </div>
+      )}
     </div>
   );
 };

@@ -20,6 +20,7 @@ import { runTimingAgent } from './timing-agent';
 import { runRiskAgent } from './risk-agent';
 import { checkForDuplicates } from './duplicate-detector';
 import { getBestProvider, rotateProvider } from './provider-switcher';
+import { aiRotationSystem, ProviderResponse } from '@/lib/ai/rotation-system';
 
 // Callback type for state updates
 type StateUpdateCallback = (agents: AgentState[], currentStep: number) => void;
@@ -161,7 +162,7 @@ export class AgentOrchestrator {
   /**
    * Run all agents in sequence
    */
-  public async runAll(context: AgentContext): Promise<AgentOrchestrationResult> {
+  public async runAll(context: AgentContext, aiMode: string = 'auto'): Promise<AgentOrchestrationResult> {
     if (this.isRunning) {
       throw new Error('Orchestrator is already running');
     }
@@ -182,7 +183,7 @@ export class AgentOrchestrator {
       // Step 1: Content Agent
       this.currentStep = 1;
       this.startAgent('content', 'Analyzing title & context...');
-      
+
       // Simulate progress
       const progressInterval = setInterval(() => {
         const agent = this.agents.get('content');
@@ -190,6 +191,9 @@ export class AgentOrchestrator {
           this.setAgentProgress('content', (agent.progress || 0) + 10);
         }
       }, 200);
+
+      // Use aiRotationSystem for coordinated calls if needed
+      // Here we still call individual agents but we could pass the mode down
 
       contentResult = await runContentAgent(context);
       clearInterval(progressInterval);
@@ -207,7 +211,7 @@ export class AgentOrchestrator {
       // Step 2: Market Logic Agent
       this.currentStep = 2;
       this.startAgent('logic', 'Determining market type...');
-      
+
       const logicProgressInterval = setInterval(() => {
         const agent = this.agents.get('logic');
         if (agent && agent.status === 'processing' && agent.progress < 90) {
@@ -229,7 +233,7 @@ export class AgentOrchestrator {
       // Step 3: Timing Agent
       this.currentStep = 3;
       this.startAgent('timing', 'Calculating optimal timing...');
-      
+
       const timingProgressInterval = setInterval(() => {
         const agent = this.agents.get('timing');
         if (agent && agent.status === 'processing' && agent.progress < 90) {
@@ -250,7 +254,7 @@ export class AgentOrchestrator {
       // Step 4: Risk Agent
       this.currentStep = 4;
       this.startAgent('risk', 'Checking compliance...');
-      
+
       const riskProgressInterval = setInterval(() => {
         const agent = this.agents.get('risk');
         if (agent && agent.status === 'processing' && agent.progress < 90) {
@@ -264,10 +268,10 @@ export class AgentOrchestrator {
       agentsUsed.push('risk');
 
       // Add risk warnings if any
-      if (riskResult.warnings.length > 0) {
+      if (riskResult.warnings?.length > 0) {
         warnings.push(...riskResult.warnings);
       }
-      if (riskResult.recommendations.length > 0) {
+      if (riskResult.recommendations?.length > 0) {
         warnings.push(...riskResult.recommendations.map(r => `Recommendation: ${r}`));
       }
 
@@ -277,7 +281,7 @@ export class AgentOrchestrator {
           contentResult.title,
           context.existingEvents
         );
-        
+
         if (duplicateCheck.isDuplicate) {
           warnings.push(`Similar event exists: ${duplicateCheck.matchedEvent?.title}`);
           warnings.push(...duplicateCheck.suggestions.map(s => `Suggestion: ${s}`));
@@ -335,7 +339,8 @@ export class AgentOrchestrator {
    */
   public async runAgent(
     type: AgentType,
-    context: AgentContext
+    context: AgentContext,
+    aiMode: string = 'auto'
   ): Promise<any> {
     this.startAgent(type);
 

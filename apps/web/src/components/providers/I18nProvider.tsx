@@ -5,34 +5,17 @@ import i18n from '@/i18n/config';
 import { I18nextProvider } from 'react-i18next';
 
 export function I18nProvider({ children }: { children: ReactNode }) {
-    const [isInitialized, setIsInitialized] = useState(i18n.isInitialized);
+    const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
-        // Ensure i18n is initialized on client side
-        if (i18n.isInitialized) {
-            setIsInitialized(true);
-        } else {
-            i18n.on('initialized', () => {
-                setIsInitialized(true);
-            });
+        setMounted(true);
+        if (typeof window !== 'undefined' && !i18n.isInitialized) {
+            i18n.init();
         }
-
-        // Force re-render when language changes
-        const handleLanguageChange = () => {
-            // This forces a re-render of the provider
-            setIsInitialized(true);
-        };
-
-        i18n.on('languageChanged', handleLanguageChange);
-
-        return () => {
-            i18n.off('languageChanged', handleLanguageChange);
-        };
     }, []);
 
-    // Show nothing while i18n initializes to prevent hydration mismatch
-    if (!isInitialized) {
-        return null;
+    if (!mounted) {
+        return <>{children}</>;
     }
 
     return (

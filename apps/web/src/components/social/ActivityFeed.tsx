@@ -3,8 +3,8 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { 
-  TrendingUp, 
+import {
+  TrendingUp,
   TrendingDown,
   MessageSquare,
   UserPlus,
@@ -54,8 +54,8 @@ import {
 import { toast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
 import { useStore } from '@/store/useStore';
-import { 
-  Activity as ActivityType, 
+import {
+  Activity as ActivityType,
   ActivityAggregation,
   ContentType,
   FeedPreferences,
@@ -144,8 +144,8 @@ function ActivityItem({ activity, onMarkRead, compact = false }: ActivityItemPro
                 <span className="text-muted-foreground"> ${data.amount.toLocaleString()}</span>
               )}
               {data.position && (
-                <Badge 
-                  variant="outline" 
+                <Badge
+                  variant="outline"
                   className={cn(
                     'ml-2 text-[10px]',
                     data.position === 'YES' ? 'border-green-500 text-green-500' : 'border-red-500 text-red-500'
@@ -169,8 +169,8 @@ function ActivityItem({ activity, onMarkRead, compact = false }: ActivityItemPro
             <p className="text-sm">
               <span className="font-medium">{data.sourceUserName}</span>
               {' '}{data.interactionType === 'reply' ? 'replied to your comment' :
-                    data.interactionType === 'mention' ? 'mentioned you' :
-                    data.interactionType === 'upvote' ? 'upvoted your comment' :
+                data.interactionType === 'mention' ? 'mentioned you' :
+                  data.interactionType === 'upvote' ? 'upvoted your comment' :
                     'started following you'}
             </p>
             {data.content && (
@@ -254,7 +254,7 @@ function ActivityItem({ activity, onMarkRead, compact = false }: ActivityItemPro
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
           {renderContent()}
-          
+
           {!activity.is_read && onMarkRead && (
             <button
               onClick={onMarkRead}
@@ -328,11 +328,11 @@ function ActivityAggregationCard({ aggregation, onExpand }: ActivityAggregationC
 // MUTE KEYWORDS DIALOG
 // ===================================
 
-function MuteKeywordsDialog({ 
-  keywords, 
-  onUpdate 
-}: { 
-  keywords: string[]; 
+function MuteKeywordsDialog({
+  keywords,
+  onUpdate
+}: {
+  keywords: string[];
   onUpdate: (keywords: string[]) => Promise<void>;
 }) {
   const [newKeyword, setNewKeyword] = useState('');
@@ -377,7 +377,7 @@ function MuteKeywordsDialog({
               Add
             </Button>
           </div>
-          
+
           <div className="space-y-2 max-h-[300px] overflow-auto">
             {localKeywords.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-4">
@@ -398,7 +398,7 @@ function MuteKeywordsDialog({
               ))
             )}
           </div>
-          
+
           <Button onClick={handleSave} className="w-full">
             Save Changes
           </Button>
@@ -493,7 +493,7 @@ function FeedControls({
             {/* Content Type Weights */}
             <div className="space-y-4">
               <h4 className="font-medium text-sm">Content Priorities</h4>
-              
+
               <div className="space-y-3">
                 {[
                   { key: 'market_movements_weight', label: 'Market Movements', icon: TrendingUp },
@@ -528,7 +528,7 @@ function FeedControls({
             {/* Display Options */}
             <div className="space-y-4">
               <h4 className="font-medium text-sm">Display Options</h4>
-              
+
               <div className="flex items-center justify-between">
                 <span className="text-sm">Compact Mode</span>
                 <Switch
@@ -551,13 +551,13 @@ function FeedControls({
             {/* Muted Items */}
             <div className="space-y-4">
               <h4 className="font-medium text-sm">Muted Items</h4>
-              
+
               <div className="space-y-3">
                 <MuteKeywordsDialog
                   keywords={localPrefs.muted_keywords}
                   onUpdate={(keywords) => setLocalPrefs(p => ({ ...p, muted_keywords: keywords }))}
                 />
-                
+
                 <div className="text-sm text-muted-foreground space-y-1">
                   {localPrefs.muted_keywords.length > 0 && (
                     <p>• {localPrefs.muted_keywords.length} keywords muted</p>
@@ -568,11 +568,11 @@ function FeedControls({
                   {localPrefs.muted_markets.length > 0 && (
                     <p>• {localPrefs.muted_markets.length} markets muted</p>
                   )}
-                  {localPrefs.muted_keywords.length === 0 && 
-                   localPrefs.muted_users.length === 0 && 
-                   localPrefs.muted_markets.length === 0 && (
-                    <p>No muted items</p>
-                  )}
+                  {localPrefs.muted_keywords.length === 0 &&
+                    localPrefs.muted_users.length === 0 &&
+                    localPrefs.muted_markets.length === 0 && (
+                      <p>No muted items</p>
+                    )}
                 </div>
               </div>
             </div>
@@ -593,6 +593,7 @@ function FeedControls({
 
 interface ActivityFeedProps {
   userId?: string;
+  marketId?: string;
   filterTypes?: ContentType[];
   enableInfiniteScroll?: boolean;
   batchSize?: number;
@@ -601,6 +602,7 @@ interface ActivityFeedProps {
 
 export function ActivityFeed({
   userId,
+  marketId,
   filterTypes,
   enableInfiniteScroll = true,
   batchSize = 20,
@@ -622,11 +624,12 @@ export function ActivityFeed({
   // Load initial data
   const loadActivities = useCallback(async (reset = false) => {
     if (isLoading && !reset) return;
-    
+
     setIsLoading(true);
     try {
       const params = new URLSearchParams();
       if (activeFilter !== 'all') params.append('type', activeFilter);
+      if (marketId) params.append('market_id', marketId);
       if (cursor && !reset) params.append('cursor', cursor);
       params.append('limit', batchSize.toString());
 
@@ -675,7 +678,7 @@ export function ActivityFeed({
 
   // Virtual list
   const allItems = useMemo(() => [...aggregations, ...activities], [aggregations, activities]);
-  
+
   const virtualizer = useVirtualizer({
     count: allItems.length,
     getScrollElement: () => parentRef.current,
@@ -689,8 +692,8 @@ export function ActivityFeed({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ activityIds: [activityId] })
     });
-    
-    setActivities(prev => 
+
+    setActivities(prev =>
       prev.map(a => a.id === activityId ? { ...a, is_read: true } : a)
     );
     setUnreadCount(prev => Math.max(0, prev - 1));
@@ -718,10 +721,10 @@ export function ActivityFeed({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ duration })
     });
-    setPreferences(prev => prev ? { 
-      ...prev, 
+    setPreferences(prev => prev ? {
+      ...prev,
       notifications_paused: !!duration,
-      notifications_pause_until: duration 
+      notifications_pause_until: duration
         ? new Date(Date.now() + duration * 60000).toISOString()
         : undefined
     } : null);
@@ -734,7 +737,7 @@ export function ActivityFeed({
       <div className="flex items-center justify-between sticky top-0 bg-background z-10 py-2">
         <div className="flex items-center gap-4">
           <h2 className="text-2xl font-bold">Activity Feed</h2>
-          
+
           {/* Filter Dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -768,7 +771,7 @@ export function ActivityFeed({
       </div>
 
       {/* Feed Content */}
-      <div 
+      <div
         ref={parentRef}
         className="space-y-2 max-h-[calc(100vh-200px)] overflow-auto"
       >
@@ -787,8 +790,8 @@ export function ActivityFeed({
           <>
             {/* Aggregations */}
             {aggregations.map(agg => (
-              <ActivityAggregationCard 
-                key={agg.id} 
+              <ActivityAggregationCard
+                key={agg.id}
                 aggregation={agg}
                 onExpand={() => {
                   // Expand aggregation

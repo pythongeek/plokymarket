@@ -94,6 +94,21 @@ export interface Market {
   paused_at?: string;
   paused_by?: string;
   estimated_resume_at?: string;
+
+  // Multi-outcome
+  outcomes?: MarketOutcome[];
+}
+
+export interface MarketOutcome {
+  id: string;
+  market_id: string;
+  label: string;
+  description?: string;
+  image_url?: string;
+  current_price: number;
+  price_change_24h?: number;
+  total_volume?: number;
+  winner?: boolean;
 }
 
 // ===================================

@@ -2,6 +2,9 @@ import { useState, useEffect, useMemo } from 'react';
 import { useStore } from '@/store/useStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
+import { useBetSlipStore } from '@/store/betSlipStore';
+import { ShoppingCart } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -84,9 +87,11 @@ const calculateExecution = (
 interface TradingPanelProps {
   market: Market;
   isPaused?: boolean;
+  selectedOutcomeId?: string;
+  forcedDirection?: 'YES' | 'NO';
 }
 
-export function TradingPanel({ market, isPaused }: TradingPanelProps) {
+export function TradingPanel({ market, isPaused, selectedOutcomeId, forcedDirection }: TradingPanelProps) {
   const {
     wallet,
     placeOrder,
@@ -98,8 +103,9 @@ export function TradingPanel({ market, isPaused }: TradingPanelProps) {
     toggleBracket,
     setBracketPrices
   } = useStore();
+  const { addItem: addToSlip } = useBetSlipStore();
   const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState<'buy' | 'sell'>('buy');
+  const [activeTab, setActiveTab] = useState<'buy' | 'sell'>(forcedDirection?.toLowerCase() as 'buy' | 'sell' || 'buy');
   const [outcome, setOutcome] = useState<OutcomeType>('YES');
   const [price, setPrice] = useState(market.yes_price?.toFixed(2) || '0.50');
   const [quantity, setQuantity] = useState('100');
@@ -138,6 +144,12 @@ export function TradingPanel({ market, isPaused }: TradingPanelProps) {
       setActiveTab(tradingState.side);
     }
   }, [tradingState.side]);
+
+  useEffect(() => {
+    if (forcedDirection) {
+      setOutcome(forcedDirection);
+    }
+  }, [forcedDirection, selectedOutcomeId]);
 
   // Computations
   const executionPrice = orderType === 'market'
@@ -227,7 +239,8 @@ export function TradingPanel({ market, isPaused }: TradingPanelProps) {
         parseInt(quantity),
         orderType,
         orderType === 'limit' ? parseFloat(limitPrice) : undefined,
-        slippage / 100
+        slippage / 100,
+        selectedOutcomeId
       );
 
       if (success) {
@@ -364,13 +377,13 @@ export function TradingPanel({ market, isPaused }: TradingPanelProps) {
           <div className="flex gap-4 my-4 border-b">
             <button
               onClick={() => setOrderType('market')}
-              className={`pb-2 text-sm font-medium border-b-2 transition-colors ${orderType === 'market' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+              className={`pb - 2 text - sm font - medium border - b - 2 transition - colors ${orderType === 'market' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'} `}
             >
               {t('trading.market_order', 'Market Order')}
             </button>
             <button
               onClick={() => setOrderType('limit')}
-              className={`pb-2 text-sm font-medium border-b-2 transition-colors ${orderType === 'limit' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+              className={`pb - 2 text - sm font - medium border - b - 2 transition - colors ${orderType === 'limit' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'} `}
             >
               {t('trading.limit_order', 'Limit Order')}
             </button>
@@ -387,7 +400,7 @@ export function TradingPanel({ market, isPaused }: TradingPanelProps) {
                     onClick={() => setPercentageQuantity(pct)}
                     className="px-1.5 py-0.5 text-[10px] bg-muted hover:bg-muted/80 rounded transition-colors"
                   >
-                    {pct === 1 ? 'Max' : `${pct * 100}%`}
+                    {pct === 1 ? 'Max' : `${pct * 100}% `}
                   </button>
                 ))}
               </div>
@@ -443,10 +456,10 @@ export function TradingPanel({ market, isPaused }: TradingPanelProps) {
                 <button
                   key={tol}
                   onClick={() => setSlippage(tol)}
-                  className={`px-3 py-1.5 text-sm rounded-md border transition-colors ${slippage === tol
+                  className={`px - 3 py - 1.5 text - sm rounded - md border transition - colors ${slippage === tol
                     ? 'bg-primary/10 border-primary text-primary font-medium'
                     : 'border-border text-muted-foreground hover:bg-muted'
-                    }`}
+                    } `}
                 >
                   {tol}%
                 </button>
@@ -599,34 +612,64 @@ export function TradingPanel({ market, isPaused }: TradingPanelProps) {
           )}
 
           {/* Submit Button */}
-          <Button
-            onClick={handleSubmit}
-            disabled={
-              isSubmitting ||
-              parsedQty <= 0 ||
-              totalCost > (wallet?.balance || 0) ||
-              isPaused ||
-              executionWarning?.status === 'slippage_exceeded'
-            }
-            className={cn(
-              "w-full h-14 text-lg font-bold rounded-xl",
-              activeTab === 'buy'
-                ? "bg-green-500 hover:bg-green-600 text-white shadow-lg shadow-green-500/20"
-                : "bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20"
-            )}
-          >
-            {isPaused ? (
-              t('trading.paused', 'Trading Paused')
-            ) : isSubmitting ? (
-              t('trading.processing')
-            ) : (
-              <>
-                {orderType === 'market'
-                  ? (activeTab === 'buy' ? t('trading.buy_now', 'Buy Now') : t('trading.sell_now', 'Sell Now'))
-                  : t('trading.place_limit', 'Place Limit Order')}
-              </>
-            )}
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={() => {
+                addToSlip({
+                  marketId: market?.id || '',
+                  marketTitle: market?.question || market?.title || 'Market Order',
+                  outcome: selectedOutcomeId || (activeTab === 'buy' ? 'YES' : 'NO'),
+                  side: activeTab,
+                  price: typeof price === 'string' ? parseFloat(price) : price,
+                  quantity: typeof quantity === 'string' ? parseFloat(quantity) : quantity,
+                  orderType: orderType
+                });
+                toast.success('বেট স্লিপে যোগ করা হয়েছে');
+              }}
+              className="flex-1 rounded-xl h-14 border-slate-700 hover:bg-slate-800"
+              disabled={
+                isSubmitting ||
+                parsedQty <= 0 ||
+                totalCost > (wallet?.balance || 0) ||
+                isPaused ||
+                executionWarning?.status === 'slippage_exceeded'
+              }
+            >
+              <ShoppingCart className="w-4 h-4 mr-2" />
+              স্লিপে দিন
+            </Button>
+            <Button
+              size="lg"
+              onClick={handleSubmit}
+              disabled={
+                isSubmitting ||
+                parsedQty <= 0 ||
+                totalCost > (wallet?.balance || 0) ||
+                isPaused ||
+                executionWarning?.status === 'slippage_exceeded'
+              }
+              className={cn(
+                "flex-[2] rounded-xl font-bold h-14",
+                activeTab === 'buy'
+                  ? "bg-green-500 hover:bg-green-600 text-white shadow-lg shadow-green-500/20"
+                  : "bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20"
+              )}
+            >
+              {isPaused ? (
+                t('trading.paused', 'Trading Paused')
+              ) : isSubmitting ? (
+                t('trading.processing')
+              ) : (
+                <>
+                  {orderType === 'market'
+                    ? (activeTab === 'buy' ? t('trading.buy_now', 'Buy Now') : t('trading.sell_now', 'Sell Now'))
+                    : t('trading.place_limit', 'Place Limit Order')}
+                </>
+              )}
+            </Button>
+          </div>
 
           {/* Info & Warning for One Click */}
           {tradingState.isOneClick && (

@@ -65,6 +65,7 @@ export interface RiskAssessmentResult {
   isSafe: boolean;
   riskScore: number;
   violations: string[];
+  warnings: string[];
   recommendations: string[];
   policyChecks: {
     cyberSecurityLaw: boolean;

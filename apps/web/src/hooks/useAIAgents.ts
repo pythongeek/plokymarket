@@ -16,6 +16,7 @@ import {
   TimingResult,
   RiskAssessmentResult,
 } from '@/lib/ai-agents/types';
+import { useAIProviderStore } from '@/store/aiProviderStore';
 
 interface UseAIAgentsOptions {
   onComplete?: (result: AgentOrchestrationResult) => void;
@@ -30,7 +31,7 @@ interface UseAIAgentsReturn {
   isProcessing: boolean;
   result: AgentOrchestrationResult | null;
   error: Error | null;
-  
+
   // Actions
   runWorkflow: (params: RunWorkflowParams) => Promise<void>;
   runSingleAgent: (type: AgentType, params: RunWorkflowParams) => Promise<void>;
@@ -61,7 +62,8 @@ export function useAIAgents(options: UseAIAgentsOptions = {}): UseAIAgentsReturn
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState<AgentOrchestrationResult | null>(null);
   const [error, setError] = useState<Error | null>(null);
-  
+  const { mode, recordSuccess, recordFailure } = useAIProviderStore();
+
   const eventSourceRef = useRef<EventSource | null>(null);
 
   // Cleanup on unmount
@@ -91,7 +93,7 @@ export function useAIAgents(options: UseAIAgentsOptions = {}): UseAIAgentsReturn
     setIsProcessing(true);
     setError(null);
     setResult(null);
-    
+
     // Reset all agents to idle
     setAgents(defaultAgents);
     setCurrentStep(0);
@@ -105,16 +107,19 @@ export function useAIAgents(options: UseAIAgentsOptions = {}): UseAIAgentsReturn
         body: JSON.stringify({
           ...params,
           mode: 'full',
+          aiMode: mode,
         }),
       });
 
       if (!response.ok) {
+        recordFailure('vertex'); // Generic failure recording
         const errorData = await response.json();
         throw new Error(errorData.message || 'Agent workflow failed');
       }
 
       const data = await response.json();
-      
+      recordSuccess(data.metadata?.providerUsed === 'kimi' ? 'kimi' : 'vertex');
+
       // Update agents based on result
       if (data.data) {
         if (data.data.content) {
@@ -161,7 +166,7 @@ export function useAIAgents(options: UseAIAgentsOptions = {}): UseAIAgentsReturn
   const runSingleAgent = useCallback(async (type: AgentType, params: RunWorkflowParams) => {
     setIsProcessing(true);
     setError(null);
-    
+
     // Set specific agent to processing
     updateAgentState(type, { status: 'processing', progress: 0 });
 
@@ -183,7 +188,7 @@ export function useAIAgents(options: UseAIAgentsOptions = {}): UseAIAgentsReturn
       }
 
       const data = await response.json();
-      
+
       // Update agent with result
       updateAgentState(type, {
         status: 'completed',

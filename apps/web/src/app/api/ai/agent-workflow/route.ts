@@ -59,6 +59,7 @@ export async function POST(req: NextRequest) {
       resolution_date,
       existing_events = [],
       mode = 'full', // 'full' | 'content' | 'logic' | 'timing' | 'risk'
+      aiMode = 'auto',
     } = body;
 
     if (!title) {
@@ -111,10 +112,10 @@ export async function POST(req: NextRequest) {
 
     if (mode === 'full') {
       // Run all agents
-      result = await orchestrator.runAll(context);
+      result = await orchestrator.runAll(context, aiMode);
     } else {
       // Run specific agent
-      const agentResult = await orchestrator.runAgent(mode, context);
+      const agentResult = await orchestrator.runAgent(mode, context, aiMode);
       result = {
         success: true,
         [mode]: agentResult,

@@ -8,11 +8,6 @@ const nextConfig = {
     eslint: {
         ignoreDuringBuilds: true,
     },
-    i18n: {
-        locales: ['bn', 'en'],
-        defaultLocale: 'bn',
-        localeDetection: false,
-    },
 };
 
 module.exports = nextConfig;

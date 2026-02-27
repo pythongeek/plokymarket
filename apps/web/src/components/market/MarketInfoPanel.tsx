@@ -26,7 +26,7 @@ export function MarketInfoPanel({ market }: MarketInfoPanelProps) {
                         <span className="text-xs uppercase tracking-wider">Resolution Criteria</span>
                     </div>
                     <p className="leading-relaxed text-sm">
-                        {market.resolution_criteria || 'This market resolves to YES if the specified conditions are met before the trading period closes. Otherwise, it resolves to NO.'}
+                        {(market as any).resolution_criteria || 'This market resolves to YES if the specified conditions are met before the trading period closes. Otherwise, it resolves to NO.'}
                     </p>
                 </div>
 
@@ -88,8 +88,10 @@ export function MarketInfoPanel({ market }: MarketInfoPanelProps) {
                             <UserCheck className="w-3 h-3" /> Creator
                         </span>
                         <div className="flex items-center gap-2">
-                            <span className="font-medium text-foreground">Plokymarket BD</span>
-                            <Badge variant="secondary" className="text-[10px] bg-emerald-500/10 text-emerald-500 border-none px-1.5 py-0 leading-tight">Verified</Badge>
+                            <span className="font-medium text-foreground">{(market as any).creator_name || 'Plokymarket BD'}</span>
+                            {(market as any).is_creator_verified !== false && (
+                                <Badge variant="secondary" className="text-[10px] bg-emerald-500/10 text-emerald-500 border-none px-1.5 py-0 leading-tight">Verified</Badge>
+                            )}
                         </div>
                     </div>
 
