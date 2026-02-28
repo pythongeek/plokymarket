@@ -520,6 +520,13 @@ export default function EventCreationPage() {
     setIsSubmitting(true);
 
     try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) {
+        throw new Error('অনুগ্রহ করে লগইন করুন');
+      }
+
       const payload = {
         title: form.title.trim(),
         question: form.question.trim(),
@@ -545,16 +552,22 @@ export default function EventCreationPage() {
         status: 'active' as EventStatus,
       };
 
-      const response = await fetch('/api/admin/events/create-atomic', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      const { data: rpcResultRaw, error: rpcError } = await (supabase.rpc as any)(
+        'create_event_complete',
+        {
+          p_event_data: payload,
+          p_admin_id: user.id,
+        }
+      );
 
-      const result = await response.json();
+      const result = rpcResultRaw as any;
 
-      if (!response.ok) {
-        throw new Error(result.error || 'ইভেন্ট তৈরি করা সম্ভব হয়নি');
+      if (rpcError) {
+        throw new Error(rpcError.message || 'ডাটাবেস এরর: ইভেন্ট তৈরি করা যায়নি।');
+      }
+
+      if (!result?.success) {
+        throw new Error(result?.error || 'ইভেন্ট তৈরি করা সম্ভব হয়নি');
       }
 
       setSuccessData({
