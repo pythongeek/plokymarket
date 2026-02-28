@@ -124,7 +124,7 @@ export async function POST(req: NextRequest) {
       status: 'active',
       is_featured: event_data.is_featured || false,
       created_by: user.id,
-      initial_liquidity: event_data.initial_liquidity || 1000,
+      initial_liquidity: event_data.initial_liquidity || 5000,
       b_parameter: event_data.b_parameter || 100,
     };
 
@@ -138,7 +138,7 @@ export async function POST(req: NextRequest) {
         question: market.question || event_data.title,
         description: market.description || '',
         outcomes: market.outcomes || ['হ্যাঁ', 'না'],
-        liquidity: market.liquidity || event_data.initial_liquidity || 1000,
+        liquidity: market.liquidity || event_data.initial_liquidity || 5000,
         trading_fee: market.trading_fee || 0.02,
         min_trade_amount: market.min_trade_amount || 10,
         max_trade_amount: market.max_trade_amount || 10000,

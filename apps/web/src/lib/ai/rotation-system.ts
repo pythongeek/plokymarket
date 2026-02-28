@@ -165,7 +165,8 @@ export class AIRotationSystem {
         ? `${prompt}\n\nContext: Generate content suitable for Bangladesh market. Use Bengali language where appropriate.`
         : prompt;
 
-      const res = await fetch('/api/ai/vertex-generate', {
+      const baseUrl = typeof window !== 'undefined' ? '' : (process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'));
+      const res = await fetch(`${baseUrl}/api/ai/vertex-generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

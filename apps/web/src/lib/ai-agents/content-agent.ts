@@ -46,39 +46,39 @@ function extractEntities(title: string): {
     party: [],
     coin: [],
   };
-  
+
   let category = 'Other';
-  
+
   // Check sports
   if (NER_PATTERNS.sports.tournament.test(title)) {
     category = 'Sports';
     const tournamentMatch = title.match(NER_PATTERNS.sports.tournament);
     if (tournamentMatch) entities.tournament.push(tournamentMatch[0]);
-    
+
     const yearMatch = title.match(NER_PATTERNS.sports.year);
     if (yearMatch) entities.year.push(yearMatch[0]);
-    
+
     const teamMatches = title.match(new RegExp(NER_PATTERNS.sports.team, 'g'));
     if (teamMatches) entities.team.push(...teamMatches);
   }
-  
+
   // Check politics
   else if (NER_PATTERNS.politics.election.test(title)) {
     category = 'Politics';
     const electionMatch = title.match(NER_PATTERNS.politics.election);
     if (electionMatch) entities.election.push(electionMatch[0]);
-    
+
     const partyMatches = title.match(new RegExp(NER_PATTERNS.politics.party, 'g'));
     if (partyMatches) entities.party.push(...partyMatches);
   }
-  
+
   // Check crypto
   else if (NER_PATTERNS.crypto.coin.test(title) || NER_PATTERNS.crypto.exchange.test(title)) {
     category = 'Crypto';
     const coinMatches = title.match(new RegExp(NER_PATTERNS.crypto.coin, 'g'));
     if (coinMatches) entities.coin.push(...coinMatches);
   }
-  
+
   return { category, entities };
 }
 
@@ -87,24 +87,24 @@ function extractEntities(title: string): {
  */
 function calculateSEOScore(title: string): number {
   let score = 50; // Base score
-  
+
   // Length check (optimal: 30-60 chars)
   if (title.length >= 30 && title.length <= 60) score += 15;
   else if (title.length > 60) score += 5;
-  
+
   // Contains year (trending)
   if (/\d{4}/.test(title)) score += 10;
-  
+
   // Contains question mark (engagement)
   if (title.includes('?')) score += 10;
-  
+
   // Contains popular keywords
   const popularKeywords = ['বিজয়', 'চ্যাম্পিয়ন', 'জয়', 'হার', 'দাম', 'মূল্য'];
   if (popularKeywords.some(kw => title.includes(kw))) score += 10;
-  
+
   // Bengali content bonus
   if (/[\u0980-\u09FF]/.test(title)) score += 5;
-  
+
   return Math.min(100, score);
 }
 
@@ -116,38 +116,38 @@ function generateEnhancedTitleRuleBased(
   entities: Record<string, string[]>
 ): string {
   const { category } = extractEntities(rawTitle);
-  
+
   if (category === 'Sports') {
     const tournament = entities.tournament[0] || '';
     const year = entities.year[0] || new Date().getFullYear().toString();
-    
+
     if (tournament.includes('বিপিএল') || tournament.includes('বাংলাদেশ প্রিমিয়ার লীগ')) {
       return `${tournament} ${year}-এ চ্যাম্পিয়ন হবে কোন দল?`;
     }
-    
+
     if (entities.team.length >= 2) {
       return `${entities.team[0]} বনাম ${entities.team[1]}: কে জিতবে ${tournament || 'ম্যাচ'}?`;
     }
-    
+
     return `${tournament || rawTitle} ${year}: কে হবে বিজয়ী?`;
   }
-  
+
   if (category === 'Politics') {
     const election = entities.election[0] || 'নির্বাচন';
     const year = entities.year[0] || new Date().getFullYear().toString();
     return `${year} সালের ${election}: কোন দল জয়লাভ করবে?`;
   }
-  
+
   if (category === 'Crypto') {
     const coin = entities.coin[0] || 'বিটকয়েন';
     return `${coin} এর দাম কি আগামী সপ্তাহে বাড়বে?`;
   }
-  
+
   // Generic enhancement
   if (!rawTitle.includes('?')) {
     return `${rawTitle} - কী হবে ফলাফল?`;
   }
-  
+
   return rawTitle;
 }
 
@@ -164,7 +164,7 @@ function generateDescriptionRuleBased(
     Crypto: `ক্রিপ্টোকারেন্সি বাজারের ওঠানামা নিয়ে পূর্বাভাস দিন। বাজার বিশ্লেষণ করে সঠিক সিদ্ধান্ত নিন।`,
     Other: `এই ইভেন্টে ভবিষ্যৎবাণী করুন এবং অন্যান্য ব্যবহারকারীদের সাথে ট্রেড করুন।`,
   };
-  
+
   return descriptions[category] || descriptions.Other;
 }
 
@@ -177,7 +177,7 @@ function generateTagsRuleBased(
   entities: Record<string, string[]>
 ): string[] {
   const tags: string[] = [category.toLowerCase()];
-  
+
   if (category === 'Sports') {
     tags.push('cricket', 'bangladesh', 'prediction');
     if (entities.tournament[0]) tags.push(entities.tournament[0].toLowerCase().replace(/\s+/g, '-'));
@@ -186,7 +186,7 @@ function generateTagsRuleBased(
   } else if (category === 'Crypto') {
     tags.push('bitcoin', 'trading', 'price-prediction');
   }
-  
+
   return [...new Set(tags)];
 }
 
@@ -198,7 +198,8 @@ async function generateWithVertexAI(
   context: AgentContext
 ): Promise<ContentAgentResult> {
   // Call the API route instead of direct Vertex AI
-  const response = await fetch('/api/ai/vertex-generate', {
+  const baseUrl = typeof window !== 'undefined' ? '' : (process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'));
+  const response = await fetch(`${baseUrl}/api/ai/vertex-generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -225,11 +226,11 @@ async function generateWithKimi(
   context: AgentContext
 ): Promise<ContentAgentResult> {
   const apiKey = process.env.KIMI_API_KEY;
-  
+
   if (!apiKey) {
     throw new Error('KIMI_API_KEY not set');
   }
-  
+
   const response = await fetch('https://api.moonshot.cn/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -261,25 +262,25 @@ Respond in JSON format:
       temperature: 0.3,
     }),
   });
-  
+
   if (!response.ok) {
     throw new Error(`Kimi API error: ${response.status}`);
   }
-  
+
   const data = await response.json();
   const content = data.choices?.[0]?.message?.content;
-  
+
   if (!content) {
     throw new Error('Empty response from Kimi');
   }
-  
+
   const jsonMatch = content.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
     throw new Error('Invalid JSON response from Kimi');
   }
-  
+
   const parsed = JSON.parse(jsonMatch[0]);
-  
+
   return {
     title: parsed.title,
     description: parsed.description,
@@ -297,12 +298,12 @@ Respond in JSON format:
 function generateRuleBased(context: AgentContext): ContentAgentResult {
   const rawTitle = context.rawInput || context.title || '';
   const { category, entities } = extractEntities(rawTitle);
-  
+
   const title = generateEnhancedTitleRuleBased(rawTitle, entities);
   const description = generateDescriptionRuleBased(title, category);
   const tags = generateTagsRuleBased(title, category, entities);
   const seoScore = calculateSEOScore(title);
-  
+
   return {
     title,
     description,
@@ -321,15 +322,15 @@ export async function runContentAgent(
   context: AgentContext
 ): Promise<ContentAgentResult> {
   console.log('[ContentAgent] Starting with context:', context);
-  
+
   const { result, provider } = await executeWithFailover(
     () => generateWithVertexAI(context),
     () => generateWithKimi(context),
     () => generateRuleBased(context)
   );
-  
+
   console.log(`[ContentAgent] Completed using ${provider}`);
-  
+
   return {
     ...result,
     sources: provider === 'rule-based' ? ['rule-based'] : [provider, 'ner-analysis'],

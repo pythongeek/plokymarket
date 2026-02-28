@@ -11,7 +11,7 @@ export const marketSchema = z.object({
     endsAt: z.string().refine((val) => !isNaN(Date.parse(val)), { message: "সঠিক তারিখ দিন" }),
     resolutionDelay: z.number().int().min(0).max(20160).default(60),
     initialPrice: z.number().min(0.01).max(0.99).default(0.5),
-    initialLiquidity: z.number().min(100).default(1000),
+    initialLiquidity: z.number().min(100).default(5000),
     imageUrl: z.string().url('সঠিক URL দিন').optional().or(z.literal('')),
     resolverAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/, 'সঠিক ইথেরিয়াম অ্যাড্রেস দিন'),
     description: z.string().max(5000).optional(),

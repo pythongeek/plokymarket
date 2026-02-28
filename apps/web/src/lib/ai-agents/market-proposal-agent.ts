@@ -51,17 +51,17 @@ const MARKET_PATTERNS = {
  */
 export function detectMarketType(title: string, description?: string): MarketType {
   const text = `${title} ${description || ''}`.toLowerCase();
-  
+
   // Check for scalar indicators first (more specific)
   if (MARKET_PATTERNS.scalar.indicators.some(i => text.includes(i.toLowerCase()))) {
     return 'scalar';
   }
-  
+
   // Check for categorical indicators
   if (MARKET_PATTERNS.categorical.indicators.some(i => text.includes(i.toLowerCase()))) {
     return 'categorical';
   }
-  
+
   // Default to binary
   return 'binary';
 }
@@ -71,26 +71,26 @@ export function detectMarketType(title: string, description?: string): MarketTyp
  */
 function extractEntities(text: string): string[] {
   const entities: string[] = [];
-  
+
   // Common BPL teams
   const bplTeams = [
     'ঢাকা', 'কুমিল্লা', 'রংপুর', 'চট্টগ্রাম', 'সিলেট', 'খুলনা', 'বরিশাল',
     'Dhaka', 'Comilla', 'Rangpur', 'Chittagong', 'Sylhet', 'Khulna', 'Barisal'
   ];
-  
+
   // International teams
   const intlTeams = [
-    'বাংলাদেশ', 'ভারত', 'পাকিস্তান', 'অস্ট্রেলিয়া', 'ইংল্যান্ড', 
+    'বাংলাদেশ', 'ভারত', 'পাকিস্তান', 'অস্ট্রেলিয়া', 'ইংল্যান্ড',
     'Bangladesh', 'India', 'Pakistan', 'Australia', 'England'
   ];
-  
+
   // Check for teams
   [...bplTeams, ...intlTeams].forEach(team => {
     if (text.includes(team)) {
       entities.push(team);
     }
   });
-  
+
   return [...new Set(entities)];
 }
 
@@ -101,7 +101,7 @@ function generateOutcomes(type: MarketType, title: string, description?: string)
   switch (type) {
     case 'binary':
       return ['হ্যাঁ (Yes)', 'না (No)'];
-    
+
     case 'categorical': {
       const entities = extractEntities(`${title} ${description || ''}`);
       if (entities.length >= 2) {
@@ -109,10 +109,10 @@ function generateOutcomes(type: MarketType, title: string, description?: string)
       }
       return ['অপশন ১', 'অপশন ২', 'অপশন ৩'];
     }
-    
+
     case 'scalar':
       return ['Over', 'Under', 'Exact'];
-    
+
     default:
       return ['হ্যাঁ (Yes)', 'না (No)'];
   }
@@ -129,21 +129,21 @@ function calculateLiquidity(category: string, marketType: MarketType, isPrimary:
     'entertainment': 3000,
     'other': 2000,
   };
-  
+
   let liquidity = baseLiquidity[category.toLowerCase()] || 2000;
-  
+
   // Adjust for market type
   if (marketType === 'categorical') {
     liquidity *= 1.5; // More liquidity for multi-outcome
   } else if (marketType === 'scalar') {
     liquidity *= 1.2;
   }
-  
+
   // Primary market gets more liquidity
   if (isPrimary) {
     liquidity *= 1.5;
   }
-  
+
   return Math.round(liquidity);
 }
 
@@ -154,10 +154,10 @@ function generateRuleBasedProposals(context: AgentContext): MarketProposalResult
   const title = context.title || '';
   const description = context.description || '';
   const category = context.category || 'other';
-  
+
   const marketType = detectMarketType(title, description);
   const outcomes = generateOutcomes(marketType, title, description);
-  
+
   // Primary market
   const primaryMarket: ProposedMarket = {
     id: 'primary',
@@ -172,10 +172,10 @@ function generateRuleBasedProposals(context: AgentContext): MarketProposalResult
     confidence: 0.7,
     reasoning: `Detected ${marketType} market type from title analysis`,
   };
-  
+
   // Secondary markets based on context
   const secondaryMarkets: ProposedMarket[] = [];
-  
+
   // For sports events, add over/under market
   if (category.toLowerCase() === 'sports' || title.toLowerCase().includes('ক্রিকেট') || title.toLowerCase().includes('cricket')) {
     secondaryMarkets.push({
@@ -192,7 +192,7 @@ function generateRuleBasedProposals(context: AgentContext): MarketProposalResult
       reasoning: 'Sports events often have run-based side markets',
     });
   }
-  
+
   // For crypto, add price range market
   if (category.toLowerCase() === 'crypto' || title.toLowerCase().includes('bitcoin') || title.toLowerCase().includes('বিটকয়েন')) {
     secondaryMarkets.push({
@@ -209,10 +209,10 @@ function generateRuleBasedProposals(context: AgentContext): MarketProposalResult
       reasoning: 'Crypto markets benefit from price range predictions',
     });
   }
-  
-  const totalLiquidity = primaryMarket.suggestedLiquidity + 
+
+  const totalLiquidity = primaryMarket.suggestedLiquidity +
     secondaryMarkets.reduce((sum, m) => sum + m.suggestedLiquidity, 0);
-  
+
   return {
     primaryMarket,
     secondaryMarkets,
@@ -225,7 +225,8 @@ function generateRuleBasedProposals(context: AgentContext): MarketProposalResult
  * Vertex AI market proposal
  */
 async function generateWithVertexAI(context: AgentContext): Promise<MarketProposalResult> {
-  const response = await fetch('/api/ai/vertex-generate', {
+  const baseUrl = typeof window !== 'undefined' ? '' : (process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'));
+  const response = await fetch(`${baseUrl}/api/ai/vertex-generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -250,11 +251,11 @@ async function generateWithVertexAI(context: AgentContext): Promise<MarketPropos
  */
 async function generateWithKimi(context: AgentContext): Promise<MarketProposalResult> {
   const apiKey = process.env.KIMI_API_KEY;
-  
+
   if (!apiKey) {
     throw new Error('KIMI_API_KEY not set');
   }
-  
+
   const prompt = `
 Analyze this Bangladeshi prediction market event and propose optimal markets.
 
@@ -304,18 +305,18 @@ Respond in JSON:
 
   const data = await response.json();
   const content = data.choices?.[0]?.message?.content;
-  
+
   if (!content) {
     throw new Error('Empty response from Kimi');
   }
-  
+
   const jsonMatch = content.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
     throw new Error('Invalid JSON from Kimi');
   }
-  
+
   const parsed = JSON.parse(jsonMatch[0]);
-  
+
   return {
     primaryMarket: {
       ...parsed.primaryMarket,
@@ -343,15 +344,15 @@ export async function proposeMarkets(
   context: AgentContext
 ): Promise<MarketProposalResult> {
   console.log('[MarketProposalAgent] Analyzing event:', context.title);
-  
+
   const { result, provider } = await executeWithFailover(
     () => generateWithVertexAI(context),
     () => generateWithKimi(context),
     () => generateRuleBasedProposals(context)
   );
-  
+
   console.log(`[MarketProposalAgent] Proposed ${1 + result.secondaryMarkets.length} markets using ${provider}`);
-  
+
   return result;
 }
 
@@ -383,7 +384,7 @@ export function getDefaultMarketsForCategory(category: string): Partial<Proposed
       { name: 'মূল্য পরিসর (Price Range)', type: 'scalar', suggestedLiquidity: 3000 },
     ],
   };
-  
+
   return defaults[category.toLowerCase()] || [
     { name: 'মূল বাজার (Main Market)', type: 'binary', suggestedLiquidity: 2000 },
   ];

@@ -1,14 +1,14 @@
-'use client';
+﻿'use client';
 
 /**
  * =====================================================================
- * PLOKYMARKET — Event & Market Creation Page with AI Multi-Agent System
+ * PLOKYMARKET ΓÇö Event & Market Creation Page with AI Multi-Agent System
  * =====================================================================
- * ✅ AI Co-Pilot: Content, Logic, Timing, Risk agents
- * ✅ Provider Rotation: Vertex AI ↔ Kimi API
- * ✅ Real-time duplicate detection (Levenshtein)
- * ✅ Bangladesh timezone (Asia/Dhaka) handling
- * ✅ Atomic transaction for event+market creation
+ * Γ£à AI Co-Pilot: Content, Logic, Timing, Risk agents
+ * Γ£à Provider Rotation: Vertex AI Γåö Kimi API
+ * Γ£à Real-time duplicate detection (Levenshtein)
+ * Γ£à Bangladesh timezone (Asia/Dhaka) handling
+ * Γ£à Atomic transaction for event+market creation
  * =====================================================================
  */
 
@@ -31,7 +31,7 @@ import { useMarketProposals } from '@/hooks/useMarketProposals';
 import { AgentState, AgentOrchestrationResult } from '@/lib/ai-agents/types';
 import { ProposedMarket } from '@/lib/ai-agents/market-proposal-agent';
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ Types ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 type ResolutionMethod = 'manual_admin' | 'ai_oracle' | 'expert_panel' | 'external_api' | 'community_vote' | 'hybrid';
 type EventStatus = 'pending' | 'active';
@@ -57,38 +57,38 @@ interface FormData {
   slug: string;
 }
 
-// ─── Bangladesh-Specific Data ─────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ Bangladesh-Specific Data ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 const BD_CATEGORIES = [
   {
     value: 'politics',
-    label: 'রাজনীতি (Politics)',
-    icon: '🏛️',
+    label: 'αª░αª╛αª£αª¿αºÇαªñαª┐ (Politics)',
+    icon: '≡ƒÅ¢∩╕Å',
     color: 'bg-red-50 border-red-200 text-red-700',
     subcategories: [
-      { value: 'national_election', label: 'জাতীয় নির্বাচন (National Election)' },
-      { value: 'parliament', label: 'জাতীয় সংসদ (Parliament)' },
-      { value: 'local_govt', label: 'স্থানীয় সরকার (Local Govt)' },
-      { value: 'party_politics', label: 'দলীয় রাজনীতি (Party Politics)' },
+      { value: 'national_election', label: 'αª£αª╛αªñαºÇαª»αª╝ αª¿αª┐αª░αºìαª¼αª╛αªÜαª¿ (National Election)' },
+      { value: 'parliament', label: 'αª£αª╛αªñαºÇαª»αª╝ αª╕αªéαª╕αªª (Parliament)' },
+      { value: 'local_govt', label: 'αª╕αºìαªÑαª╛αª¿αºÇαª»αª╝ αª╕αª░αªòαª╛αª░ (Local Govt)' },
+      { value: 'party_politics', label: 'αªªαª▓αºÇαª»αª╝ αª░αª╛αª£αª¿αºÇαªñαª┐ (Party Politics)' },
     ],
   },
   {
     value: 'sports',
-    label: 'খেলাধুলা (Sports)',
-    icon: '🏏',
+    label: 'αªûαºçαª▓αª╛αªºαºüαª▓αª╛ (Sports)',
+    icon: '≡ƒÅÅ',
     color: 'bg-green-50 border-green-200 text-green-700',
     subcategories: [
-      { value: 'cricket', label: 'ক্রিকেট (Cricket)' },
-      { value: 'football', label: 'ফুটবল (Football)' },
+      { value: 'cricket', label: 'αªòαºìαª░αª┐αªòαºçαªƒ (Cricket)' },
+      { value: 'football', label: 'αª½αºüαªƒαª¼αª▓ (Football)' },
       { value: 'ipl', label: 'IPL' },
-      { value: 'world_cup', label: 'বিশ্বকাপ (World Cup)' },
-      { value: 'bpl', label: 'বিপিএল (BPL)' },
+      { value: 'world_cup', label: 'αª¼αª┐αª╢αºìαª¼αªòαª╛αª¬ (World Cup)' },
+      { value: 'bpl', label: 'αª¼αª┐αª¬αª┐αªÅαª▓ (BPL)' },
     ],
   },
   {
     value: 'crypto',
-    label: 'ক্রিপ্টো (Crypto)',
-    icon: '₿',
+    label: 'αªòαºìαª░αª┐αª¬αºìαªƒαºï (Crypto)',
+    icon: 'Γé┐',
     color: 'bg-orange-50 border-orange-200 text-orange-700',
     subcategories: [
       { value: 'bitcoin', label: 'Bitcoin (BTC)' },
@@ -99,24 +99,24 @@ const BD_CATEGORIES = [
   },
   {
     value: 'entertainment',
-    label: 'বিনোদন (Entertainment)',
-    icon: '🎬',
+    label: 'αª¼αª┐αª¿αºïαªªαª¿ (Entertainment)',
+    icon: '≡ƒÄ¼',
     color: 'bg-purple-50 border-purple-200 text-purple-700',
     subcategories: [
-      { value: 'dhallywood', label: 'ঢালিউড (Dhallywood)' },
-      { value: 'music', label: 'সংগীত (Music)' },
-      { value: 'ott', label: 'OTT / স্ট্রিমিং' },
+      { value: 'dhallywood', label: 'αªóαª╛αª▓αª┐αªëαªí (Dhallywood)' },
+      { value: 'music', label: 'αª╕αªéαªùαºÇαªñ (Music)' },
+      { value: 'ott', label: 'OTT / αª╕αºìαªƒαºìαª░αª┐αª«αª┐αªé' },
     ],
   },
   {
     value: 'other',
-    label: 'অন্যান্য (Other)',
-    icon: '📋',
+    label: 'αªàαª¿αºìαª»αª╛αª¿αºìαª» (Other)',
+    icon: '≡ƒôï',
     color: 'bg-gray-50 border-gray-200 text-gray-700',
     subcategories: [
-      { value: 'education', label: 'শিক্ষা (Education)' },
-      { value: 'technology', label: 'প্রযুক্তি (Technology)' },
-      { value: 'weather', label: 'আবহাওয়া (Weather)' },
+      { value: 'education', label: 'αª╢αª┐αªòαºìαª╖αª╛ (Education)' },
+      { value: 'technology', label: 'αª¬αºìαª░αª»αºüαªòαºìαªñαª┐ (Technology)' },
+      { value: 'weather', label: 'αªåαª¼αª╣αª╛αªôαª»αª╝αª╛ (Weather)' },
     ],
   },
 ];
@@ -124,13 +124,13 @@ const BD_CATEGORIES = [
 const RESOLUTION_METHODS = [
   {
     value: 'manual_admin' as ResolutionMethod,
-    label: 'ম্যানুয়াল (Admin)',
+    label: 'αª«αºìαª»αª╛αª¿αºüαª»αª╝αª╛αª▓ (Admin)',
     labelEn: 'Manual Admin',
     icon: Users,
     color: 'border-blue-300 bg-blue-50',
     activeColor: 'border-blue-500 bg-blue-100 ring-2 ring-blue-300',
-    description: 'অ্যাডমিন টিম সরাসরি ফলাফল নির্ধারণ করবে।',
-    badge: 'সবচেয়ে নির্ভরযোগ্য',
+    description: 'αªàαºìαª»αª╛αªíαª«αª┐αª¿ αªƒαª┐αª« αª╕αª░αª╛αª╕αª░αª┐ αª½αª▓αª╛αª½αª▓ αª¿αª┐αª░αºìαªºαª╛αª░αªú αªòαª░αª¼αºçαÑñ',
+    badge: 'αª╕αª¼αªÜαºçαª»αª╝αºç αª¿αª┐αª░αºìαª¡αª░αª»αºïαªùαºìαª»',
   },
   {
     value: 'ai_oracle' as ResolutionMethod,
@@ -139,42 +139,42 @@ const RESOLUTION_METHODS = [
     icon: Bot,
     color: 'border-purple-300 bg-purple-50',
     activeColor: 'border-purple-500 bg-purple-100 ring-2 ring-purple-300',
-    description: 'AI সংবাদ বিশ্লেষণ করে স্বয়ংক্রিয়ভাবে ফলাফল নির্ধারণ করবে।',
-    badge: 'স্বয়ংক্রিয়',
+    description: 'AI αª╕αªéαª¼αª╛αªª αª¼αª┐αª╢αºìαª▓αºçαª╖αªú αªòαª░αºç αª╕αºìαª¼αª»αª╝αªéαªòαºìαª░αª┐αª»αª╝αª¡αª╛αª¼αºç αª½αª▓αª╛αª½αª▓ αª¿αª┐αª░αºìαªºαª╛αª░αªú αªòαª░αª¼αºçαÑñ',
+    badge: 'αª╕αºìαª¼αª»αª╝αªéαªòαºìαª░αª┐αª»αª╝',
   },
   {
     value: 'hybrid' as ResolutionMethod,
-    label: 'হাইব্রিড (Hybrid)',
+    label: 'αª╣αª╛αªçαª¼αºìαª░αª┐αªí (Hybrid)',
     labelEn: 'Hybrid',
     icon: Sparkles,
     color: 'border-rose-300 bg-rose-50',
     activeColor: 'border-rose-500 bg-rose-100 ring-2 ring-rose-300',
-    description: 'AI + Manual + Expert একসাথে।',
-    badge: 'স্মার্ট মিক্স',
+    description: 'AI + Manual + Expert αªÅαªòαª╕αª╛αªÑαºçαÑñ',
+    badge: 'αª╕αºìαª«αª╛αª░αºìαªƒ αª«αª┐αªòαºìαª╕',
   },
 ];
 
 const LIQUIDITY_PRESETS = [
-  { value: 1000, label: '৳১,০০০', desc: 'Starter' },
-  { value: 5000, label: '৳৫,০০০', desc: 'Standard' },
-  { value: 10000, label: '৳১০,০০০', desc: 'Recommended ✓' },
-  { value: 25000, label: '৳২৫,০০০', desc: 'Premium' },
-  { value: 50000, label: '৳৫০,০০০', desc: 'High Volume' },
+  { value: 1000, label: 'αº│αºº,αºªαºªαºª', desc: 'Starter' },
+  { value: 5000, label: 'αº│αº½,αºªαºªαºª', desc: 'Standard' },
+  { value: 10000, label: 'αº│αººαºª,αºªαºªαºª', desc: 'Recommended Γ£ô' },
+  { value: 25000, label: 'αº│αº¿αº½,αºªαºªαºª', desc: 'Premium' },
+  { value: 50000, label: 'αº│αº½αºª,αºªαºªαºª', desc: 'High Volume' },
 ];
 
-// ─── Helper Functions ─────────────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ Helper Functions ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 function generateSlug(title: string): string {
   const bnMap: Record<string, string> = {
-    'ক': 'k', 'খ': 'kh', 'গ': 'g', 'ঘ': 'gh', 'ঙ': 'ng',
-    'চ': 'ch', 'ছ': 'chh', 'জ': 'j', 'ঝ': 'jh', 'ঞ': 'n',
-    'ট': 't', 'ঠ': 'th', 'ড': 'd', 'ঢ': 'dh', 'ণ': 'n',
-    'ত': 't', 'থ': 'th', 'দ': 'd', 'ধ': 'dh', 'ন': 'n',
-    'প': 'p', 'ফ': 'ph', 'ব': 'b', 'ভ': 'bh', 'ম': 'm',
-    'য': 'j', 'র': 'r', 'ল': 'l', 'শ': 'sh', 'ষ': 'sh',
-    'স': 's', 'হ': 'h', 'ড়': 'r', 'ঢ়': 'rh', 'য়': 'y',
-    '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4',
-    '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9',
+    'αªò': 'k', 'αªû': 'kh', 'αªù': 'g', 'αªÿ': 'gh', 'αªÖ': 'ng',
+    'αªÜ': 'ch', 'αª¢': 'chh', 'αª£': 'j', 'αª¥': 'jh', 'αª₧': 'n',
+    'αªƒ': 't', 'αªá': 'th', 'αªí': 'd', 'αªó': 'dh', 'αªú': 'n',
+    'αªñ': 't', 'αªÑ': 'th', 'αªª': 'd', 'αªº': 'dh', 'αª¿': 'n',
+    'αª¬': 'p', 'αª½': 'ph', 'αª¼': 'b', 'αª¡': 'bh', 'αª«': 'm',
+    'αª»': 'j', 'αª░': 'r', 'αª▓': 'l', 'αª╢': 'sh', 'αª╖': 'sh',
+    'αª╕': 's', 'αª╣': 'h', 'αªíαª╝': 'r', 'αªóαª╝': 'rh', 'αª»αª╝': 'y',
+    'αºª': '0', 'αºº': '1', 'αº¿': '2', 'αº⌐': '3', 'αº¬': '4',
+    'αº½': '5', 'αº¼': '6', 'αº¡': '7', 'αº«': '8', 'αº»': '9',
   };
 
   let slug = title.toLowerCase().trim();
@@ -193,7 +193,7 @@ function generateSlug(title: string): string {
   return slug.length > 5 ? `${slug}-${timestamp}` : `event-${timestamp}`;
 }
 
-// ─── Components ───────────────────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ Components ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 function NativeDropdown({ value, placeholder, options, onChange, label, required, error }: {
   value: string;
@@ -266,27 +266,27 @@ function TagInput({ tags, onChange }: { tags: string[]; onChange: (tags: string[
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(); } }}
-          placeholder={tags.length === 0 ? 'ট্যাগ লিখুন, Enter দিন...' : 'আরও যোগ করুন...'}
+          placeholder={tags.length === 0 ? 'αªƒαºìαª»αª╛αªù αª▓αª┐αªûαºüαª¿, Enter αªªαª┐αª¿...' : 'αªåαª░αªô αª»αºïαªù αªòαª░αºüαª¿...'}
           className="flex-1 min-w-[120px] outline-none text-sm text-gray-700 bg-transparent placeholder-gray-400"
         />
       </div>
-      <p className="text-xs text-gray-500">{tags.length}/8 ট্যাগ। Enter বা কমা দিয়ে যোগ করুন।</p>
+      <p className="text-xs text-gray-500">{tags.length}/8 αªƒαºìαª»αª╛αªùαÑñ Enter αª¼αª╛ αªòαª«αª╛ αªªαª┐αª»αª╝αºç αª»αºïαªù αªòαª░αºüαª¿αÑñ</p>
     </div>
   );
 }
 
 const STEPS = [
-  { id: 1, label: 'মূল তথ্য', labelEn: 'Core Info', icon: FileText },
-  { id: 2, label: 'ক্যাটাগরি', labelEn: 'Category', icon: Tag },
-  { id: 3, label: 'সময়সীমা', labelEn: 'Timing', icon: Calendar },
-  { id: 4, label: 'উত্তর', labelEn: 'Answers', icon: CheckCircle2 },
-  { id: 5, label: 'রেজোলিউশন', labelEn: 'Resolution', icon: Shield },
-  { id: 6, label: 'মার্কেট', labelEn: 'Market', icon: TrendingUp },
+  { id: 1, label: 'αª«αºéαª▓ αªñαªÑαºìαª»', labelEn: 'Core Info', icon: FileText },
+  { id: 2, label: 'αªòαºìαª»αª╛αªƒαª╛αªùαª░αª┐', labelEn: 'Category', icon: Tag },
+  { id: 3, label: 'αª╕αª«αª»αª╝αª╕αºÇαª«αª╛', labelEn: 'Timing', icon: Calendar },
+  { id: 4, label: 'αªëαªñαºìαªñαª░', labelEn: 'Answers', icon: CheckCircle2 },
+  { id: 5, label: 'αª░αºçαª£αºïαª▓αª┐αªëαª╢αª¿', labelEn: 'Resolution', icon: Shield },
+  { id: 6, label: 'αª«αª╛αª░αºìαªòαºçαªƒ', labelEn: 'Market', icon: TrendingUp },
 ];
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
 // MAIN COMPONENT
-// ═══════════════════════════════════════════════════════════════════════════════
+// ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
 
 export default function EventCreationPage() {
   const router = useRouter();
@@ -311,7 +311,7 @@ export default function EventCreationPage() {
   } = useAIAgents({
     onComplete: (result) => {
       applyAIResult(result);
-      toast.success('✨ AI এজেন্ট সাজেশন প্রস্তুত!');
+      toast.success('Γ£¿ AI αªÅαª£αºçαª¿αºìαªƒ αª╕αª╛αª£αºçαª╢αª¿ αª¬αºìαª░αª╕αºìαªñαºüαªñ!');
     },
     onError: (error) => {
       toast.error(`AI Error: ${error.message}`);
@@ -337,8 +337,8 @@ export default function EventCreationPage() {
     imageUrl: '',
     tradingClosesAt: '',
     resolutionDelayHours: 24,
-    answer1: 'হ্যাঁ (YES)',
-    answer2: 'না (NO)',
+    answer1: 'αª╣αºìαª»αª╛αªü (YES)',
+    answer2: 'αª¿αª╛ (NO)',
     resolutionMethod: 'manual_admin',
     aiKeywords: [],
     aiSources: [],
@@ -358,9 +358,9 @@ export default function EventCreationPage() {
           .select('title')
           .limit(100);
         if (data) {
-          setExistingEvents(data.map((e: any) => e.title));
+          setExistingEvents(data.map(e => e.title));
         }
-      } catch (e: any) {
+      } catch (e) {
         console.warn('Could not fetch existing events:', e);
       }
     };
@@ -395,8 +395,8 @@ export default function EventCreationPage() {
       set('tags', result.content.tags);
     }
     if (result.marketLogic) {
-      set('answer1', result.marketLogic.outcomes[0] || 'হ্যাঁ');
-      set('answer2', result.marketLogic.outcomes[1] || 'না');
+      set('answer1', result.marketLogic.outcomes[0] || 'αª╣αºìαª»αª╛αªü');
+      set('answer2', result.marketLogic.outcomes[1] || 'αª¿αª╛');
       set('initialLiquidity', result.marketLogic.liquidityRecommendation);
     }
     if (result.timing) {
@@ -407,10 +407,10 @@ export default function EventCreationPage() {
   // Run AI workflow
   const handleRunAI = async () => {
     if (!form.title && !form.question) {
-      toast.error('টাইটেল বা প্রশ্ন লিখুন');
+      toast.error('αªƒαª╛αªçαªƒαºçαª▓ αª¼αª╛ αª¬αºìαª░αª╢αºìαª¿ αª▓αª┐αªûαºüαª¿');
       return;
     }
-
+    
     await runWorkflow({
       title: form.title || form.question,
       description: form.description,
@@ -433,7 +433,7 @@ export default function EventCreationPage() {
     reset: resetProposals,
   } = useMarketProposals({
     onSuccess: (result) => {
-      toast.success(`✅ ইভেন্ট এবং ${result.marketIds?.length || 1}টি মার্কেট তৈরি হয়েছে!`);
+      toast.success(`Γ£à αªçαª¡αºçαª¿αºìαªƒ αªÅαª¼αªé ${result.marketIds?.length || 1}αªƒαª┐ αª«αª╛αª░αºìαªòαºçαªƒ αªñαºêαª░αª┐ αª╣αª»αª╝αºçαª¢αºç!`);
       setSuccessData({
         eventId: result.eventId!,
         marketId: result.marketIds?.[0] || null,
@@ -442,14 +442,14 @@ export default function EventCreationPage() {
       });
     },
     onError: (error) => {
-      toast.error(`তৈরি ব্যর্থ: ${error.message}`);
+      toast.error(`αªñαºêαª░αª┐ αª¼αºìαª»αª░αºìαªÑ: ${error.message}`);
     },
   });
 
   // Generate market proposals
   const handleGenerateProposals = async () => {
     if (!form.title) {
-      toast.error('টাইটেল লিখুন');
+      toast.error('αªƒαª╛αªçαªƒαºçαª▓ αª▓αª┐αªûαºüαª¿');
       return;
     }
     await generateProposals({
@@ -463,7 +463,7 @@ export default function EventCreationPage() {
   const handleApproveProposals = async (markets: ProposedMarket[]) => {
     const { data: { user } } = await createClient().auth.getUser();
     if (!user) {
-      toast.error('লগইন প্রয়োজন');
+      toast.error('αª▓αªùαªçαª¿ αª¬αºìαª░αª»αª╝αºïαª£αª¿');
       return;
     }
 
@@ -493,19 +493,19 @@ export default function EventCreationPage() {
   const validateStep = useCallback((s: number): boolean => {
     const e: Partial<Record<keyof FormData, string>> = {};
     if (s === 1) {
-      if (!form.title.trim()) e.title = 'ইভেন্টের শিরোনাম আবশ্যক';
-      else if (form.title.length < 10) e.title = 'শিরোনাম কমপক্ষে ১০ অক্ষরের হতে হবে';
-      if (!form.question.trim()) e.question = 'প্রশ্ন আবশ্যক';
+      if (!form.title.trim()) e.title = 'αªçαª¡αºçαª¿αºìαªƒαºçαª░ αª╢αª┐αª░αºïαª¿αª╛αª« αªåαª¼αª╢αºìαª»αªò';
+      else if (form.title.length < 10) e.title = 'αª╢αª┐αª░αºïαª¿αª╛αª« αªòαª«αª¬αªòαºìαª╖αºç αººαºª αªàαªòαºìαª╖αª░αºçαª░ αª╣αªñαºç αª╣αª¼αºç';
+      if (!form.question.trim()) e.question = 'αª¬αºìαª░αª╢αºìαª¿ αªåαª¼αª╢αºìαª»αªò';
     }
     if (s === 2) {
-      if (!form.category) e.category = 'ক্যাটাগরি নির্বাচন করুন';
+      if (!form.category) e.category = 'αªòαºìαª»αª╛αªƒαª╛αªùαª░αª┐ αª¿αª┐αª░αºìαª¼αª╛αªÜαª¿ αªòαª░αºüαª¿';
     }
     if (s === 3) {
-      if (!form.tradingClosesAt) e.tradingClosesAt = 'ট্রেডিং বন্ধের তারিখ আবশ্যক';
+      if (!form.tradingClosesAt) e.tradingClosesAt = 'αªƒαºìαª░αºçαªíαª┐αªé αª¼αª¿αºìαªºαºçαª░ αªñαª╛αª░αª┐αªû αªåαª¼αª╢αºìαª»αªò';
     }
     if (s === 4) {
-      if (!form.answer1.trim()) e.answer1 = 'প্রথম উত্তর আবশ্যক';
-      if (!form.answer2.trim()) e.answer2 = 'দ্বিতীয় উত্তর আবশ্যক';
+      if (!form.answer1.trim()) e.answer1 = 'αª¬αºìαª░αªÑαª« αªëαªñαºìαªñαª░ αªåαª¼αª╢αºìαª»αªò';
+      if (!form.answer2.trim()) e.answer2 = 'αªªαºìαª¼αª┐αªñαºÇαª»αª╝ αªëαªñαºìαªñαª░ αªåαª¼αª╢αºìαª»αªò';
     }
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -554,7 +554,7 @@ export default function EventCreationPage() {
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || 'ইভেন্ট তৈরি করা সম্ভব হয়নি');
+        throw new Error(result.error || 'αªçαª¡αºçαª¿αºìαªƒ αªñαºêαª░αª┐ αªòαª░αª╛ αª╕αª«αºìαª¡αª¼ αª╣αª»αª╝αª¿αª┐');
       }
 
       setSuccessData({
@@ -563,10 +563,10 @@ export default function EventCreationPage() {
         slug: result.slug,
         title: form.title,
       });
-
-      toast.success('✅ ইভেন্ট সফলভাবে তৈরি হয়েছে!');
+      
+      toast.success('Γ£à αªçαª¡αºçαª¿αºìαªƒ αª╕αª½αª▓αª¡αª╛αª¼αºç αªñαºêαª░αª┐ αª╣αª»αª╝αºçαª¢αºç!');
     } catch (err: any) {
-      toast.error(err.message || 'কিছু একটা ভুল হয়েছে');
+      toast.error(err.message || 'αªòαª┐αª¢αºü αªÅαªòαªƒαª╛ αª¡αºüαª▓ αª╣αª»αª╝αºçαª¢αºç');
     } finally {
       setIsSubmitting(false);
     }
@@ -594,15 +594,16 @@ export default function EventCreationPage() {
               <ArrowLeft className="h-5 w-5" />
             </button>
             <div>
-              <h1 className="text-base font-bold text-gray-900">নতুন ইভেন্ট তৈরি করুন</h1>
+              <h1 className="text-base font-bold text-gray-900">αª¿αªñαºüαª¿ αªçαª¡αºçαª¿αºìαªƒ αªñαºêαª░αª┐ αªòαª░αºüαª¿</h1>
               <p className="text-xs text-gray-500">AI-Assisted Event Creation</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowAIAgents(!showAIAgents)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm transition-colors ${showAIAgents ? 'bg-indigo-50 border-indigo-300 text-indigo-600' : 'border-gray-300 text-gray-600'
-                }`}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm transition-colors ${
+                showAIAgents ? 'bg-indigo-50 border-indigo-300 text-indigo-600' : 'border-gray-300 text-gray-600'
+              }`}
             >
               <Bot className="h-4 w-4" />
               AI Agents
@@ -701,15 +702,18 @@ export default function EventCreationPage() {
 
         {/* Risk Warning */}
         {riskCheck && riskCheck.riskLevel !== 'low' && (
-          <div className={`mb-4 p-3 rounded-lg border ${riskCheck.riskLevel === 'high'
-            ? 'bg-red-50 border-red-200'
-            : 'bg-yellow-50 border-yellow-200'
-            }`}>
+          <div className={`mb-4 p-3 rounded-lg border ${
+            riskCheck.riskLevel === 'high' 
+              ? 'bg-red-50 border-red-200' 
+              : 'bg-yellow-50 border-yellow-200'
+          }`}>
             <div className="flex items-center gap-2">
-              <Shield className={`h-4 w-4 ${riskCheck.riskLevel === 'high' ? 'text-red-500' : 'text-yellow-500'
-                }`} />
-              <span className={`text-sm ${riskCheck.riskLevel === 'high' ? 'text-red-700' : 'text-yellow-700'
-                }`}>
+              <Shield className={`h-4 w-4 ${
+                riskCheck.riskLevel === 'high' ? 'text-red-500' : 'text-yellow-500'
+              }`} />
+              <span className={`text-sm ${
+                riskCheck.riskLevel === 'high' ? 'text-red-700' : 'text-yellow-700'
+              }`}>
                 Risk Level: {riskCheck.riskLevel.toUpperCase()}
               </span>
             </div>
@@ -720,7 +724,7 @@ export default function EventCreationPage() {
         {step === 1 && form.title.length > 5 && (
           <div className="mb-6">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-medium text-gray-700">AI মার্কেট প্রস্তাবনা</h3>
+              <h3 className="text-sm font-medium text-gray-700">AI αª«αª╛αª░αºìαªòαºçαªƒ αª¬αºìαª░αª╕αºìαªñαª╛αª¼αª¿αª╛</h3>
               <button
                 onClick={handleGenerateProposals}
                 disabled={isGeneratingProposals}
@@ -731,10 +735,10 @@ export default function EventCreationPage() {
                 ) : (
                   <Sparkles className="h-3.5 w-3.5" />
                 )}
-                {isGeneratingProposals ? 'জেনারেট হচ্ছে...' : 'মার্কেট প্রস্তাবনা'}
+                {isGeneratingProposals ? 'αª£αºçαª¿αª╛αª░αºçαªƒ αª╣αªÜαºìαª¢αºç...' : 'αª«αª╛αª░αºìαªòαºçαªƒ αª¬αºìαª░αª╕αºìαªñαª╛αª¼αª¿αª╛'}
               </button>
             </div>
-
+            
             <AIProposalPanel
               proposals={marketProposals}
               isLoading={isGeneratingProposals}
@@ -752,7 +756,7 @@ export default function EventCreationPage() {
           {step === 1 && (
             <div className="p-6 space-y-5">
               <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-gray-900">মূল তথ্য (Core Information)</h2>
+                <h2 className="text-lg font-semibold text-gray-900">αª«αºéαª▓ αªñαªÑαºìαª» (Core Information)</h2>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={handleGenerateProposals}
@@ -764,7 +768,7 @@ export default function EventCreationPage() {
                     ) : (
                       <Sparkles className="h-4 w-4" />
                     )}
-                    AI মার্কেট
+                    AI αª«αª╛αª░αºìαªòαºçαªƒ
                   </button>
                   <button
                     onClick={handleRunAI}
@@ -784,15 +788,16 @@ export default function EventCreationPage() {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    ইভেন্টের শিরোনাম <span className="text-red-500">*</span>
+                    αªçαª¡αºçαª¿αºìαªƒαºçαª░ αª╢αª┐αª░αºïαª¿αª╛αª« <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
                     value={form.title}
                     onChange={(e) => set('title', e.target.value)}
-                    placeholder="যেমন: বিপিএল ২০২৭-এ চ্যাম্পিয়ন কে হবে?"
-                    className={`w-full px-3 py-2.5 rounded-lg border text-sm ${errors.title ? 'border-red-400 bg-red-50' : 'border-gray-300'
-                      } focus:outline-none focus:ring-2 focus:ring-indigo-500`}
+                    placeholder="αª»αºçαª«αª¿: αª¼αª┐αª¬αª┐αªÅαª▓ αº¿αºªαº¿αº¡-αªÅ αªÜαºìαª»αª╛αª«αºìαª¬αª┐αª»αª╝αª¿ αªòαºç αª╣αª¼αºç?"
+                    className={`w-full px-3 py-2.5 rounded-lg border text-sm ${
+                      errors.title ? 'border-red-400 bg-red-50' : 'border-gray-300'
+                    } focus:outline-none focus:ring-2 focus:ring-indigo-500`}
                   />
                   {errors.title && <p className="mt-1 text-xs text-red-500">{errors.title}</p>}
                   <p className="mt-1 text-xs text-gray-500">SEO-optimized title for better visibility</p>
@@ -800,32 +805,33 @@ export default function EventCreationPage() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    প্রশ্ন (Question) <span className="text-red-500">*</span>
+                    αª¬αºìαª░αª╢αºìαª¿ (Question) <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
                     value={form.question}
                     onChange={(e) => set('question', e.target.value)}
-                    placeholder="যেমন: ২০২৭ সালের বিপিএল চ্যাম্পিয়ন কোন দল হবে?"
-                    className={`w-full px-3 py-2.5 rounded-lg border text-sm ${errors.question ? 'border-red-400 bg-red-50' : 'border-gray-300'
-                      } focus:outline-none focus:ring-2 focus:ring-indigo-500`}
+                    placeholder="αª»αºçαª«αª¿: αº¿αºªαº¿αº¡ αª╕αª╛αª▓αºçαª░ αª¼αª┐αª¬αª┐αªÅαª▓ αªÜαºìαª»αª╛αª«αºìαª¬αª┐αª»αª╝αª¿ αªòαºïαª¿ αªªαª▓ αª╣αª¼αºç?"
+                    className={`w-full px-3 py-2.5 rounded-lg border text-sm ${
+                      errors.question ? 'border-red-400 bg-red-50' : 'border-gray-300'
+                    } focus:outline-none focus:ring-2 focus:ring-indigo-500`}
                   />
                   {errors.question && <p className="mt-1 text-xs text-red-500">{errors.question}</p>}
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">বিবরণ (Description)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">αª¼αª┐αª¼αª░αªú (Description)</label>
                   <textarea
                     value={form.description}
                     onChange={(e) => set('description', e.target.value)}
                     rows={3}
-                    placeholder="ইভেন্টের বিস্তারিত বিবরণ দিন..."
+                    placeholder="αªçαª¡αºçαª¿αºìαªƒαºçαª░ αª¼αª┐αª╕αºìαªñαª╛αª░αª┐αªñ αª¼αª┐αª¼αª░αªú αªªαª┐αª¿..."
                     className="w-full px-3 py-2.5 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">ছবির URL</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">αª¢αª¼αª┐αª░ URL</label>
                   <div className="flex gap-2">
                     <input
                       type="url"
@@ -846,17 +852,18 @@ export default function EventCreationPage() {
           {/* Step 2: Category */}
           {step === 2 && (
             <div className="p-6 space-y-5">
-              <h2 className="text-lg font-semibold text-gray-900">ক্যাটাগরি নির্বাচন</h2>
-
+              <h2 className="text-lg font-semibold text-gray-900">αªòαºìαª»αª╛αªƒαª╛αªùαª░αª┐ αª¿αª┐αª░αºìαª¼αª╛αªÜαª¿</h2>
+              
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {BD_CATEGORIES.map((cat) => (
                   <button
                     key={cat.value}
                     onClick={() => { set('category', cat.value); set('subcategory', ''); }}
-                    className={`p-4 rounded-xl border-2 text-left transition-all ${form.category === cat.value
-                      ? `${cat.color} border-current ring-2 ring-offset-1`
-                      : 'bg-white border-gray-200 hover:border-gray-300'
-                      }`}
+                    className={`p-4 rounded-xl border-2 text-left transition-all ${
+                      form.category === cat.value
+                        ? `${cat.color} border-current ring-2 ring-offset-1`
+                        : 'bg-white border-gray-200 hover:border-gray-300'
+                    }`}
                   >
                     <span className="text-2xl mb-2 block">{cat.icon}</span>
                     <span className="text-sm font-medium">{cat.label}</span>
@@ -868,9 +875,9 @@ export default function EventCreationPage() {
               {selectedCategory && selectedCategory.subcategories.length > 0 && (
                 <div className="mt-4">
                   <NativeDropdown
-                    label="সাব-ক্যাটাগরি"
+                    label="αª╕αª╛αª¼-αªòαºìαª»αª╛αªƒαª╛αªùαª░αª┐"
                     value={form.subcategory}
-                    placeholder="সাব-ক্যাটাগরি নির্বাচন করুন"
+                    placeholder="αª╕αª╛αª¼-αªòαºìαª»αª╛αªƒαª╛αªùαª░αª┐ αª¿αª┐αª░αºìαª¼αª╛αªÜαª¿ αªòαª░αºüαª¿"
                     options={selectedCategory.subcategories}
                     onChange={(v) => set('subcategory', v)}
                   />
@@ -878,7 +885,7 @@ export default function EventCreationPage() {
               )}
 
               <div className="mt-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">ট্যাগ</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">αªƒαºìαª»αª╛αªù</label>
                 <TagInput tags={form.tags} onChange={(tags) => set('tags', tags)} />
               </div>
             </div>
@@ -887,19 +894,20 @@ export default function EventCreationPage() {
           {/* Step 3: Timing */}
           {step === 3 && (
             <div className="p-6 space-y-5">
-              <h2 className="text-lg font-semibold text-gray-900">সময়সীমা (Timing)</h2>
-
+              <h2 className="text-lg font-semibold text-gray-900">αª╕αª«αª»αª╝αª╕αºÇαª«αª╛ (Timing)</h2>
+              
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    ট্রেডিং বন্ধের সময় <span className="text-red-500">*</span>
+                    αªƒαºìαª░αºçαªíαª┐αªé αª¼αª¿αºìαªºαºçαª░ αª╕αª«αª»αª╝ <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="datetime-local"
                     value={form.tradingClosesAt}
                     onChange={(e) => set('tradingClosesAt', e.target.value)}
-                    className={`w-full px-3 py-2.5 rounded-lg border text-sm ${errors.tradingClosesAt ? 'border-red-400 bg-red-50' : 'border-gray-300'
-                      } focus:outline-none focus:ring-2 focus:ring-indigo-500`}
+                    className={`w-full px-3 py-2.5 rounded-lg border text-sm ${
+                      errors.tradingClosesAt ? 'border-red-400 bg-red-50' : 'border-gray-300'
+                    } focus:outline-none focus:ring-2 focus:ring-indigo-500`}
                   />
                   {errors.tradingClosesAt && <p className="mt-1 text-xs text-red-500">{errors.tradingClosesAt}</p>}
                   <p className="mt-1 text-xs text-gray-500">Asia/Dhaka timezone (UTC+6)</p>
@@ -907,7 +915,7 @@ export default function EventCreationPage() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    রেজোলিউশন ডিলে (ঘণ্টা)
+                    αª░αºçαª£αºïαª▓αª┐αªëαª╢αª¿ αªíαª┐αª▓αºç (αªÿαªúαºìαªƒαª╛)
                   </label>
                   <input
                     type="number"
@@ -917,7 +925,7 @@ export default function EventCreationPage() {
                     max={168}
                     className="w-full px-3 py-2.5 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
-                  <p className="mt-1 text-xs text-gray-500">ইভেন্ট শেষ হওয়ার কত ঘণ্টা পরে ফলাফল নির্ধারণ হবে</p>
+                  <p className="mt-1 text-xs text-gray-500">αªçαª¡αºçαª¿αºìαªƒ αª╢αºçαª╖ αª╣αªôαª»αª╝αª╛αª░ αªòαªñ αªÿαªúαºìαªƒαª╛ αª¬αª░αºç αª½αª▓αª╛αª½αª▓ αª¿αª┐αª░αºìαªºαª╛αª░αªú αª╣αª¼αºç</p>
                 </div>
               </div>
             </div>
@@ -926,33 +934,35 @@ export default function EventCreationPage() {
           {/* Step 4: Answers */}
           {step === 4 && (
             <div className="p-6 space-y-5">
-              <h2 className="text-lg font-semibold text-gray-900">উত্তরসমূহ (Outcomes)</h2>
-
+              <h2 className="text-lg font-semibold text-gray-900">αªëαªñαºìαªñαª░αª╕αª«αºéαª╣ (Outcomes)</h2>
+              
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    প্রথম উত্তর <span className="text-red-500">*</span>
+                    αª¬αºìαª░αªÑαª« αªëαªñαºìαªñαª░ <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
                     value={form.answer1}
                     onChange={(e) => set('answer1', e.target.value)}
-                    className={`w-full px-3 py-2.5 rounded-lg border text-sm ${errors.answer1 ? 'border-red-400 bg-red-50' : 'border-gray-300'
-                      } focus:outline-none focus:ring-2 focus:ring-indigo-500`}
+                    className={`w-full px-3 py-2.5 rounded-lg border text-sm ${
+                      errors.answer1 ? 'border-red-400 bg-red-50' : 'border-gray-300'
+                    } focus:outline-none focus:ring-2 focus:ring-indigo-500`}
                   />
                   {errors.answer1 && <p className="mt-1 text-xs text-red-500">{errors.answer1}</p>}
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    দ্বিতীয় উত্তর <span className="text-red-500">*</span>
+                    αªªαºìαª¼αª┐αªñαºÇαª»αª╝ αªëαªñαºìαªñαª░ <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
                     value={form.answer2}
                     onChange={(e) => set('answer2', e.target.value)}
-                    className={`w-full px-3 py-2.5 rounded-lg border text-sm ${errors.answer2 ? 'border-red-400 bg-red-50' : 'border-gray-300'
-                      } focus:outline-none focus:ring-2 focus:ring-indigo-500`}
+                    className={`w-full px-3 py-2.5 rounded-lg border text-sm ${
+                      errors.answer2 ? 'border-red-400 bg-red-50' : 'border-gray-300'
+                    } focus:outline-none focus:ring-2 focus:ring-indigo-500`}
                   />
                   {errors.answer2 && <p className="mt-1 text-xs text-red-500">{errors.answer2}</p>}
                 </div>
@@ -961,7 +971,7 @@ export default function EventCreationPage() {
               <div className="p-4 bg-blue-50 rounded-lg">
                 <p className="text-sm text-blue-700">
                   <Info className="h-4 w-4 inline mr-1" />
-                  বাইনারি মার্কেট: দুটি উত্তর (হ্যাঁ/না) — সবচেয়ে জনপ্রিয় ফরম্যাট
+                  αª¼αª╛αªçαª¿αª╛αª░αª┐ αª«αª╛αª░αºìαªòαºçαªƒ: αªªαºüαªƒαª┐ αªëαªñαºìαªñαª░ (αª╣αºìαª»αª╛αªü/αª¿αª╛) ΓÇö αª╕αª¼αªÜαºçαª»αª╝αºç αª£αª¿αª¬αºìαª░αª┐αª»αª╝ αª½αª░αª«αºìαª»αª╛αªƒ
                 </p>
               </div>
             </div>
@@ -970,8 +980,8 @@ export default function EventCreationPage() {
           {/* Step 5: Resolution */}
           {step === 5 && (
             <div className="p-6 space-y-5">
-              <h2 className="text-lg font-semibold text-gray-900">রেজোলিউশন পদ্ধতি</h2>
-
+              <h2 className="text-lg font-semibold text-gray-900">αª░αºçαª£αºïαª▓αª┐αªëαª╢αª¿ αª¬αªªαºìαªºαªñαª┐</h2>
+              
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {RESOLUTION_METHODS.map((method) => {
                   const Icon = method.icon;
@@ -980,8 +990,9 @@ export default function EventCreationPage() {
                     <button
                       key={method.value}
                       onClick={() => set('resolutionMethod', method.value)}
-                      className={`p-4 rounded-xl border-2 text-left transition-all ${isSelected ? method.activeColor : `${method.color} hover:opacity-80`
-                        }`}
+                      className={`p-4 rounded-xl border-2 text-left transition-all ${
+                        isSelected ? method.activeColor : `${method.color} hover:opacity-80`
+                      }`}
                     >
                       <div className="flex items-start gap-3">
                         <Icon className="h-5 w-5 mt-0.5" />
@@ -1004,7 +1015,7 @@ export default function EventCreationPage() {
                 <div className="space-y-3 mt-4 p-4 bg-purple-50 rounded-lg">
                   <label className="block text-sm font-medium text-purple-900">AI Keywords</label>
                   <TagInput tags={form.aiKeywords} onChange={(tags) => set('aiKeywords', tags)} />
-                  <p className="text-xs text-purple-700">AI কী কী শব্দ খুঁজবে তা নির্ধারণ করুন</p>
+                  <p className="text-xs text-purple-700">AI αªòαºÇ αªòαºÇ αª╢αª¼αºìαªª αªûαºüαªüαª£αª¼αºç αªñαª╛ αª¿αª┐αª░αºìαªºαª╛αª░αªú αªòαª░αºüαª¿</p>
                 </div>
               )}
             </div>
@@ -1013,19 +1024,20 @@ export default function EventCreationPage() {
           {/* Step 6: Market */}
           {step === 6 && (
             <div className="p-6 space-y-5">
-              <h2 className="text-lg font-semibold text-gray-900">মার্কেট সেটিংস</h2>
-
+              <h2 className="text-lg font-semibold text-gray-900">αª«αª╛αª░αºìαªòαºçαªƒ αª╕αºçαªƒαª┐αªéαª╕</h2>
+              
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">প্রাথমিক লিকুইডিটি</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">αª¬αºìαª░αª╛αªÑαª«αª┐αªò αª▓αª┐αªòαºüαªçαªíαª┐αªƒαª┐</label>
                 <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
                   {LIQUIDITY_PRESETS.map((preset) => (
                     <button
                       key={preset.value}
                       onClick={() => set('initialLiquidity', preset.value)}
-                      className={`p-3 rounded-lg border text-center transition-all ${form.initialLiquidity === preset.value
-                        ? 'bg-indigo-50 border-indigo-500 text-indigo-700'
-                        : 'bg-white border-gray-200 hover:border-gray-300'
-                        }`}
+                      className={`p-3 rounded-lg border text-center transition-all ${
+                        form.initialLiquidity === preset.value
+                          ? 'bg-indigo-50 border-indigo-500 text-indigo-700'
+                          : 'bg-white border-gray-200 hover:border-gray-300'
+                      }`}
                     >
                       <span className="block text-sm font-semibold">{preset.label}</span>
                       <span className="text-[10px] text-gray-500">{preset.desc}</span>
@@ -1043,7 +1055,7 @@ export default function EventCreationPage() {
                   className="w-4 h-4 text-indigo-600 rounded"
                 />
                 <label htmlFor="featured" className="text-sm text-gray-700">
-                  ফিচার্ড ইভেন্ট হিসেবে দেখান (হোমপেজে হাইলাইট)
+                  αª½αª┐αªÜαª╛αª░αºìαªí αªçαª¡αºçαª¿αºìαªƒ αª╣αª┐αª╕αºçαª¼αºç αªªαºçαªûαª╛αª¿ (αª╣αºïαª«αª¬αºçαª£αºç αª╣αª╛αªçαª▓αª╛αªçαªƒ)
                 </label>
               </div>
 
@@ -1062,7 +1074,7 @@ export default function EventCreationPage() {
               className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <ArrowLeft className="h-4 w-4" />
-              পেছনে
+              αª¬αºçαª¢αª¿αºç
             </button>
 
             {step < 6 ? (
@@ -1070,7 +1082,7 @@ export default function EventCreationPage() {
                 onClick={nextStep}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700"
               >
-                পরবর্তী
+                αª¬αª░αª¼αª░αºìαªñαºÇ
                 <ArrowRight className="h-4 w-4" />
               </button>
             ) : (
@@ -1084,7 +1096,7 @@ export default function EventCreationPage() {
                 ) : (
                   <Check className="h-4 w-4" />
                 )}
-                {isSubmitting ? 'তৈরি হচ্ছে...' : 'ইভেন্ট তৈরি করুন'}
+                {isSubmitting ? 'αªñαºêαª░αª┐ αª╣αªÜαºìαª¢αºç...' : 'αªçαª¡αºçαª¿αºìαªƒ αªñαºêαª░αª┐ αªòαª░αºüαª¿'}
               </button>
             )}
           </div>
@@ -1099,7 +1111,7 @@ export default function EventCreationPage() {
               <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Check className="h-8 w-8 text-green-600" />
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">ইভেন্ট তৈরি সফল!</h3>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">αªçαª¡αºçαª¿αºìαªƒ αªñαºêαª░αª┐ αª╕αª½αª▓!</h3>
               <p className="text-gray-600 mb-4">{successData.title}</p>
               <div className="space-y-2 text-sm text-gray-500 mb-6">
                 <p>Event ID: <code className="bg-gray-100 px-2 py-1 rounded">{successData.eventId}</code></p>
@@ -1110,13 +1122,13 @@ export default function EventCreationPage() {
                   onClick={() => router.push(`/markets/${successData.slug}`)}
                   className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
                 >
-                  মার্কেট দেখুন
+                  αª«αª╛αª░αºìαªòαºçαªƒ αªªαºçαªûαºüαª¿
                 </button>
                 <button
                   onClick={() => router.push('/sys-cmd-7x9k2/events')}
                   className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
                 >
-                  ইভেন্ট লিস্ট
+                  αªçαª¡αºçαª¿αºìαªƒ αª▓αª┐αª╕αºìαªƒ
                 </button>
               </div>
             </div>

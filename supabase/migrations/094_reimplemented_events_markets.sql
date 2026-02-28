@@ -209,12 +209,16 @@ DECLARE
     v_market_id UUID;
     v_slug TEXT;
     v_result JSONB;
+    v_initial_liquidity NUMERIC;
+    v_system_user_id UUID;
 BEGIN
-    -- Generate slug if not provided
+    -- Generate slug if not provided, preferring the explicit one from the payload
     v_slug := COALESCE(
         p_event_data->>'slug',
         lower(regexp_replace(COALESCE(p_event_data->>'title', p_event_data->>'question'), '[^a-zA-Z0-9]+', '-', 'g')) || '-' || substr(gen_random_uuid()::text, 1, 8)
     );
+    
+    v_initial_liquidity := COALESCE((p_event_data->>'initial_liquidity')::NUMERIC, 1000);
     
     -- Insert event
     INSERT INTO public.events (
@@ -262,8 +266,8 @@ BEGIN
         COALESCE(p_event_data->>'resolution_method', 'manual_admin'),
         COALESCE((p_event_data->>'resolution_delay_hours')::INTEGER, 24),
         p_event_data->>'resolution_source',
-        COALESCE((p_event_data->>'initial_liquidity')::NUMERIC, 1000),
-        COALESCE((p_event_data->>'initial_liquidity')::NUMERIC, 1000),
+        v_initial_liquidity,
+        v_initial_liquidity,
         COALESCE((p_event_data->>'is_featured')::BOOLEAN, FALSE),
         COALESCE((p_event_data->'ai_keywords')::TEXT[], '{}'),
         COALESCE((p_event_data->'ai_sources')::TEXT[], '{}'),
@@ -273,75 +277,96 @@ BEGIN
     RETURNING id INTO v_event_id;
     
     -- Also create a linked market record for CLOB compatibility
-    BEGIN
-        INSERT INTO public.markets (
-            event_id,
-            name,
-            question,
-            description,
-            category,
-            subcategory,
-            tags,
-            trading_closes_at,
-            resolution_delay_hours,
-            initial_liquidity,
-            liquidity,
-            status,
-            slug,
-            answer_type,
-            answer1,
-            answer2,
-            is_featured,
-            created_by,
-            image_url
-        ) VALUES (
-            v_event_id,
-            COALESCE(p_event_data->>'title', p_event_data->>'name', p_event_data->>'question'),
-            COALESCE(p_event_data->>'question', p_event_data->>'title'),
-            p_event_data->>'description',
-            COALESCE(p_event_data->>'category', 'general'),
-            p_event_data->>'subcategory',
-            COALESCE((p_event_data->'tags')::TEXT[], '{}'),
-            (p_event_data->>'trading_closes_at')::TIMESTAMPTZ,
-            COALESCE((p_event_data->>'resolution_delay_hours')::INTEGER, 24),
-            COALESCE((p_event_data->>'initial_liquidity')::NUMERIC, 1000),
-            COALESCE((p_event_data->>'initial_liquidity')::NUMERIC, 1000),
-            'active',
-            v_slug || '-market',
-            COALESCE(p_event_data->>'answer_type', 'binary'),
-            COALESCE(p_event_data->>'answer1', 'হ্যাঁ (Yes)'),
-            COALESCE(p_event_data->>'answer2', 'না (No)'),
-            COALESCE((p_event_data->>'is_featured')::BOOLEAN, FALSE),
-            p_admin_id,
-            p_event_data->>'image_url'
-        )
-        RETURNING id INTO v_market_id;
-    EXCEPTION WHEN OTHERS THEN
-        -- Markets table might have different columns, log and continue
-        RAISE NOTICE 'Market creation skipped: %', SQLERRM;
-        v_market_id := NULL;
-    END;
+    INSERT INTO public.markets (
+        event_id,
+        name,
+        question,
+        description,
+        category,
+        subcategory,
+        tags,
+        trading_closes_at,
+        resolution_delay_hours,
+        initial_liquidity,
+        liquidity,
+        status,
+        slug,
+        answer_type,
+        answer1,
+        answer2,
+        is_featured,
+        created_by,
+        image_url
+    ) VALUES (
+        v_event_id,
+        COALESCE(p_event_data->>'title', p_event_data->>'name', p_event_data->>'question'),
+        COALESCE(p_event_data->>'question', p_event_data->>'title'),
+        p_event_data->>'description',
+        COALESCE(p_event_data->>'category', 'general'),
+        p_event_data->>'subcategory',
+        COALESCE((p_event_data->'tags')::TEXT[], '{}'),
+        (p_event_data->>'trading_closes_at')::TIMESTAMPTZ,
+        COALESCE((p_event_data->>'resolution_delay_hours')::INTEGER, 24),
+        v_initial_liquidity,
+        v_initial_liquidity,
+        'active',
+        v_slug,
+        COALESCE(p_event_data->>'answer_type', 'binary'),
+        COALESCE(p_event_data->>'answer1', 'হ্যাঁ (Yes)'),
+        COALESCE(p_event_data->>'answer2', 'না (No)'),
+        COALESCE((p_event_data->>'is_featured')::BOOLEAN, FALSE),
+        p_admin_id,
+        p_event_data->>'image_url'
+    )
+    RETURNING id INTO v_market_id;
     
     -- Create resolution config if resolution_systems table exists
-    BEGIN
-        INSERT INTO resolution_systems (
-            event_id,
-            primary_method,
-            ai_keywords,
-            ai_sources,
-            confidence_threshold,
-            status
-        ) VALUES (
-            COALESCE(v_market_id, v_event_id),
-            COALESCE(p_event_data->>'resolution_method', 'manual_admin'),
-            COALESCE((p_event_data->'ai_keywords')::TEXT[], '{}'),
-            COALESCE((p_event_data->'ai_sources')::TEXT[], '{}'),
-            COALESCE((p_event_data->>'ai_confidence_threshold')::INTEGER, 85),
-            'pending'
-        );
-    EXCEPTION WHEN OTHERS THEN
-        RAISE NOTICE 'Resolution config creation skipped: %', SQLERRM;
-    END;
+    INSERT INTO resolution_systems (
+        event_id,
+        primary_method,
+        ai_keywords,
+        ai_sources,
+        confidence_threshold,
+        status
+    ) VALUES (
+        COALESCE(v_market_id, v_event_id),
+        COALESCE(p_event_data->>'resolution_method', 'manual_admin'),
+        COALESCE((p_event_data->'ai_keywords')::TEXT[], '{}'),
+        COALESCE((p_event_data->'ai_sources')::TEXT[], '{}'),
+        COALESCE((p_event_data->>'ai_confidence_threshold')::INTEGER, 85),
+        'pending'
+    );
+    
+    -- INITIALIZE ORDERBOOK (Replaces MarketService.initializeOrderbook logic)
+    -- Only seed if the market is effectively active
+    IF COALESCE(p_event_data->>'status', 'pending') = 'active' AND v_initial_liquidity > 0 THEN
+        -- Find the system admin user to act as liquidity provider
+        SELECT id INTO v_system_user_id
+        FROM public.user_profiles
+        WHERE is_admin = true
+        ORDER BY created_at ASC
+        LIMIT 1;
+
+        IF v_system_user_id IS NOT NULL THEN
+            -- Strategy: 0.48 YES Bid, 0.48 NO Bid (Total 0.96, 4% Platform Spread)
+            INSERT INTO public.orders (
+                market_id,
+                user_id,
+                side,
+                outcome,
+                price,
+                quantity,
+                filled_quantity,
+                status,
+                order_type
+            ) VALUES 
+            (v_market_id, v_system_user_id, 'buy', 'YES', 0.48, v_initial_liquidity, 0, 'open', 'limit'),
+            (v_market_id, v_system_user_id, 'buy', 'NO', 0.48, v_initial_liquidity, 0, 'open', 'limit');
+        ELSE
+            -- We cannot seed without an admin user, but we won't abort market creation here.
+            RAISE WARNING 'No admin user found to seed market liquidity';
+        END IF;
+    END IF;
     
     v_result := jsonb_build_object(
         'success', TRUE,

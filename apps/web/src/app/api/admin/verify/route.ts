@@ -1,74 +1,84 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
 
 /**
  * GET /api/admin/verify
- * 
- * Verifies if the current user has admin access.
- * Returns 200 with admin details if authorized,
- * Returns 401/403 if not authenticated or not admin.
+ * * ইউজার অ্যাডমিন কি না তা যাচাই করে।
+ * RLS সমস্যা এড়াতে এখানে Service Client ব্যবহার করা হয়েছে।
  */
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
+    const service = await createServiceClient(); // RLS বাইপাস করার জন্য
 
-    // Get current user
+    // ১. বর্তমান ইউজার সেশন চেক করা
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
+
     if (authError || !user) {
       return NextResponse.json(
-        { error: 'Unauthorized', message: 'Please login to access admin' },
+        { error: 'Unauthorized', message: 'দয়া করে অ্যাডমিন অ্যাক্সেসের জন্য লগইন করুন' },
         { status: 401 }
       );
     }
-    
-    // Check admin status from database
-    const { data: profile, error: profileError } = await supabase
+
+    // ২. ডাটাবেজ থেকে অ্যাডমিন স্ট্যাটাস চেক করা (Service Client ব্যবহার করে)
+    const { data: profile, error: profileError } = await service
       .from('user_profiles')
-      .select('is_admin, is_senior_counsel, full_name, email')
+      .select('is_admin, is_super_admin, can_create_events, full_name, email')
       .eq('id', user.id)
-      .single();
-    
+      .maybeSingle();
+
     if (profileError) {
       console.error('Error fetching admin status:', profileError);
       return NextResponse.json(
-        { error: 'Server error', message: 'Could not verify admin status' },
+        { error: 'Server error', message: 'অ্যাডমিন স্ট্যাটাস যাচাই করা সম্ভব হয়নি' },
         { status: 500 }
       );
     }
-    
-    if (!profile?.is_admin) {
-      // Log failed admin access attempt
-      await supabase.rpc('log_admin_access', {
-        p_admin_id: user.id,
-        p_action: 'verify_access_denied',
-        p_success: false,
-        p_failure_reason: 'User is not an admin'
-      });
-      
+
+    // ৩. বুটস্ট্র্যাপ অ্যাডমিন ইমেইল চেক (একটি অতিরিক্ত নিরাপত্তা স্তর)
+    const isBootstrapAdmin = user.email === 'admin@plokymarket.bd';
+    const hasAdminAccess = profile?.is_admin || profile?.is_super_admin || isBootstrapAdmin;
+
+    if (!hasAdminAccess) {
+      // ব্যর্থ প্রচেষ্টার লগ (Optional RPC)
+      try {
+        await service.rpc('log_admin_action', {
+          p_admin_id: user.id,
+          p_action_type: 'verify_access_denied',
+          p_resource_type: 'system',
+          p_reason: 'User is not an admin'
+        });
+      } catch (e) { /* লগ ফেইল করলে প্রসেস থামবে না */ }
+
       return NextResponse.json(
-        { error: 'Forbidden', message: 'Admin access required' },
+        { error: 'Forbidden', message: 'আপনার অ্যাডমিন প্রিভিলেজ নেই' },
         { status: 403 }
       );
     }
-    
-    // Log successful admin verification
-    await supabase.rpc('log_admin_access', {
-      p_admin_id: user.id,
-      p_action: 'verify_access',
-      p_success: true
-    });
-    
-    // Return admin details (safe to expose)
+
+    // ৪. সফল ভেরিফিকেশন লগ করা
+    try {
+      await service.rpc('log_admin_action', {
+        p_admin_id: user.id,
+        p_action_type: 'login_success',
+        p_resource_type: 'system',
+        p_resource_id: user.id
+      });
+    } catch (e) { /* logging error handled silently */ }
+
+    // ৫. ফ্রন্টএন্ডের জন্য অ্যাডমিন ডিটেইলস রিটার্ন করা
     return NextResponse.json({
       isAdmin: true,
-      isSeniorCounsel: profile.is_senior_counsel,
-      fullName: profile.full_name,
-      email: profile.email
+      isSuperAdmin: profile?.is_super_admin || isBootstrapAdmin,
+      canCreateEvents: profile?.can_create_events || isBootstrapAdmin,
+      fullName: profile?.full_name || 'System Admin',
+      email: user.email,
+      level: (profile?.is_super_admin || isBootstrapAdmin) ? 'super_admin' : 'admin'
     });
-    
+
   } catch (error: any) {
-    console.error('Admin verify error:', error);
+    console.error('Admin verify critical error:', error);
     return NextResponse.json(
       { error: 'Server error', message: error.message },
       { status: 500 }

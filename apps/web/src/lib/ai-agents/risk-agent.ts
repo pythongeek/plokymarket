@@ -59,13 +59,13 @@ function checkCyberSecurityLaw(title: string, description: string): {
 } {
   const violations: string[] = [];
   const combinedText = `${title} ${description}`.toLowerCase();
-  
+
   for (const keyword of CYBER_SECURITY_VIOLATIONS) {
     if (combinedText.includes(keyword.toLowerCase())) {
       violations.push(`Potential violation: ${keyword}`);
     }
   }
-  
+
   return {
     passed: violations.length === 0,
     violations,
@@ -82,22 +82,22 @@ function checkPoliticalSensitivity(title: string): {
 } {
   const foundKeywords: string[] = [];
   const normalizedTitle = title.toLowerCase();
-  
+
   for (const keyword of POLITICAL_SENSITIVITY_KEYWORDS) {
     if (normalizedTitle.includes(keyword.toLowerCase())) {
       foundKeywords.push(keyword);
     }
   }
-  
+
   const isSensitive = foundKeywords.length > 0;
   let level: 'low' | 'medium' | 'high' = 'low';
-  
+
   if (foundKeywords.length >= 3) {
     level = 'high';
   } else if (foundKeywords.length >= 1) {
     level = 'medium';
   }
-  
+
   return { isSensitive, level, keywords: foundKeywords };
 }
 
@@ -110,14 +110,14 @@ function checkGamblingPolicy(title: string, category: string): {
 } {
   const issues: string[] = [];
   const normalizedTitle = title.toLowerCase();
-  
+
   // Check for explicit gambling terms
   for (const keyword of GAMBLING_VIOLATIONS) {
     if (normalizedTitle.includes(keyword.toLowerCase())) {
       issues.push(`Contains gambling term: ${keyword}`);
     }
   }
-  
+
   // Check if it's a pure luck-based game (not skill-based prediction)
   const luckBasedTerms = ['লটারি', 'lottery', 'random', 'randomly', 'দৈব'];
   for (const term of luckBasedTerms) {
@@ -125,7 +125,7 @@ function checkGamblingPolicy(title: string, category: string): {
       issues.push(`Appears to be luck-based: ${term}`);
     }
   }
-  
+
   return {
     compliant: issues.length === 0,
     issues,
@@ -144,7 +144,7 @@ function checkTermsOfService(
   violations: string[];
 } {
   const violations: string[] = [];
-  
+
   // Title length check
   if (title.length < PLATFORM_RESTRICTIONS.minTitleLength) {
     violations.push(`Title too short (min ${PLATFORM_RESTRICTIONS.minTitleLength} chars)`);
@@ -152,7 +152,7 @@ function checkTermsOfService(
   if (title.length > PLATFORM_RESTRICTIONS.maxTitleLength) {
     violations.push(`Title too long (max ${PLATFORM_RESTRICTIONS.maxTitleLength} chars)`);
   }
-  
+
   // Outcomes check
   if (!outcomes || outcomes.length < PLATFORM_RESTRICTIONS.minOutcomes) {
     violations.push(`Need at least ${PLATFORM_RESTRICTIONS.minOutcomes} outcomes`);
@@ -160,7 +160,7 @@ function checkTermsOfService(
   if (outcomes && outcomes.length > PLATFORM_RESTRICTIONS.maxOutcomes) {
     violations.push(`Too many outcomes (max ${PLATFORM_RESTRICTIONS.maxOutcomes})`);
   }
-  
+
   // Duplicate outcomes check
   if (outcomes) {
     const uniqueOutcomes = new Set(outcomes.map(o => o.toLowerCase().trim()));
@@ -168,7 +168,7 @@ function checkTermsOfService(
       violations.push('Duplicate outcomes detected');
     }
   }
-  
+
   return {
     compliant: violations.length === 0,
     violations,
@@ -185,20 +185,20 @@ function calculateRiskScore(
   tos: { compliant: boolean; violations: string[] }
 ): number {
   let score = 0;
-  
+
   // Cyber security violations (highest weight)
   score += cyberSecurity.violations.length * 25;
-  
+
   // Political sensitivity
   if (political.level === 'high') score += 30;
   else if (political.level === 'medium') score += 15;
-  
+
   // Gambling issues
   score += gambling.issues.length * 20;
-  
+
   // ToS violations
   score += tos.violations.length * 10;
-  
+
   return Math.min(100, score);
 }
 
@@ -212,26 +212,26 @@ function generateRecommendations(
   tos: { violations: string[] }
 ): string[] {
   const recommendations: string[] = [];
-  
+
   if (cyberSecurity.violations.length > 0) {
     recommendations.push('Review content for potential legal violations');
     recommendations.push('Ensure no defamatory or harmful content');
   }
-  
+
   if (political.isSensitive) {
     recommendations.push('Consider adding disclaimer for political sensitivity');
     recommendations.push('Ensure balanced representation of viewpoints');
   }
-  
+
   if (gambling.issues.length > 0) {
     recommendations.push('Clarify this is a prediction market, not gambling');
     recommendations.push('Emphasize skill-based analysis');
   }
-  
+
   if (tos.violations.length > 0) {
     recommendations.push('Fix Terms of Service violations before publishing');
   }
-  
+
   return recommendations;
 }
 
@@ -243,30 +243,31 @@ function assessRiskRuleBased(context: AgentContext): RiskAssessmentResult {
   const description = context.description || '';
   const category = context.category || 'Other';
   const outcomes = context.outcomes || [];
-  
+
   // Run all checks
   const cyberSecurity = checkCyberSecurityLaw(title, description);
   const political = checkPoliticalSensitivity(title);
   const gambling = checkGamblingPolicy(title, category);
   const tos = checkTermsOfService(title, description, outcomes);
-  
+
   // Calculate overall risk
   const riskScore = calculateRiskScore(cyberSecurity, political, gambling, tos);
-  
+
   // Determine if safe (score < 30 is considered safe)
   const isSafe = riskScore < 30;
-  
+
   // Collect all violations
   const violations = [
     ...cyberSecurity.violations,
     ...gambling.issues,
     ...tos.violations,
   ];
-  
+
   return {
     isSafe,
     riskScore,
     violations,
+    warnings: [],
     recommendations: generateRecommendations(cyberSecurity, political, gambling, tos),
     policyChecks: {
       cyberSecurityLaw: cyberSecurity.passed,
@@ -282,7 +283,8 @@ function assessRiskRuleBased(context: AgentContext): RiskAssessmentResult {
  * Vertex AI risk assessment (SERVER-SIDE ONLY)
  */
 async function assessWithVertexAI(context: AgentContext): Promise<RiskAssessmentResult> {
-  const response = await fetch('/api/ai/vertex-generate', {
+  const baseUrl = typeof window !== 'undefined' ? '' : (process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'));
+  const response = await fetch(`${baseUrl}/api/ai/vertex-generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -298,6 +300,7 @@ async function assessWithVertexAI(context: AgentContext): Promise<RiskAssessment
   const data = await response.json();
   return {
     ...data.result,
+    warnings: data.result.warnings || [],
     confidence: 0.9,
   };
 }
@@ -307,11 +310,11 @@ async function assessWithVertexAI(context: AgentContext): Promise<RiskAssessment
  */
 async function assessWithKimi(context: AgentContext): Promise<RiskAssessmentResult> {
   const apiKey = process.env.KIMI_API_KEY;
-  
+
   if (!apiKey) {
     throw new Error('KIMI_API_KEY not set');
   }
-  
+
   const response = await fetch('https://api.moonshot.cn/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -336,6 +339,7 @@ Return JSON:
   "isSafe": true,
   "riskScore": 10,
   "violations": [],
+  "warnings": [],
   "recommendations": [],
   "policyChecks": {
     "cyberSecurityLaw": true,
@@ -349,29 +353,30 @@ Return JSON:
       temperature: 0.1,
     }),
   });
-  
+
   if (!response.ok) {
     throw new Error(`Kimi API error: ${response.status}`);
   }
-  
+
   const data = await response.json();
   const content = data.choices?.[0]?.message?.content;
-  
+
   if (!content) {
     throw new Error('Empty response');
   }
-  
+
   const jsonMatch = content.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
     throw new Error('Invalid JSON');
   }
-  
+
   const parsed = JSON.parse(jsonMatch[0]);
-  
+
   return {
     isSafe: parsed.isSafe,
     riskScore: parsed.riskScore,
     violations: parsed.violations,
+    warnings: parsed.warnings || [],
     recommendations: parsed.recommendations,
     policyChecks: parsed.policyChecks,
     confidence: 0.85,
@@ -385,15 +390,15 @@ export async function runRiskAgent(
   context: AgentContext
 ): Promise<RiskAssessmentResult> {
   console.log('[RiskAgent] Assessing risk for:', context.title);
-  
+
   const { result, provider } = await executeWithFailover(
     () => assessWithVertexAI(context),
     () => assessWithKimi(context),
     () => assessRiskRuleBased(context)
   );
-  
+
   console.log(`[RiskAgent] Completed using ${provider}, Risk Score: ${result.riskScore}`);
-  
+
   return result;
 }
 
@@ -405,30 +410,30 @@ export function quickRiskCheck(title: string): {
   riskLevel: 'low' | 'medium' | 'high';
 } {
   const normalized = title.toLowerCase();
-  
+
   // Check for high-risk keywords
   const highRiskKeywords = [
     ...CYBER_SECURITY_VIOLATIONS.slice(0, 5), // First 5 are highest risk
     ...POLITICAL_SENSITIVITY_KEYWORDS.slice(0, 3),
   ];
-  
+
   const mediumRiskKeywords = [
     ...CYBER_SECURITY_VIOLATIONS.slice(5),
     ...POLITICAL_SENSITIVITY_KEYWORDS.slice(3),
   ];
-  
+
   for (const keyword of highRiskKeywords) {
     if (normalized.includes(keyword.toLowerCase())) {
       return { isSafe: false, riskLevel: 'high' };
     }
   }
-  
+
   for (const keyword of mediumRiskKeywords) {
     if (normalized.includes(keyword.toLowerCase())) {
       return { isSafe: true, riskLevel: 'medium' };
     }
   }
-  
+
   return { isSafe: true, riskLevel: 'low' };
 }
 

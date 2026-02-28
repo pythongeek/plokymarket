@@ -1,17 +1,17 @@
-'use client';
-
-/**
- * useMarketProposals Hook
- * Manages AI market proposal generation and approval
- */
-
 import { useState, useCallback } from 'react';
-import { 
-  proposeMarkets, 
-  ProposedMarket, 
-  MarketProposalResult 
+import {
+  proposeMarkets,
+  ProposedMarket,
+  MarketProposalResult
 } from '@/lib/ai-agents/market-proposal-agent';
-import { eventMarketSync, EventMarketCreationResult } from '@/lib/services/EventMarketSync';
+
+export interface EventMarketCreationResult {
+  success: boolean;
+  eventId?: string;
+  marketIds?: string[];
+  slug?: string;
+  error?: string;
+}
 
 interface UseMarketProposalsOptions {
   onSuccess?: (result: EventMarketCreationResult) => void;
@@ -25,7 +25,7 @@ interface UseMarketProposalsReturn {
   isCreating: boolean;
   error: string | null;
   lastResult: EventMarketCreationResult | null;
-  
+
   // Actions
   generateProposals: (params: GenerateParams) => Promise<void>;
   createEventWithMarkets: (params: CreateParams) => Promise<void>;
@@ -93,27 +93,71 @@ export function useMarketProposals(options: UseMarketProposalsOptions = {}): Use
   }, [options]);
 
   /**
-   * Create event with selected markets
+   * Create event with selected markets via API route
    */
   const createEventWithMarkets = useCallback(async (params: CreateParams) => {
     setIsCreating(true);
     setError(null);
 
     try {
-      const result = await eventMarketSync.createEventWithMarkets({
-        event: params.event,
-        markets: params.markets,
-        createdBy: params.createdBy,
+      // Map markets to API payload format
+      const marketsData = params.markets.map(market => ({
+        question: market.question || market.name,
+        description: market.description || '',
+        outcomes: market.outcomes || ['Yes', 'No'],
+        liquidity: market.suggestedLiquidity || params.event.initial_liquidity || 1000,
+        trading_fee: market.tradingFee || 0.02,
+        min_trade_amount: 10,
+        max_trade_amount: 10000,
+        trading_closes_at: params.event.trading_closes_at ? new Date(params.event.trading_closes_at).toISOString() : null,
+      }));
+
+      const payload = {
+        event_data: {
+          title: params.event.title,
+          question: params.event.question || params.event.title,
+          description: params.event.description || null,
+          category: params.event.category,
+          subcategory: params.event.subcategory || null,
+          tags: params.event.tags || [],
+          image_url: params.event.image_url || null,
+          trading_closes_at: params.event.trading_closes_at ? new Date(params.event.trading_closes_at).toISOString() : null,
+          resolution_method: params.event.resolution_method || 'manual_admin',
+          initial_liquidity: params.event.initial_liquidity || 1000,
+          is_featured: params.event.is_featured || false,
+          b_parameter: 100
+        },
+        markets_data: marketsData,
+        resolution_config: {
+          method: params.event.resolution_method || 'manual_admin',
+          ai_keywords: [],
+          ai_sources: [],
+          confidence_threshold: 85,
+        }
+      };
+
+      const response = await fetch('/api/admin/events/create-atomic', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       });
 
-      setLastResult(result);
+      const data = await response.json();
 
-      if (result.success) {
-        options.onSuccess?.(result);
-      } else {
-        setError(result.error || 'Creation failed');
-        options.onError?.(new Error(result.error || 'Creation failed'));
+      if (!response.ok) {
+        throw new Error(data.message || data.error || 'Failed to create event and markets');
       }
+
+      const result: EventMarketCreationResult = {
+        success: true,
+        eventId: data.event_id,
+        marketIds: data.market_id ? [data.market_id] : [],
+        slug: data.slug,
+      };
+
+      setLastResult(result);
+      options.onSuccess?.(result);
+
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Creation failed';
       setError(errorMessage);

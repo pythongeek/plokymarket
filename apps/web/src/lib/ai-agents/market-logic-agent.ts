@@ -15,7 +15,7 @@ function detectMarketType(outcomes: string[]): 'binary' | 'categorical' | 'scala
   if (!outcomes || outcomes.length === 0) {
     return 'binary'; // Default
   }
-  
+
   // Binary: exactly 2 outcomes
   if (outcomes.length === 2) {
     // Check if it's Yes/No type
@@ -26,7 +26,7 @@ function detectMarketType(outcomes: string[]): 'binary' | 'categorical' | 'scala
       ['হ্যা', 'না'],
       ['true', 'false'],
     ];
-    
+
     for (const variant of yesNoVariants) {
       if (
         normalized.includes(variant[0].toLowerCase()) &&
@@ -35,16 +35,16 @@ function detectMarketType(outcomes: string[]): 'binary' | 'categorical' | 'scala
         return 'binary';
       }
     }
-    
+
     // 2 outcomes but not yes/no - still binary
     return 'binary';
   }
-  
+
   // Categorical: 3-10 outcomes
   if (outcomes.length >= 3 && outcomes.length <= 10) {
     return 'categorical';
   }
-  
+
   // Scalar: numeric ranges or >10 outcomes
   return 'scalar';
 }
@@ -66,9 +66,9 @@ function calculateLiquidity(
     'Weather': 1000,
     'Other': 1000,
   };
-  
+
   let liquidity = baseLiquidity[category] || 1000;
-  
+
   // Adjust by market type
   if (marketType === 'categorical') {
     // More outcomes = more liquidity needed
@@ -76,7 +76,7 @@ function calculateLiquidity(
   } else if (marketType === 'scalar') {
     liquidity *= 1.5;
   }
-  
+
   return Math.round(liquidity);
 }
 
@@ -105,10 +105,10 @@ function calculateTradeLimits(liquidity: number): {
 } {
   // Min trade: 1% of liquidity or 10, whichever is higher
   const minTradeAmount = Math.max(10, Math.round(liquidity * 0.01));
-  
+
   // Max trade: 10% of liquidity or 10000, whichever is lower
   const maxTradeAmount = Math.min(10000, Math.round(liquidity * 0.1));
-  
+
   return { minTradeAmount, maxTradeAmount };
 }
 
@@ -127,18 +127,18 @@ function calculateBParameter(liquidity: number, outcomeCount: number): number {
  */
 function generateDefaultOutcomes(title: string): string[] {
   const normalized = title.toLowerCase();
-  
+
   // Check for specific patterns
   if (normalized.includes('বিজয়') || normalized.includes('জিতবে') || normalized.includes('হবে')) {
     // Winner prediction - needs teams
     return ['Team A', 'Team B', 'Draw'];
   }
-  
+
   if (normalized.includes('দাম') || normalized.includes('মূল্য') || normalized.includes('price')) {
     // Price prediction
     return ['বাড়বে (Up)', 'কমবে (Down)', 'অপরিবর্তিত (Same)'];
   }
-  
+
   // Default binary
   return ['হ্যাঁ (Yes)', 'না (No)'];
 }
@@ -149,13 +149,13 @@ function generateDefaultOutcomes(title: string): string[] {
 function analyzeMarketRuleBased(context: AgentContext): MarketLogicResult {
   const outcomes = context.outcomes || generateDefaultOutcomes(context.title || '');
   const category = context.category || 'Other';
-  
+
   const marketType = detectMarketType(outcomes);
   const liquidity = calculateLiquidity(category, marketType, outcomes.length);
   const tradingFee = calculateTradingFee(marketType);
   const { minTradeAmount, maxTradeAmount } = calculateTradeLimits(liquidity);
   const bParameter = calculateBParameter(liquidity, outcomes.length);
-  
+
   return {
     marketType,
     outcomes,
@@ -173,7 +173,8 @@ function analyzeMarketRuleBased(context: AgentContext): MarketLogicResult {
  * Vertex AI market analysis (SERVER-SIDE ONLY)
  */
 async function analyzeWithVertexAI(context: AgentContext): Promise<MarketLogicResult> {
-  const response = await fetch('/api/ai/vertex-generate', {
+  const baseUrl = typeof window !== 'undefined' ? '' : (process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'));
+  const response = await fetch(`${baseUrl}/api/ai/vertex-generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -199,11 +200,11 @@ async function analyzeWithVertexAI(context: AgentContext): Promise<MarketLogicRe
  */
 async function analyzeWithKimi(context: AgentContext): Promise<MarketLogicResult> {
   const apiKey = process.env.KIMI_API_KEY;
-  
+
   if (!apiKey) {
     throw new Error('KIMI_API_KEY not set');
   }
-  
+
   const response = await fetch('https://api.moonshot.cn/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -236,25 +237,25 @@ Return JSON:
       temperature: 0.2,
     }),
   });
-  
+
   if (!response.ok) {
     throw new Error(`Kimi API error: ${response.status}`);
   }
-  
+
   const data = await response.json();
   const content = data.choices?.[0]?.message?.content;
-  
+
   if (!content) {
     throw new Error('Empty response');
   }
-  
+
   const jsonMatch = content.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
     throw new Error('Invalid JSON');
   }
-  
+
   const parsed = JSON.parse(jsonMatch[0]);
-  
+
   return {
     marketType: parsed.marketType,
     outcomes: parsed.outcomes,
@@ -275,15 +276,15 @@ export async function runMarketLogicAgent(
   context: AgentContext
 ): Promise<MarketLogicResult> {
   console.log('[MarketLogicAgent] Analyzing:', context.title);
-  
+
   const { result, provider } = await executeWithFailover(
     () => analyzeWithVertexAI(context),
     () => analyzeWithKimi(context),
     () => analyzeMarketRuleBased(context)
   );
-  
+
   console.log(`[MarketLogicAgent] Completed using ${provider}`);
-  
+
   return result;
 }
 
@@ -318,7 +319,7 @@ export function getDefaultMarketConfig(category: string): Partial<MarketLogicRes
       maxTradeAmount: 2000,
     },
   };
-  
+
   return configs[category] || {
     liquidityRecommendation: 1000,
     tradingFee: 0.02,
