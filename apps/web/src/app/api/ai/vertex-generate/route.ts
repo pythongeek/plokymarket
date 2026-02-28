@@ -3,9 +3,11 @@
  * Server-side endpoint for Vertex AI calls
  * Supports content, market-logic, timing, and risk generation
  * 
- * Models updated 2026-02-28:
- * - gemini-2.0-flash-001  → fast, cost-effective (replaces gemini-1.5-flash)
- * - gemini-2.5-pro-preview-03-25 → complex reasoning (replaces gemini-1.5-pro)
+ * Models (Industry Standard - Stable):
+ * - gemini-1.5-flash-002 → Fast tasks: slug, classify, risk
+ * - gemini-1.5-pro-002   → Complex: content, market logic
+ * 
+ * Region: asia-south1 (Mumbai) for low latency in Bangladesh
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -16,18 +18,31 @@ export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
 
 // ─── Model Constants ──────────────────────────────────────────────────────────
-// Use these — old models (gemini-1.5-pro, gemini-1.5-flash without -002) are deprecated
-const FAST_MODEL = 'gemini-2.0-flash-001';       // Fast tasks: slug, classify, risk
-const PRO_MODEL  = 'gemini-2.5-pro-preview-03-25'; // Complex: content, market logic
+// Latest stable model IDs from Google Cloud Vertex AI
+// Reference: https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini
+const FAST_MODEL = 'gemini-1.5-flash-002';  // Fast, cost-effective tasks (latest stable)
+const PRO_MODEL = 'gemini-1.5-pro-002';    // Complex reasoning tasks (latest stable)
 
 // ─── Auth Setup ───────────────────────────────────────────────────────────────
 function getAuthOptions() {
+  // Try Gemini API Key first (for API key based auth)
+  const geminiApiKey = process.env.GEMINI_API_KEY;
+  if (geminiApiKey) {
+    return { apiKey: geminiApiKey };
+  }
+
+  // Fallback to Service Account
   const base64Key = process.env.GOOGLE_SERVICE_ACCOUNT_KEY_BASE64;
   if (base64Key) {
     try {
-      const credentials = JSON.parse(
-        Buffer.from(base64Key, 'base64').toString('utf-8')
-      );
+      const decodedKey = Buffer.from(base64Key, 'base64').toString('utf-8');
+      const credentials = JSON.parse(decodedKey);
+
+      // Fix potential literal newline escaping issues common in Vercel envs
+      if (credentials.private_key) {
+        credentials.private_key = credentials.private_key.replace(/\\n/g, '\n');
+      }
+
       return { credentials };
     } catch (error) {
       console.error('[Vertex API] Failed to parse Base64 key:', error);
@@ -36,15 +51,41 @@ function getAuthOptions() {
   return {};
 }
 
+/**
+ * Initialize Vertex AI
+ * Uses API key if available, otherwise service account
+ */
 function initVertexAI(): VertexAI | null {
   try {
     const project = process.env.GOOGLE_CLOUD_PROJECT;
-    const location = process.env.VERTEX_LOCATION || 'us-central1';
-    if (!project) {
-      console.warn('[Vertex API] GOOGLE_CLOUD_PROJECT not set');
+    const geminiApiKey = process.env.GEMINI_API_KEY;
+
+    // For API key auth, we use global endpoint
+    const location = geminiApiKey ? 'global' : (process.env.VERTEX_LOCATION || 'us-central1');
+
+    if (!project && !geminiApiKey) {
+      console.warn('[Vertex API] Neither GOOGLE_CLOUD_PROJECT nor GEMINI_API_KEY set');
       return null;
     }
-    return new VertexAI({ project, location, googleAuthOptions: getAuthOptions() });
+
+    console.log(`[Vertex API] Initializing with ${geminiApiKey ? 'API Key' : 'Service Account'}, location: ${location}`);
+
+    const authOptions = getAuthOptions();
+
+    // If using API key, we use a different initialization
+    if (geminiApiKey) {
+      return new VertexAI({
+        project: project || 'gen-lang-client-0578182636',
+        location: location,
+        googleAuthOptions: authOptions
+      });
+    }
+
+    return new VertexAI({
+      project: project,
+      location: location,
+      googleAuthOptions: authOptions
+    });
   } catch (error) {
     console.error('[Vertex API] Failed to init:', error);
     return null;
@@ -270,13 +311,19 @@ export async function POST(req: NextRequest) {
     console.log(`[Vertex API][${requestId}] Using model: ${modelName} for type: ${type}`);
 
     // Generate
-    const model = vertex.preview.getGenerativeModel({
+    const model = vertex.getGenerativeModel({
       model: modelName,
       generationConfig: {
         maxOutputTokens: 2048,
         temperature: type === 'risk' ? 0.1 : 0.3,
         responseMimeType: 'application/json',
       },
+      tools: [{
+        // @ts-ignore
+        googleSearchRetrieval: {
+          disableAttribution: false,
+        } as any
+      }]
     });
 
     console.log(`[Vertex API][${requestId}] Calling ${modelName}...`);
@@ -308,6 +355,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Make sure 'totalSuggestedLiquidity' exists for older UI compatibility
+    if (type === 'market-proposal' && !parsed.totalSuggestedLiquidity) {
+      const primaryLiq = parsed.primaryMarket?.suggestedLiquidity || 0;
+      const secondaryLiq = (parsed.secondaryMarkets || []).reduce((sum: number, m: any) => sum + (m.suggestedLiquidity || 0), 0);
+      parsed.totalSuggestedLiquidity = primaryLiq + secondaryLiq + 1000;
+    }
+
     console.log(`[Vertex API][${requestId}] Success with ${modelName}`);
 
     return NextResponse.json({
@@ -330,8 +384,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         error: isModelError ? 'Model unavailable — check Vertex AI model access'
-             : isQuotaError ? 'Quota exceeded — try again later'
-             : 'Internal Server Error',
+          : isQuotaError ? 'Quota exceeded — try again later'
+            : 'Internal Server Error',
         message: msg,
         ...(process.env.NODE_ENV === 'development' && { stack: error?.stack }),
       },

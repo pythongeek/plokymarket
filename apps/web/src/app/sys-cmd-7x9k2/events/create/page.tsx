@@ -501,7 +501,16 @@ export default function EventCreationPage() {
       if (!form.category) e.category = 'ক্যাটাগরি নির্বাচন করুন';
     }
     if (s === 3) {
-      if (!form.tradingClosesAt) e.tradingClosesAt = 'ট্রেডিং বন্ধের তারিখ আবশ্যক';
+      if (!form.tradingClosesAt) {
+        e.tradingClosesAt = 'ট্রেডিং বন্ধের তারিখ আবশ্যক';
+      } else {
+        const date = new Date(form.tradingClosesAt);
+        if (isNaN(date.getTime())) {
+          e.tradingClosesAt = 'সঠিক তারিখ ও সময় প্রদান করুন';
+        } else if (date.getFullYear() > 2100) {
+          e.tradingClosesAt = 'সাল ২১০০ এর বেশি হতে পারে না';
+        }
+      }
     }
     if (s === 4) {
       if (!form.answer1.trim()) e.answer1 = 'প্রথম উত্তর আবশ্যক';
@@ -909,6 +918,7 @@ export default function EventCreationPage() {
                   </label>
                   <input
                     type="datetime-local"
+                    max="2100-12-31T23:59"
                     value={form.tradingClosesAt}
                     onChange={(e) => set('tradingClosesAt', e.target.value)}
                     className={`w-full px-3 py-2.5 rounded-lg border text-sm ${errors.tradingClosesAt ? 'border-red-400 bg-red-50' : 'border-gray-300'

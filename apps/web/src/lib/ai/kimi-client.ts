@@ -4,8 +4,15 @@
  * Moonshot AI's Kimi models with strong Bengali support
  */
 
-const KIMI_API_KEY = process.env.KIMI_API_KEY!;
+const KIMI_API_KEY = process.env.KIMI_API_KEY;
 const KIMI_BASE_URL = "https://api.moonshot.cn/v1";
+
+/**
+ * Check if Kimi API is properly configured
+ */
+export function isKimiConfigured(): boolean {
+  return !!KIMI_API_KEY && KIMI_API_KEY.length > 0;
+}
 
 export interface KimiMessage {
   role: "system" | "user" | "assistant";
@@ -38,22 +45,36 @@ export interface KimiCompletionResult {
 
 /**
  * Call Kimi API for completions
+ * @throws Error if KIMI_API_KEY is not configured or API call fails
  */
 export async function callKimiAPI(
   messages: KimiMessage[],
   options: KimiCompletionOptions = {}
 ): Promise<KimiCompletionResult> {
+  const { providers } = await import("./ai-config").then(m => m.getAIConfigs());
+  const kimiConfig = providers?.kimi;
+
+  const activeKey = kimiConfig?.is_active ? process.env.KIMI_API_KEY : KIMI_API_KEY;
+  const activeBaseUrl = kimiConfig?.base_url || KIMI_BASE_URL;
+
+  // Check if Kimi API is configured
+  if (!activeKey || !kimiConfig?.is_active && !isKimiConfigured()) {
+    throw new Error(
+      "Kimi API not configured. Please set KIMI_API_KEY environment variable or enable Provider."
+    );
+  }
+
   const {
-    model = "kimi-k1.5",
-    temperature = 0.2,
-    maxTokens = 2048,
+    model = kimiConfig?.model || "moonshot-v1-32k",
+    temperature = kimiConfig?.temperature ?? 0.7,
+    maxTokens = kimiConfig?.max_tokens || 4000,
     responseFormat = { type: "json_object" },
   } = options;
 
-  const response = await fetch(`${KIMI_BASE_URL}/chat/completions`, {
+  const response = await fetch(`${activeBaseUrl}/chat/completions`, {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${KIMI_API_KEY}`,
+      "Authorization": `Bearer ${activeKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -77,19 +98,12 @@ export async function callKimiAPI(
  * Generate slug using Kimi API
  */
 export async function generateSlugWithKimi(title: string) {
-  const systemPrompt = `You are a URL slug generator. Convert titles to URL-safe slugs.
-Rules:
-1. Transliterate Bengali to English
-2. Use only lowercase, numbers, hyphens
-3. Max 60 characters
+  const { prompts } = await import("./ai-config").then(m => m.getAIConfigs());
+  const { SLUG_AGENT_PROMPT } = await import("./prompts/eventPrompts");
 
-Respond in JSON:
-{
-  "slug": "url-slug",
-  "title": "optimized title",
-  "language": "bn|en|mixed",
-  "keywords": ["keyword1"]
-}`;
+  const systemPrompt = prompts?.slug_agent?.is_active
+    ? prompts.slug_agent.system_prompt
+    : SLUG_AGENT_PROMPT;
 
   const result = await callKimiAPI([
     { role: "system", content: systemPrompt },
@@ -106,17 +120,12 @@ Respond in JSON:
  * Classify category using Kimi API
  */
 export async function classifyCategoryWithKimi(title: string, description?: string) {
-  const systemPrompt = `Classify events into categories.
-Categories: politics, sports, crypto, economics, weather, entertainment, technology, international
+  const { prompts } = await import("./ai-config").then(m => m.getAIConfigs());
+  const { CATEGORY_AGENT_PROMPT } = await import("./prompts/eventPrompts");
 
-Respond in JSON:
-{
-  "primary": "category",
-  "secondary": ["sub"],
-  "tags": ["bd-local"],
-  "confidence": 0.9,
-  "reasoning": "..."
-}`;
+  const systemPrompt = prompts?.category_agent?.is_active
+    ? prompts.category_agent.system_prompt
+    : CATEGORY_AGENT_PROMPT;
 
   const userContent = description
     ? `Title: "${title}"\nDescription: "${description}"`
@@ -137,17 +146,12 @@ Respond in JSON:
  * Generate content using Kimi API
  */
 export async function generateContentWithKimi(title: string, category: string) {
-  const systemPrompt = `Generate event descriptions for prediction markets.
-Include: description, resolution criteria (yes/no/edge cases), resolution source, context
+  const { prompts } = await import("./ai-config").then(m => m.getAIConfigs());
+  const { CONTENT_AGENT_PROMPT } = await import("./prompts/eventPrompts");
 
-Respond in JSON:
-{
-  "description": "...",
-  "resolutionCriteria": { "yes": "...", "no": "...", "edgeCases": "..." },
-  "resolutionSource": { "name": "...", "url": "..." },
-  "context": "...",
-  "language": "bn|en|mixed"
-}`;
+  const systemPrompt = prompts?.content_agent?.is_active
+    ? prompts.content_agent.system_prompt
+    : CONTENT_AGENT_PROMPT;
 
   const result = await callKimiAPI([
     { role: "system", content: systemPrompt },
@@ -164,18 +168,12 @@ Respond in JSON:
  * Validate event using Kimi API
  */
 export async function validateEventWithKimi(eventData: object) {
-  const systemPrompt = `Validate prediction market events.
-Score 0-1, recommendation: approve/review/revise/reject
+  const { prompts } = await import("./ai-config").then(m => m.getAIConfigs());
+  const { VALIDATION_AGENT_PROMPT } = await import("./prompts/eventPrompts");
 
-Respond in JSON:
-{
-  "score": 0.85,
-  "recommendation": "approve",
-  "breakdown": { "titleQuality": 0.9, "descriptionQuality": 0.8, "resolutionCriteria": 0.85, "resolutionSource": 0.9, "feasibility": 0.85 },
-  "risks": [],
-  "improvements": [],
-  "confidence": 0.9
-}`;
+  const systemPrompt = prompts?.validation_agent?.is_active
+    ? prompts.validation_agent.system_prompt
+    : VALIDATION_AGENT_PROMPT;
 
   const result = await callKimiAPI([
     { role: "system", content: systemPrompt },
@@ -197,19 +195,19 @@ export async function withFallback<T>(
   options: { logFallback?: boolean } = {}
 ): Promise<T> {
   const { logFallback = true } = options;
-  
+
   try {
     return await vertexFn();
   } catch (error) {
     if (logFallback) {
-      console.warn("[AI Fallback] Vertex AI failed, switching to Kimi:", 
+      console.warn("[AI Fallback] Vertex AI failed, switching to Kimi:",
         error instanceof Error ? error.message : error);
     }
-    
+
     try {
       return await kimiFn();
     } catch (kimiError) {
-      console.error("[AI Fallback] Kimi also failed:", 
+      console.error("[AI Fallback] Kimi also failed:",
         kimiError instanceof Error ? kimiError.message : kimiError);
       throw new Error("Both AI providers failed");
     }
@@ -221,12 +219,21 @@ export async function withFallback<T>(
  */
 export async function checkKimiHealth(): Promise<{ healthy: boolean; latencyMs: number; error?: string }> {
   const start = Date.now();
-  
+
+  // Check if API key is configured first
+  if (!isKimiConfigured()) {
+    return {
+      healthy: false,
+      latencyMs: 0,
+      error: "KIMI_API_KEY not configured",
+    };
+  }
+
   try {
     await callKimiAPI([
       { role: "user", content: "Respond with {\"status\": \"ok\"}" },
     ], { maxTokens: 50 });
-    
+
     return {
       healthy: true,
       latencyMs: Date.now() - start,

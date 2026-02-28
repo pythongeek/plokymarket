@@ -240,6 +240,8 @@ DECLARE
     v_result JSONB;
     v_initial_liquidity NUMERIC;
     v_system_user_id UUID;
+    v_category TEXT;
+    v_is_custom_category BOOLEAN;
 BEGIN
     -- Generate slug if not provided, preferring the explicit one from the payload
     v_slug := COALESCE(
@@ -248,6 +250,28 @@ BEGIN
     );
     
     v_initial_liquidity := COALESCE((p_event_data->>'initial_liquidity')::NUMERIC, 1000);
+    
+    -- Check if this is a custom category (from "Other" option)
+    v_is_custom_category := COALESCE((p_event_data->>'is_custom_category')::BOOLEAN, FALSE);
+    v_category := COALESCE(p_event_data->>'category', 'general');
+    
+    -- If custom category, add to custom_categories table if not exists
+    IF v_is_custom_category AND v_category != 'general' THEN
+        -- Try to insert, handle both name and slug conflicts
+        BEGIN
+            INSERT INTO public.custom_categories (name, slug, icon, display_order, created_by)
+            VALUES (
+                v_category,
+                lower(regexp_replace(v_category, '[^a-zA-Z0-9]+', '-', 'g')),
+                '📌',
+                999,
+                p_admin_id
+            );
+        EXCEPTION WHEN unique_violation THEN
+            -- Category already exists (either name or slug), continue without error
+            NULL;
+        END;
+    END IF;
     
     -- Insert event
     INSERT INTO public.events (
@@ -281,7 +305,7 @@ BEGIN
         v_slug,
         COALESCE(p_event_data->>'question', p_event_data->>'title'),
         p_event_data->>'description',
-        COALESCE(p_event_data->>'category', 'general'),
+        v_category,
         p_event_data->>'subcategory',
         COALESCE((p_event_data->'tags')::TEXT[], '{}'),
         p_event_data->>'image_url',
@@ -331,7 +355,7 @@ BEGIN
         COALESCE(p_event_data->>'title', p_event_data->>'name', p_event_data->>'question'),
         COALESCE(p_event_data->>'question', p_event_data->>'title'),
         p_event_data->>'description',
-        COALESCE(p_event_data->>'category', 'general'),
+        v_category,
         p_event_data->>'subcategory',
         COALESCE((p_event_data->'tags')::TEXT[], '{}'),
         (p_event_data->>'trading_closes_at')::TIMESTAMPTZ,
@@ -402,7 +426,9 @@ BEGIN
         'event_id', v_event_id,
         'market_id', v_market_id,
         'slug', v_slug,
-        'message', 'Event created successfully'
+        'message', 'Event created successfully',
+        'is_custom_category', v_is_custom_category,
+        'category', v_category
     );
     
     RETURN v_result;

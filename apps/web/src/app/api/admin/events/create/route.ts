@@ -14,14 +14,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Admin check
     const { data: profile } = await supabase
       .from('user_profiles')
       .select('is_admin, is_super_admin')
       .eq('id', user.id)
       .single()
 
-    if (!profile?.is_admin && !profile?.is_super_admin) {
+    const userProfile = profile as any
+
+    if (!userProfile?.is_admin && !userProfile?.is_super_admin) {
       return NextResponse.json({ error: 'Forbidden: Admin access required' }, { status: 403 })
     }
 
@@ -37,19 +38,20 @@ export async function POST(request: NextRequest) {
       ...event_data,
       created_by: user.id,
       // Normalize: support both resolution_method and primary_method keys
-      resolution_method: event_data.resolution_method 
-        || resolution_config?.primary_method 
+      resolution_method: event_data.resolution_method
+        || resolution_config?.primary_method
         || 'manual_admin',
+      resolution_delay_hours: event_data.resolution_delay ? Math.floor(event_data.resolution_delay / 60) : 24,
       ai_keywords: resolution_config?.ai_keywords || event_data.ai_keywords || [],
-      ai_sources:  resolution_config?.ai_sources  || event_data.ai_sources  || [],
+      ai_sources: resolution_config?.ai_sources || event_data.ai_sources || [],
       ai_confidence_threshold: resolution_config?.confidence_threshold || event_data.ai_confidence_threshold || 85,
     }
 
-    // Use the fixed RPC function
+    // Use the complete RPC function that handles event + market + liquidity atomically
     const { data: rpcResult, error: rpcError } = await supabase
-      .rpc('create_event_with_markets', {
-        p_event_data:   eventPayload,
-        p_markets_data: markets_data || null,
+      .rpc('create_event_complete', {
+        p_event_data: eventPayload,
+        p_admin_id: user.id,
       })
 
     if (rpcError) {
@@ -69,10 +71,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      event_id:  rpcResult.event_id,
+      event_id: rpcResult.event_id,
       market_id: rpcResult.market_id,
-      slug:      rpcResult.slug,
-      message:   'Event created successfully',
+      slug: rpcResult.slug,
+      message: 'Event created successfully',
     })
 
   } catch (err: any) {

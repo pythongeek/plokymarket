@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createClient } from '@/lib/supabase/client';
@@ -32,7 +32,8 @@ interface EventCreationPanelProps {
   onEventCreated?: (eventId: string) => void;
 }
 
-const CATEGORIES = [
+// Default categories (fallback) - will be overridden by DB fetch
+const DEFAULT_CATEGORIES = [
   { id: 'Sports', bn: 'খেলাধুলা' },
   { id: 'Politics', bn: 'রাজনীতি' },
   { id: 'Crypto', bn: 'ক্রিপ্টো' },
@@ -44,12 +45,51 @@ const CATEGORIES = [
   { id: 'Other', bn: 'অন্যান্য' }
 ];
 
+// Database-synced ORACLE_TYPES (matches events.resolution_method CHECK constraint)
+// Reference: supabase/migrations/094_reimplemented_events_markets.sql
 const ORACLE_TYPES = [
-  { id: 'MANUAL', name: 'ম্যানুয়াল (অ্যাডমিন)', nameEn: 'Manual (Admin)', description: 'প্ল্যাটফর্ম অ্যাডমিন দ্বারা সমাধান', icon: Users },
-  { id: 'AI', name: 'AI কনসেনসাস', nameEn: 'AI Consensus', description: 'AI ওরাকল দ্বারা স্বয়ংক্রিয়', icon: Cpu },
-  { id: 'UMA', name: 'UMA অপটিমিস্টিক', nameEn: 'UMA Optimistic', description: 'বিকেন্দ্রীভূত অপটিমিস্টিক ওরাকল', icon: SlidersHorizontal },
-  { id: 'CHAINLINK', name: 'Chainlink', nameEn: 'Chainlink', description: 'বিকেন্দ্রীভূত ডেটা ফিড', icon: SlidersHorizontal },
-  { id: 'MULTI', name: 'মাল্টি-সোর্স', nameEn: 'Multi-Source', description: 'একাধিক উৎস থেকে যাচাইকরণ', icon: SlidersHorizontal },
+  {
+    id: 'manual_admin',
+    name: 'ম্যানুয়াল (অ্যাডমিন)',
+    nameEn: 'Manual (Admin)',
+    description: 'অ্যাডমিন প্যানেল থেকে সরাসরি রেজাল্ট ইনপুট দেয়া হবে।',
+    icon: Users
+  },
+  {
+    id: 'ai_oracle',
+    name: 'AI ওরাকল (Vertex/Kimi)',
+    nameEn: 'AI Oracle',
+    description: 'AI এজেন্ট স্বয়ংক্রিয়ভাবে নিউজ স্ক্র্যাপ করে রেজাল্ট দিবে।',
+    icon: Cpu
+  },
+  {
+    id: 'expert_panel',
+    name: 'এক্সপার্ট প্যানেল',
+    nameEn: 'Expert Panel',
+    description: 'বাংলাদেশি বিশেষজ্ঞদের একটি প্যানেল রেজাল্ট যাচাই করবে।',
+    icon: SlidersHorizontal
+  },
+  {
+    id: 'external_api',
+    name: 'এক্সটারনাল API',
+    nameEn: 'External API',
+    description: 'সরাসরি স্পোর্টস বা ফিন্যান্স ডেটা সোর্স থেকে রেজাল্ট আসবে।',
+    icon: SlidersHorizontal
+  },
+  {
+    id: 'community_vote',
+    name: 'কমিউনিটি ভোট',
+    nameEn: 'Community Vote',
+    description: 'প্ল্যাটফর্ম ব্যবহারকারীদের ভোটের মাধ্যমে রেজোলিউশন।',
+    icon: Users
+  },
+  {
+    id: 'hybrid',
+    name: 'হাইব্রিড সিস্টেম',
+    nameEn: 'Hybrid System',
+    description: 'AI এবং মানুষের সমন্বয়ে একটি উন্নত রেজোলিউশন ব্যবস্থা।',
+    icon: SlidersHorizontal
+  }
 ];
 
 export function EventCreationPanel({ onEventCreated }: EventCreationPanelProps) {
@@ -76,14 +116,61 @@ export function EventCreationPanel({ onEventCreated }: EventCreationPanelProps) 
   });
 
   const [resolutionConfig, setResolutionConfig] = useState({
-    primary_method: 'MANUAL',
+    primary_method: 'manual_admin',
     ai_keywords: [] as string[],
     ai_sources: [] as string[],
     confidence_threshold: 85
   });
 
+  // Dynamic categories from database
+  const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+
+  // Fetch categories from database on mount
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const supabase = createClient();
+
+        // Try custom_categories table first (Bangladesh-specific categories)
+        const { data, error } = await supabase
+          .from('custom_categories')
+          .select('name, slug, is_active, display_order')
+          .eq('is_active', true)
+          .order('display_order', { ascending: true });
+
+        if (error) {
+          console.warn('[EventCreationPanel] Failed to fetch custom_categories:', error);
+          // Fallback to default categories
+          setCategories(DEFAULT_CATEGORIES);
+        } else if (data && data.length > 0) {
+          // Map database categories to component format
+          const mappedCategories = data.map((cat: any) => ({
+            id: cat.name, // Use name as ID to match existing event format
+            bn: cat.name  // Use name (frontend will show this)
+          }));
+          setCategories(mappedCategories);
+        } else {
+          // No categories in DB, use defaults
+          setCategories(DEFAULT_CATEGORIES);
+        }
+      } catch (err) {
+        console.warn('[EventCreationPanel] Error fetching categories:', err);
+        setCategories(DEFAULT_CATEGORIES);
+      } finally {
+        setCategoriesLoading(false);
+      }
+    };
+
+    fetchCategories();
+  }, []);
+
   const [tagInput, setTagInput] = useState('');
   const [keywordInput, setKeywordInput] = useState('');
+
+  // Custom category state for "Other" option
+  const [customCategory, setCustomCategory] = useState('');
+  const isOtherCategory = eventData.category === 'Other';
 
   const addTag = () => {
     if (tagInput.trim() && !eventData.tags.includes(tagInput.trim())) {
@@ -169,7 +256,15 @@ export function EventCreationPanel({ onEventCreated }: EventCreationPanelProps) 
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          event_data: eventData,
+          event_data: {
+            ...eventData,
+            // Use custom category if "Other" is selected
+            category: isOtherCategory && customCategory.trim()
+              ? customCategory.trim()
+              : eventData.category,
+            // Also add flag to indicate this is a custom category
+            is_custom_category: isOtherCategory && !!customCategory.trim()
+          },
           resolution_config: resolutionConfig
         })
       });
@@ -199,7 +294,7 @@ export function EventCreationPanel({ onEventCreated }: EventCreationPanelProps) 
         is_featured: false
       });
       setResolutionConfig({
-        primary_method: 'MANUAL',
+        primary_method: 'manual_admin',
         ai_keywords: [],
         ai_sources: [],
         confidence_threshold: 85
@@ -334,18 +429,51 @@ export function EventCreationPanel({ onEventCreated }: EventCreationPanelProps) 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label className="text-slate-300">ক্যাটাগরি (Category) *</Label>
-                <Select value={eventData.category} onValueChange={(value) => setEventData(prev => ({ ...prev, category: value }))}>
+                <Select value={eventData.category} onValueChange={(value) => {
+                  setEventData(prev => ({ ...prev, category: value }));
+                  // Reset custom category when switching away from "Other"
+                  if (value !== 'Other') {
+                    setCustomCategory('');
+                  }
+                }}>
                   <SelectTrigger className="bg-slate-800 border-slate-700 text-white">
                     <SelectValue placeholder="ক্যাটাগরি নির্বাচন করুন" />
                   </SelectTrigger>
                   <SelectContent className="bg-slate-900 border-slate-700">
-                    {CATEGORIES.map((cat) => (
-                      <SelectItem key={cat.id} value={cat.id} className="text-white hover:bg-slate-800">
-                        {cat.bn} ({cat.id})
+                    {categoriesLoading ? (
+                      <SelectItem value="loading" disabled className="text-slate-500">
+                        লোড হচ্ছে...
                       </SelectItem>
-                    ))}
+                    ) : (
+                      <>
+                        {categories.map((cat) => (
+                          <SelectItem key={cat.id} value={cat.id} className="text-white hover:bg-slate-800">
+                            {cat.bn} ({cat.id})
+                          </SelectItem>
+                        ))}
+                        {/* Always add "Other" option at the end */}
+                        <SelectItem value="Other" className="text-white hover:bg-slate-800 border-t border-slate-700 mt-1 pt-1">
+                          অন্যান্য (Custom Category)
+                        </SelectItem>
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
+
+                {/* Custom Category Input - shown only when "Other" is selected */}
+                {isOtherCategory && (
+                  <div className="mt-2">
+                    <Input
+                      value={customCategory}
+                      onChange={(e) => setCustomCategory(e.target.value)}
+                      placeholder="কাস্টম ক্যাটাগরি টাইপ করুন..."
+                      className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 border-dashed"
+                    />
+                    <p className="text-xs text-slate-400 mt-1">
+                      এই ক্যাটাগরি নতুন হিসেবে সংরক্ষণ হবে
+                    </p>
+                  </div>
+                )}
               </div>
               <div className="space-y-2">
                 <Label className="text-slate-300">সাব-ক্যাটাগরি</Label>

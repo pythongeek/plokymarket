@@ -77,19 +77,31 @@ export async function createEventWithAI(
   const fullConfig = { ...DEFAULT_CONFIG, ...config };
   const stagesCompleted: string[] = [];
   const errors: string[] = [];
-  
-  // Determine which provider to use
+  const { providers } = await import("./ai-config").then(m => m.getAIConfigs());
+
+  // Determine which provider to use based on DB settings FIRST, then fallback to args
   let provider: "vertex" | "kimi" | "fallback" = "vertex";
-  
+
+  const vertexActive = providers?.vertex?.is_active ?? true;
+  const kimiActive = providers?.kimi?.is_active ?? true;
+
   if (fullConfig.preferredProvider === "auto") {
-    // Check Vertex health
-    const vertexHealth = await checkVertexHealth();
-    if (!vertexHealth.healthy) {
-      console.warn("[Orchestrator] Vertex AI unhealthy, will use fallback");
+    if (vertexActive) {
+      // Check Vertex health
+      const vertexHealth = await checkVertexHealth();
+      if (!vertexHealth.healthy) {
+        console.warn("[Orchestrator] Vertex AI unhealthy, will use fallback");
+        provider = kimiActive ? "kimi" : "fallback";
+      }
+    } else if (kimiActive) {
       provider = "kimi";
+    } else {
+      provider = "fallback";
     }
-  } else if (fullConfig.preferredProvider === "kimi") {
+  } else if (fullConfig.preferredProvider === "kimi" && kimiActive) {
     provider = "kimi";
+  } else if (fullConfig.preferredProvider === "vertex" && !vertexActive) {
+    provider = kimiActive ? "kimi" : "fallback";
   }
 
   // Stage 1: Generate Slug
@@ -247,7 +259,7 @@ export async function batchCreateEvents(
   config: Partial<OrchestratorConfig> = {}
 ): Promise<EventCreationOutput[]> {
   const results: EventCreationOutput[] = [];
-  
+
   for (const input of inputs) {
     try {
       const result = await createEventWithAI(input, config);
@@ -300,7 +312,7 @@ export async function batchCreateEvents(
       });
     }
   }
-  
+
   return results;
 }
 

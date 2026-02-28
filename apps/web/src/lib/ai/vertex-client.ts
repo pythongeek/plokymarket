@@ -15,43 +15,55 @@ import {
   HarmBlockThreshold,
   GenerativeModel,
   GenerationConfig,
+  Tool,
 } from '@google-cloud/vertexai';
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 const PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT!;
-const LOCATION   = process.env.VERTEX_LOCATION || 'asia-south1'; // Mumbai — lowest latency for BD
+const LOCATION = process.env.VERTEX_LOCATION || 'asia-south1'; // Mumbai — lowest latency for BD
 
 // ─── Safety Settings (Bangladesh context) ────────────────────────────────────
 export const SAFETY_SETTINGS = [
   {
-    category:  HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+    category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
     threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
   },
   {
-    category:  HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+    category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
     threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
   },
   {
-    category:  HarmCategory.HARM_CATEGORY_HARASSMENT,
+    category: HarmCategory.HARM_CATEGORY_HARASSMENT,
     threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
   },
 ];
 
 // ─── Default Generation Config ────────────────────────────────────────────────
 const DEFAULT_GENERATION_CONFIG: GenerationConfig = {
-  temperature:      0.2,
-  maxOutputTokens:  2048,
-  topP:             0.9,
-  topK:             40,
+  temperature: 0.2,
+  maxOutputTokens: 2048,
+  topP: 0.9,
+  topK: 40,
 };
 
 // ─── Client Singleton ─────────────────────────────────────────────────────────
 function createVertexClient(): VertexAI {
-  const credentials = process.env.GOOGLE_SERVICE_ACCOUNT_KEY_BASE64
-    ? JSON.parse(
-        Buffer.from(process.env.GOOGLE_SERVICE_ACCOUNT_KEY_BASE64, 'base64').toString()
-      )
-    : undefined;
+  let credentials = undefined;
+
+  const base64Key = process.env.GOOGLE_SERVICE_ACCOUNT_KEY_BASE64;
+  if (base64Key) {
+    try {
+      const decodedKey = Buffer.from(base64Key, 'base64').toString('utf-8');
+      credentials = JSON.parse(decodedKey);
+
+      // Fix potential literal newline escaping issues common in Vercel envs
+      if (credentials?.private_key) {
+        credentials.private_key = credentials.private_key.replace(/\\n/g, '\n');
+      }
+    } catch (e) {
+      console.error('[Vertex Client] Failed to parse credentials', e);
+    }
+  }
 
   return new VertexAI({
     project: PROJECT_ID,
@@ -69,9 +81,9 @@ export function getVertexClient(): VertexAI {
 
 // ─── Model Config Types ───────────────────────────────────────────────────────
 export interface ModelConfig {
-  modelName:        string;
+  modelName: string;
   systemInstruction: string;
-  temperature?:     number;
+  temperature?: number;
   maxOutputTokens?: number;
   responseMimeType?: string;
 }
@@ -81,64 +93,74 @@ export function getModel(config: ModelConfig): GenerativeModel {
 
   const generationConfig: GenerationConfig = {
     ...DEFAULT_GENERATION_CONFIG,
-    temperature:      config.temperature      ?? DEFAULT_GENERATION_CONFIG.temperature,
-    maxOutputTokens:  config.maxOutputTokens  ?? DEFAULT_GENERATION_CONFIG.maxOutputTokens,
+    temperature: config.temperature ?? DEFAULT_GENERATION_CONFIG.temperature,
+    maxOutputTokens: config.maxOutputTokens ?? DEFAULT_GENERATION_CONFIG.maxOutputTokens,
     responseMimeType: config.responseMimeType || 'application/json',
   };
 
+  const vertexTools: Tool[] = [
+    {
+      // @ts-ignore - The types locally might not support disableAttribution yet although the backend does
+      googleSearchRetrieval: {
+        disableAttribution: false,
+      } as any
+    }
+  ];
+
   return client.getGenerativeModel({
     model: config.modelName,
-    systemInstruction: { parts: [{ text: config.systemInstruction }] },
+    systemInstruction: config.systemInstruction,
     safetySettings: SAFETY_SETTINGS,
     generationConfig,
+    tools: vertexTools,
   });
 }
 
 // ─── Pre-configured Models ────────────────────────────────────────────────────
-// ⚠️  DO NOT use bare "gemini-1.5-pro" or "gemini-1.5-flash" — deprecated
+// ⚠️  Using auto-updated versions as per Gen AI SDK best practices
 export const MODELS = {
   // Fast & cost-effective: slug gen, classification, risk checks
   SLUG_GENERATOR: {
-    modelName:       'gemini-2.0-flash-001',
-    temperature:     0.1,
+    modelName: 'gemini-1.5-flash-002',
+    temperature: 0.1,
     maxOutputTokens: 256,
   },
 
   CATEGORY_CLASSIFIER: {
-    modelName:       'gemini-2.0-flash-001',
-    temperature:     0.2,
+    modelName: 'gemini-1.5-flash-002',
+    temperature: 0.2,
     maxOutputTokens: 512,
   },
 
   // Heavy lifting: content generation, market proposals
   CONTENT_GENERATOR: {
-    modelName:       'gemini-2.5-pro-preview-03-25',
-    temperature:     0.3,
+    modelName: 'gemini-1.5-pro-002',
+    temperature: 0.3,
     maxOutputTokens: 2048,
   },
 
   VALIDATION_ENGINE: {
-    modelName:       'gemini-2.0-flash-001', // Fast is fine for validation
-    temperature:     0.1,
+    modelName: 'gemini-1.5-flash-002', // Fast is fine for validation
+    temperature: 0.1,
     maxOutputTokens: 1024,
   },
 
   MARKET_CONFIGURATOR: {
-    modelName:       'gemini-2.5-pro-preview-03-25',
-    temperature:     0.2,
+    modelName: 'gemini-1.5-pro-002',
+    temperature: 0.2,
     maxOutputTokens: 1024,
   },
 
   // Fallbacks (still active as of 2026-02)
   FLASH_FALLBACK: {
-    modelName:       'gemini-1.5-flash-002',
-    temperature:     0.2,
+    modelName: 'gemini-1.5-flash-002',
+    temperature: 0.2,
     maxOutputTokens: 1024,
   },
 
   PRO_FALLBACK: {
-    modelName:       'gemini-1.5-pro-002',
-    temperature:     0.2,
+    modelName: 'gemini-1.5-pro-002',
+    temperature: 0.2,
     maxOutputTokens: 2048,
   },
 } as const;
@@ -196,11 +218,11 @@ export async function checkVertexHealth(): Promise<{
     const model = getModel({
       modelName,
       systemInstruction: 'Respond only with {"status":"ok"}',
-      temperature:       0,
-      maxOutputTokens:   50,
+      temperature: 0,
+      maxOutputTokens: 50,
     });
 
-    const result   = await model.generateContent('ping');
+    const result = await model.generateContent('ping');
     const response = result.response.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (response) {
@@ -211,10 +233,10 @@ export async function checkVertexHealth(): Promise<{
     return { healthy: false, latencyMs: Date.now() - start, model: modelName, error: 'Empty response' };
   } catch (error) {
     return {
-      healthy:   false,
+      healthy: false,
       latencyMs: Date.now() - start,
-      model:     modelName,
-      error:     error instanceof Error ? error.message : String(error),
+      model: modelName,
+      error: error instanceof Error ? error.message : String(error),
     };
   }
 }
