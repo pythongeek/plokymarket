@@ -159,12 +159,14 @@ DROP POLICY IF EXISTS "Admins can insert events" ON public.events;
 DROP POLICY IF EXISTS "Admins can update events" ON public.events;
 
 -- Public can view active, closed, and resolved events
+DROP POLICY IF EXISTS "events_public_read" ON public.events;
 CREATE POLICY "events_public_read"
     ON public.events
     FOR SELECT
     USING (status IN ('active', 'closed', 'resolved'));
 
 -- Authenticated users can view pending events too
+DROP POLICY IF EXISTS "events_authenticated_read" ON public.events;
 CREATE POLICY "events_authenticated_read"
     ON public.events
     FOR SELECT
@@ -172,6 +174,7 @@ CREATE POLICY "events_authenticated_read"
     USING (true);
 
 -- Admins can do everything
+DROP POLICY IF EXISTS "events_admin_all" ON public.events;
 CREATE POLICY "events_admin_all"
     ON public.events
     FOR ALL
