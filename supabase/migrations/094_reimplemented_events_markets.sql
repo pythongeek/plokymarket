@@ -4,98 +4,124 @@
 -- Bangladesh Context Optimized
 -- ===============================================
 
--- 1. Drop old events table (from 059) and recreate with comprehensive schema
--- We use CASCADE to drop dependent objects, then recreate properly
-DROP TABLE IF EXISTS public.events CASCADE;
+-- 1. Safely add missing columns to events table (Additive Only)
+-- Dropping tables with CASCADE causes data loss. We use ALTER TABLE instead.
+BEGIN;
 
-CREATE TABLE public.events (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'events') THEN
+        CREATE TABLE public.events (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid()
+        );
+    END IF;
+END $$;
+
+ALTER TABLE public.events
+    ADD COLUMN IF NOT EXISTS title TEXT,
+    ADD COLUMN IF NOT EXISTS slug TEXT,
+    ADD COLUMN IF NOT EXISTS question TEXT,
+    ADD COLUMN IF NOT EXISTS description TEXT,
+    ADD COLUMN IF NOT EXISTS ticker VARCHAR(20),
+    ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT 'general',
+    ADD COLUMN IF NOT EXISTS subcategory VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS tags TEXT[] DEFAULT '{}',
+    ADD COLUMN IF NOT EXISTS image_url TEXT,
+    ADD COLUMN IF NOT EXISTS thumbnail_url TEXT,
+    ADD COLUMN IF NOT EXISTS banner_url TEXT,
+    ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'draft',
+    ADD COLUMN IF NOT EXISTS is_featured BOOLEAN DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS is_trending BOOLEAN DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS answer1 VARCHAR(200) DEFAULT 'হ্যাঁ (Yes)',
+    ADD COLUMN IF NOT EXISTS answer2 VARCHAR(200) DEFAULT 'না (No)',
+    ADD COLUMN IF NOT EXISTS answer_type VARCHAR(20) DEFAULT 'binary',
+    ADD COLUMN IF NOT EXISTS starts_at TIMESTAMPTZ DEFAULT NOW(),
+    ADD COLUMN IF NOT EXISTS ends_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS trading_opens_at TIMESTAMPTZ DEFAULT NOW(),
+    ADD COLUMN IF NOT EXISTS trading_closes_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS resolution_source TEXT,
+    ADD COLUMN IF NOT EXISTS resolution_method VARCHAR(50) DEFAULT 'manual_admin',
+    ADD COLUMN IF NOT EXISTS resolution_delay_hours INTEGER DEFAULT 24,
+    ADD COLUMN IF NOT EXISTS resolved_outcome INTEGER,
+    ADD COLUMN IF NOT EXISTS resolved_by UUID REFERENCES auth.users(id),
+    ADD COLUMN IF NOT EXISTS winning_token VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS initial_liquidity NUMERIC DEFAULT 1000,
+    ADD COLUMN IF NOT EXISTS current_liquidity NUMERIC DEFAULT 1000,
+    ADD COLUMN IF NOT EXISTS total_volume NUMERIC DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS total_trades INTEGER DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS unique_traders INTEGER DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS current_yes_price NUMERIC(5, 4) DEFAULT 0.5000,
+    ADD COLUMN IF NOT EXISTS current_no_price NUMERIC(5, 4) DEFAULT 0.5000,
+    ADD COLUMN IF NOT EXISTS price_24h_change NUMERIC(5, 4) DEFAULT 0.0000,
+    ADD COLUMN IF NOT EXISTS condition_id VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS token1 VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS token2 VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS neg_risk BOOLEAN DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS pause_reason TEXT,
+    ADD COLUMN IF NOT EXISTS paused_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS paused_by UUID REFERENCES auth.users(id),
+    ADD COLUMN IF NOT EXISTS estimated_resume_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS ai_keywords TEXT[] DEFAULT '{}',
+    ADD COLUMN IF NOT EXISTS ai_sources TEXT[] DEFAULT '{}',
+    ADD COLUMN IF NOT EXISTS ai_confidence_threshold INTEGER DEFAULT 85,
+    ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES auth.users(id),
+    ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW(),
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW(),
+    ADD COLUMN IF NOT EXISTS search_vector TSVECTOR;
+
+-- Add constraints safely
+DO $$ 
+BEGIN
+    BEGIN
+        ALTER TABLE public.events ADD CONSTRAINT events_slug_key UNIQUE (slug);
+    EXCEPTION WHEN duplicate_table OR duplicate_object OR unique_violation THEN NULL; END;
+
+    BEGIN
+        ALTER TABLE public.events ADD CONSTRAINT events_status_check CHECK (status IN ('draft', 'pending', 'active', 'paused', 'closed', 'resolved', 'cancelled'));
+    EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END;
     
-    -- Core Identity
-    title TEXT NOT NULL,
-    slug TEXT NOT NULL UNIQUE,
-    question TEXT NOT NULL,
-    description TEXT,
-    ticker VARCHAR(20),
+    BEGIN
+        ALTER TABLE public.events ADD CONSTRAINT events_answer_type_check CHECK (answer_type IN ('binary', 'multiple', 'scalar'));
+    EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END;
     
-    -- Category & Metadata
-    category VARCHAR(100) NOT NULL DEFAULT 'general',
-    subcategory VARCHAR(100),
-    tags TEXT[] DEFAULT '{}',
+    BEGIN
+        ALTER TABLE public.events ADD CONSTRAINT events_resolution_method_check CHECK (resolution_method IN ('manual_admin', 'ai_oracle', 'expert_panel', 'external_api', 'community_vote', 'hybrid'));
+    EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END;
     
-    -- Visual Assets
-    image_url TEXT,
-    thumbnail_url TEXT,
-    banner_url TEXT,
+    BEGIN
+        ALTER TABLE public.events ADD CONSTRAINT events_resolution_delay_hours_check CHECK (resolution_delay_hours >= 0 AND resolution_delay_hours <= 720);
+    EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END;
     
-    -- Status Management
-    status VARCHAR(20) NOT NULL DEFAULT 'draft'
-        CHECK (status IN ('draft', 'pending', 'active', 'paused', 'closed', 'resolved', 'cancelled')),
+    BEGIN
+        ALTER TABLE public.events ADD CONSTRAINT events_resolved_outcome_check CHECK (resolved_outcome IN (1, 2));
+    EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END;
     
-    -- Visibility Flags
-    is_featured BOOLEAN DEFAULT FALSE,
-    is_trending BOOLEAN DEFAULT FALSE,
-    is_verified BOOLEAN DEFAULT FALSE,
+    BEGIN
+        ALTER TABLE public.events ADD CONSTRAINT events_initial_liquidity_check CHECK (initial_liquidity >= 0);
+    EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END;
     
-    -- Answer Options
-    answer1 VARCHAR(200) DEFAULT 'হ্যাঁ (Yes)',
-    answer2 VARCHAR(200) DEFAULT 'না (No)',
-    answer_type VARCHAR(20) DEFAULT 'binary'
-        CHECK (answer_type IN ('binary', 'multiple', 'scalar')),
+    BEGIN
+        ALTER TABLE public.events ADD CONSTRAINT events_current_liquidity_check CHECK (current_liquidity >= 0);
+    EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END;
     
-    -- Time Management  
-    starts_at TIMESTAMPTZ DEFAULT NOW(),
-    ends_at TIMESTAMPTZ,
-    trading_opens_at TIMESTAMPTZ DEFAULT NOW(),
-    trading_closes_at TIMESTAMPTZ,
-    resolved_at TIMESTAMPTZ,
+    BEGIN
+        ALTER TABLE public.events ADD CONSTRAINT events_total_volume_check CHECK (total_volume >= 0);
+    EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END;
     
-    -- Resolution Configuration
-    resolution_source TEXT,
-    resolution_method VARCHAR(50) DEFAULT 'manual_admin'
-        CHECK (resolution_method IN ('manual_admin', 'ai_oracle', 'expert_panel', 'external_api', 'community_vote', 'hybrid')),
-    resolution_delay_hours INTEGER DEFAULT 24 CHECK (resolution_delay_hours >= 0 AND resolution_delay_hours <= 720),
-    resolved_outcome INTEGER CHECK (resolved_outcome IN (1, 2)),
-    resolved_by UUID REFERENCES auth.users(id),
-    winning_token VARCHAR(100),
+    BEGIN
+        ALTER TABLE public.events ADD CONSTRAINT events_total_trades_check CHECK (total_trades >= 0);
+    EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END;
     
-    -- Financial Tracking
-    initial_liquidity NUMERIC DEFAULT 1000 CHECK (initial_liquidity >= 0),
-    current_liquidity NUMERIC DEFAULT 1000 CHECK (current_liquidity >= 0),
-    total_volume NUMERIC DEFAULT 0 CHECK (total_volume >= 0),
-    total_trades INTEGER DEFAULT 0 CHECK (total_trades >= 0),
-    unique_traders INTEGER DEFAULT 0 CHECK (unique_traders >= 0),
+    BEGIN
+        ALTER TABLE public.events ADD CONSTRAINT events_unique_traders_check CHECK (unique_traders >= 0);
+    EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END;
     
-    -- Pricing Snapshot
-    current_yes_price NUMERIC(5, 4) DEFAULT 0.5000,
-    current_no_price NUMERIC(5, 4) DEFAULT 0.5000,
-    price_24h_change NUMERIC(5, 4) DEFAULT 0.0000,
-    
-    -- Blockchain Integration 
-    condition_id VARCHAR(100),
-    token1 VARCHAR(100),
-    token2 VARCHAR(100),
-    neg_risk BOOLEAN DEFAULT FALSE,
-    
-    -- Pause Control
-    pause_reason TEXT,
-    paused_at TIMESTAMPTZ,
-    paused_by UUID REFERENCES auth.users(id),
-    estimated_resume_at TIMESTAMPTZ,
-    
-    -- AI Oracle Config (embedded for convenience)
-    ai_keywords TEXT[] DEFAULT '{}',
-    ai_sources TEXT[] DEFAULT '{}',
-    ai_confidence_threshold INTEGER DEFAULT 85 CHECK (ai_confidence_threshold BETWEEN 50 AND 99),
-    
-    -- Audit Trail
-    created_by UUID REFERENCES auth.users(id),
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    
-    -- Full-Text Search
-    search_vector TSVECTOR
-);
+    BEGIN
+        ALTER TABLE public.events ADD CONSTRAINT events_ai_confidence_threshold_check CHECK (ai_confidence_threshold BETWEEN 50 AND 99);
+    EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END;
+END $$;
 
 -- 2. Ensure markets table has event_id FK
 DO $$
@@ -535,3 +561,5 @@ COMMENT ON TABLE public.events IS 'Core events table for prediction market event
 COMMENT ON FUNCTION create_event_complete IS 'Creates event with linked market and resolution config atomically';
 COMMENT ON FUNCTION get_admin_events IS 'Paginated admin event listing with market counts and search';
 COMMENT ON FUNCTION update_event_status IS 'Updates event status with transition validation';
+
+COMMIT;
