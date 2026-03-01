@@ -6814,23 +6814,23 @@ export type Database = {
         Returns: Json
       }
       create_market_draft:
-        | {
-            Args: {
-              p_creator_id: string
-              p_market_type: string
-              p_template_id?: string
-            }
-            Returns: string
-          }
-        | {
-            Args: {
-              p_creator_id: string
-              p_event_id?: string
-              p_market_type: string
-              p_template_id?: string
-            }
-            Returns: string
-          }
+      | {
+        Args: {
+          p_creator_id: string
+          p_market_type: string
+          p_template_id?: string
+        }
+        Returns: string
+      }
+      | {
+        Args: {
+          p_creator_id: string
+          p_event_id?: string
+          p_market_type: string
+          p_template_id?: string
+        }
+        Returns: string
+      }
       create_withdrawal_hold: {
         Args: { p_amount: number; p_user_id: string; p_withdrawal_id: string }
         Returns: string
@@ -6861,6 +6861,27 @@ export type Database = {
       }
       freeze_funds: {
         Args: { p_amount: number; p_user_id: string }
+        Returns: boolean
+      }
+      place_order_atomic: {
+        Args: {
+          p_user_id: string
+          p_market_id: string
+          p_side: string
+          p_outcome: string
+          p_price: number
+          p_quantity: number
+          p_order_type?: string
+          p_idempotency_key?: string
+        }
+        Returns: Json
+      }
+      process_deposit_tx: {
+        Args: {
+          p_user_id: string
+          p_amount: number
+          p_txid: string
+        }
         Returns: boolean
       }
       generate_cancellation_confirmation: {
@@ -7423,55 +7444,55 @@ export type Database = {
     }
     Enums: {
       accuracy_tier:
-        | "novice"
-        | "apprentice"
-        | "analyst"
-        | "expert"
-        | "master"
-        | "oracle"
+      | "novice"
+      | "apprentice"
+      | "analyst"
+      | "expert"
+      | "master"
+      | "oracle"
       activity_type:
-        | "TRADE"
-        | "MARKET_CREATE"
-        | "MARKET_RESOLVE"
-        | "LEAGUE_UP"
-        | "LEAGUE_DOWN"
-        | "COMMENT"
-        | "USER_JOIN"
+      | "TRADE"
+      | "MARKET_CREATE"
+      | "MARKET_RESOLVE"
+      | "LEAGUE_UP"
+      | "LEAGUE_DOWN"
+      | "COMMENT"
+      | "USER_JOIN"
       attachment_type: "image" | "link" | "gif" | "file"
       badge_category:
-        | "accuracy"
-        | "volume"
-        | "streak"
-        | "community"
-        | "special"
-        | "expert"
+      | "accuracy"
+      | "volume"
+      | "streak"
+      | "community"
+      | "special"
+      | "expert"
       badge_rarity: "common" | "uncommon" | "rare" | "epic" | "legendary"
       content_type:
-        | "market_movement"
-        | "trader_activity"
-        | "system_notification"
-        | "social_interaction"
-        | "trending_market"
-        | "comment_reply"
-        | "mention"
-        | "follow"
-        | "badge_earned"
-        | "market_resolve"
+      | "market_movement"
+      | "trader_activity"
+      | "system_notification"
+      | "social_interaction"
+      | "trending_market"
+      | "comment_reply"
+      | "mention"
+      | "follow"
+      | "badge_earned"
+      | "market_resolve"
       flag_reason:
-        | "spam"
-        | "harassment"
-        | "hate_speech"
-        | "misinformation"
-        | "off_topic"
-        | "trolling"
-        | "other"
+      | "spam"
+      | "harassment"
+      | "hate_speech"
+      | "misinformation"
+      | "off_topic"
+      | "trolling"
+      | "other"
       market_status: "active" | "closed" | "resolved" | "cancelled"
       moderation_status:
-        | "clean"
-        | "pending_review"
-        | "flagged"
-        | "removed"
-        | "appealed"
+      | "clean"
+      | "pending_review"
+      | "flagged"
+      | "removed"
+      | "appealed"
       oracle_status: "pending" | "verified" | "disputed" | "finalized"
       order_side: "buy" | "sell"
       order_status: "open" | "partially_filled" | "filled" | "cancelled"
@@ -7482,12 +7503,12 @@ export type Database = {
       sentiment_type: "positive" | "negative" | "neutral" | "mixed"
       tif_type: "FOK" | "IOC" | "GTC" | "GTD" | "AON"
       transaction_type:
-        | "deposit"
-        | "withdrawal"
-        | "trade_buy"
-        | "trade_sell"
-        | "settlement"
-        | "refund"
+      | "deposit"
+      | "withdrawal"
+      | "trade_buy"
+      | "trade_sell"
+      | "settlement"
+      | "refund"
       user_account_status: "active" | "restricted" | "dormant" | "banned"
       vote_type: "upvote" | "downvote" | "none"
     }
@@ -7503,116 +7524,116 @@ type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
 
 export type Tables<
   DefaultSchemaTableNameOrOptions extends
-    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
-    | { schema: keyof DatabaseWithoutInternals },
+  | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+  | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
-        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+  ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+    DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+  : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
   ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
-      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+    DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
       Row: infer R
     }
-    ? R
-    : never
+  ? R
+  : never
   : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
-        DefaultSchema["Views"])
-    ? (DefaultSchema["Tables"] &
-        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
-        Row: infer R
-      }
-      ? R
-      : never
-    : never
+    DefaultSchema["Views"])
+  ? (DefaultSchema["Tables"] &
+    DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+      Row: infer R
+    }
+  ? R
+  : never
+  : never
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
+  | keyof DefaultSchema["Tables"]
+  | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+  ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+  : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
   ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-      Insert: infer I
-    }
-    ? I
-    : never
+    Insert: infer I
+  }
+  ? I
+  : never
   : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
-    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-        Insert: infer I
-      }
-      ? I
-      : never
-    : never
+  ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+    Insert: infer I
+  }
+  ? I
+  : never
+  : never
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
+  | keyof DefaultSchema["Tables"]
+  | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+  ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+  : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
   ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-      Update: infer U
-    }
-    ? U
-    : never
+    Update: infer U
+  }
+  ? U
+  : never
   : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
-    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-        Update: infer U
-      }
-      ? U
-      : never
-    : never
+  ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+    Update: infer U
+  }
+  ? U
+  : never
+  : never
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
-    | keyof DefaultSchema["Enums"]
-    | { schema: keyof DatabaseWithoutInternals },
+  | keyof DefaultSchema["Enums"]
+  | { schema: keyof DatabaseWithoutInternals },
   EnumName extends DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+  ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+  : never = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
   ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
   : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
-    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
-    : never
+  ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+  : never
 
 export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
-    | keyof DefaultSchema["CompositeTypes"]
-    | { schema: keyof DatabaseWithoutInternals },
+  | keyof DefaultSchema["CompositeTypes"]
+  | { schema: keyof DatabaseWithoutInternals },
   CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+  ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+  : never = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
   ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
   : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
-    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
-    : never
+  ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+  : never
 
 export const Constants = {
   graphql_public: {

@@ -6,12 +6,14 @@ import { ShoppingCart, X, ChevronRight, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AnimatePresence, motion } from 'framer-motion';
 import { toast } from 'sonner';
+import { v4 as uuidv4 } from 'uuid';
 
 export function BetSlip() {
     const { items, removeItem, clearAll, getTotalCost } = useBetSlipStore();
     const [isOpen, setIsOpen] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [hasHydrated, setHasHydrated] = useState(false);
+    const [idempotencyKey, setIdempotencyKey] = useState(uuidv4());
 
     React.useEffect(() => {
         setHasHydrated(true);
@@ -30,6 +32,7 @@ export function BetSlip() {
                 orderType: item.orderType,
                 price: item.price,
                 quantity: item.quantity,
+                idempotency_key: `${idempotencyKey}-${item.id}`, // specific idempotent key per order in a batch
             }));
 
             const res = await fetch('/api/orders/batch', {
@@ -40,6 +43,7 @@ export function BetSlip() {
 
             if (res.ok) {
                 toast.success(`✅ ${items.length}টি অর্ডার সফলভাবে সাবমিট করা হয়েছে`);
+                setIdempotencyKey(uuidv4()); // regenerate key for the next set of fresh orders
                 clearAll();
                 setIsOpen(false);
             } else {
@@ -110,6 +114,7 @@ export function BetSlip() {
                                 </div>
                                 <button
                                     onClick={() => setIsOpen(false)}
+                                    title="Close Bet Slip"
                                     className="p-2 hover:bg-slate-800 rounded-full transition-colors group"
                                 >
                                     <X className="w-5 h-5 text-slate-400 group-hover:text-white" />
@@ -151,6 +156,7 @@ export function BetSlip() {
                                                 </div>
                                                 <button
                                                     onClick={() => removeItem(item.id)}
+                                                    title="Remove Item"
                                                     className="p-1.5 hover:bg-red-500/10 rounded-lg transition-colors group/del"
                                                 >
                                                     <Trash2 className="w-4 h-4 text-slate-600 group-hover/del:text-red-400" />

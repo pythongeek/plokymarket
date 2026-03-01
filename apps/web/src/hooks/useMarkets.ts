@@ -62,10 +62,8 @@ export function useMarkets(options: UseMarketsOptions = {}) {
 
   useEffect(() => {
     fetchMarkets()
-    subscribeToEvents()
-    return () => {
-      useMarketStore.getState().unsubscribeEvents?.()
-    }
+    const unsubscribe = subscribeToEvents()
+    return () => unsubscribe()
   }, [fetchMarkets, subscribeToEvents])
 
   const filteredEvents = filteredEventIds

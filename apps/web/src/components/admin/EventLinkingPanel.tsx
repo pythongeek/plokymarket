@@ -20,10 +20,10 @@ import { Input } from "@/components/ui/input";
 
 interface Event {
     id: string;
-    name: string;
-    name_en: string;
+    title: string;
+    question: string;
     category: string;
-    event_date: string;
+    trading_closes_at: string;
     status: string;
 }
 
@@ -46,16 +46,16 @@ export function EventLinkingPanel({ onSelectEvent }: EventLinkingPanelProps) {
                 .from("events")
                 .select(`
           id, 
-          name, 
-          name_en, 
+          title, 
+          question, 
           category, 
-          event_date,
+          trading_closes_at,
           status,
           markets(id)
         `)
-                .eq("status", "published")
+                .eq("status", "active")
                 .is("markets.id", null)
-                .order("event_date", { ascending: true });
+                .order("trading_closes_at", { ascending: true });
 
             if (error) throw error;
 
@@ -75,9 +75,9 @@ export function EventLinkingPanel({ onSelectEvent }: EventLinkingPanelProps) {
     }, []);
 
     const filteredEvents = events.filter(e =>
-        e.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        e.name_en.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        e.category.toLowerCase().includes(searchQuery.toLowerCase())
+        e.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        e.question?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        e.category?.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
     return (
@@ -143,12 +143,13 @@ export function EventLinkingPanel({ onSelectEvent }: EventLinkingPanelProps) {
                                         </span>
                                     </div>
                                     <h4 className="text-sm font-medium text-slate-200 truncate">
-                                        {event.name}
+                                        {event.title}
                                     </h4>
+                                    <p className="text-xs text-slate-400 truncate">{event.question}</p>
                                     <div className="flex items-center gap-3 mt-1.5">
                                         <div className="flex items-center gap-1 text-[10px] text-slate-500">
                                             <Calendar className="w-3 h-3" />
-                                            {new Date(event.event_date).toLocaleDateString('bn-BD')}
+                                            {new Date(event.trading_closes_at).toLocaleDateString('bn-BD')}
                                         </div>
                                     </div>
                                 </div>

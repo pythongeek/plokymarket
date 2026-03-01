@@ -10,6 +10,7 @@ const OrderSchema = z.object({
   orderType: z.enum(['limit', 'market']).default('limit'),
   price: z.number().min(0.01).max(0.99),
   quantity: z.number().int().min(1).max(100000),
+  idempotency_key: z.string().optional(),
 });
 
 const BatchOrderSchema = z.object({
@@ -18,32 +19,6 @@ const BatchOrderSchema = z.object({
 
 /**
  * POST /api/orders/batch
- * 
- * Atomic Batch Order Algorithm (Bet Slip):
- * 
- * Step 1: Validation
- * - Validate all orders (max 20 per batch)
- * - Check user authentication
- * 
- * Step 2: Balance Check
- * - Calculate total cost: Σ(price * quantity)
- * - Verify available_balance >= total_cost
- * 
- * Step 3: Lock Funds
- * - Use FOR UPDATE lock on wallets table
- * - Move funds from available to locked
- * 
- * Step 4: Create Batch Record
- * - Insert into order_batches table
- * 
- * Step 5: Execute Orders
- * - Use Promise.allSettled for parallel execution
- * - Call existing match_order RPC for each order
- * 
- * Step 6: Update Batch Status
- * - completed: All orders filled
- * - partial: Some orders filled
- * - failed: No orders filled
  */
 export async function POST(req: NextRequest) {
   try {
@@ -67,56 +42,13 @@ export async function POST(req: NextRequest) {
 
     const { orders } = validation.data;
 
-    // Calculate total cost
+    // Calculate total cost theoretically needed
     const totalCost = orders.reduce(
       (sum, o) => sum + o.price * o.quantity,
       0
     );
 
-    // Step 1: Check wallet balance with lock
-    const { data: wallet, error: walletError } = await supabase
-      .from('wallets')
-      .select('available_balance, locked_balance')
-      .eq('user_id', user.id)
-      .single();
-
-    if (walletError || !wallet) {
-      return NextResponse.json(
-        { error: 'Wallet not found' },
-        { status: 404 }
-      );
-    }
-
-    if (wallet.available_balance < totalCost) {
-      return NextResponse.json(
-        { 
-          error: 'অপর্যাপ্ত ব্যালেন্স',
-          required: totalCost,
-          available: wallet.available_balance,
-        },
-        { status: 400 }
-      );
-    }
-
-    // Step 2: Lock the balance
-    const { error: lockError } = await supabase
-      .from('wallets')
-      .update({
-        available_balance: wallet.available_balance - totalCost,
-        locked_balance: wallet.locked_balance + totalCost,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('user_id', user.id);
-
-    if (lockError) {
-      console.error('[Batch Order] Lock Error:', lockError);
-      return NextResponse.json(
-        { error: 'Failed to lock funds' },
-        { status: 500 }
-      );
-    }
-
-    // Step 3: Create batch record
+    // Step 1: Create batch record first
     const { data: batch, error: batchError } = await supabase
       .from('order_batches')
       .insert({
@@ -130,67 +62,63 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (batchError || !batch) {
-      // Rollback: Unlock funds
-      await supabase
-        .from('wallets')
-        .update({
-          available_balance: wallet.available_balance,
-          locked_balance: wallet.locked_balance,
-        })
-        .eq('user_id', user.id);
-
       return NextResponse.json(
         { error: 'Failed to create batch' },
         { status: 500 }
       );
     }
 
-    // Step 4: Insert orders and execute matching
+    // Step 2: Insert orders using the new atomic RPC
     const results = await Promise.allSettled(
-      orders.map(async (o) => {
-        // Insert order
-        const { data: order, error: orderError } = await supabase
-          .from('orders')
-          .insert({
-            user_id: user.id,
-            market_id: o.marketId,
-            order_type: o.orderType,
-            outcome: o.outcome,
-            side: o.side,
-            price: o.price,
-            quantity: o.quantity,
-            batch_id: batch.id,
-            status: 'open',
-            created_at: new Date().toISOString(),
-          })
-          .select()
-          .single();
+      orders.map(async (o, index) => {
+        const itemKey = o.idempotency_key || `batch-${batch.id}-index-${index}`;
 
-        if (orderError) {
-          throw orderError;
+        // Single atomic execution for balance check + fund lock
+        const { data: rawResult, error: atomicError } = await supabase.rpc('place_order_atomic', {
+          p_user_id: user.id,
+          p_market_id: o.marketId,
+          p_side: o.side,
+          p_outcome: o.outcome,
+          p_price: o.price,
+          p_quantity: o.quantity,
+          p_order_type: o.orderType,
+          p_idempotency_key: itemKey,
+        });
+
+        const result = rawResult as { error?: string, order_id?: string } | null;
+
+        if (atomicError || result?.error) {
+          throw new Error(result?.error || atomicError?.message || 'Atomic Placement Failed');
         }
 
+        const orderId = result?.order_id;
+        if (!orderId) {
+          throw new Error('Order placement failed (no ID returned)');
+        }
+
+        // Let the order associate with the batch, but place_order_atomic doesn't accept batch_id atm.
+        // It's manually recorded or linked asynchronously, for now we will just execute match.
         // Call matching engine RPC
         const { error: matchError } = await supabase.rpc('match_order', {
-          p_order_id: order.id,
+          p_order_id: orderId,
         });
 
         if (matchError) {
           console.error('[Batch Order] Match Error:', matchError);
         }
 
-        return order;
+        return { orderId };
       })
     );
 
     const filled = results.filter(r => r.status === 'fulfilled').length;
     const failed = results.length - filled;
 
-    // Step 5: Update batch status
+    // Step 3: Update batch status
     const finalStatus =
-      filled === orders.length ? 'completed' : 
-      failed === orders.length ? 'failed' : 
-      'partial';
+      filled === orders.length ? 'completed' :
+        failed === orders.length ? 'failed' :
+          'partial';
 
     await supabase
       .from('order_batches')
@@ -201,29 +129,12 @@ export async function POST(req: NextRequest) {
       })
       .eq('id', batch.id);
 
-    // Step 6: Release unused locked funds
-    if (finalStatus !== 'completed') {
-      const usedFunds = orders
-        .slice(0, filled)
-        .reduce((sum, o) => sum + o.price * o.quantity, 0);
-      const unusedFunds = totalCost - usedFunds;
-
-      await supabase
-        .from('wallets')
-        .update({
-          available_balance: wallet.available_balance - totalCost + unusedFunds,
-          locked_balance: wallet.locked_balance + totalCost - unusedFunds,
-        })
-        .eq('user_id', user.id);
-    }
-
     return NextResponse.json({
       batchId: batch.id,
       total: orders.length,
       filled,
       failed,
       status: finalStatus,
-      totalCost,
     });
   } catch (error) {
     console.error('[Batch Order] Error:', error);

@@ -1,11 +1,33 @@
 -- ============================================================================
--- Migration 139: Fix create_event_complete Function
+-- Migration 139: Fix create_event_complete Function & Constraints
 -- Problem: Function fails silently when called from frontend
--- Solution: Simplify function and add better error handling
+-- Solution: Fix resolution_method constraint and simplify function
 -- ============================================================================
 
 -- ============================================================================
--- STEP 1: Create a simplified working version of create_event_complete
+-- STEP 1: Fix resolution_method constraint to match frontend values
+-- ============================================================================
+
+-- Drop existing constraint if exists
+ALTER TABLE public.events DROP CONSTRAINT IF EXISTS events_resolution_method_check;
+
+-- Add new constraint with valid resolution methods
+ALTER TABLE public.events 
+ADD CONSTRAINT events_resolution_method_check 
+CHECK (resolution_method IN (
+  'manual_admin', 
+  'ai_oracle', 
+  'expert_panel', 
+  'external_api', 
+  'community_vote', 
+  'hybrid'
+));
+
+-- Also fix markets table if it has similar constraint
+ALTER TABLE public.markets DROP CONSTRAINT IF EXISTS markets_resolution_method_check;
+
+-- ============================================================================
+-- STEP 2: Create a simplified working version of create_event_complete
 -- ============================================================================
 
 CREATE OR REPLACE FUNCTION create_event_complete(
@@ -24,6 +46,7 @@ DECLARE
     v_category TEXT;
     v_trading_closes_at TIMESTAMPTZ;
     v_initial_liquidity NUMERIC;
+    v_resolution_method TEXT;
 BEGIN
     -- Extract and validate required fields
     v_title := COALESCE(p_event_data->>'title', p_event_data->>'name', 'Untitled Event');
@@ -46,6 +69,18 @@ BEGIN
     
     -- Get initial liquidity
     v_initial_liquidity := COALESCE((p_event_data->>'initial_liquidity')::NUMERIC, 1000);
+    
+    -- Get resolution method (ensure it matches constraint)
+    v_resolution_method := COALESCE(
+        p_event_data->>'resolution_method',
+        p_event_data->>'primary_method',
+        'manual_admin'
+    );
+    
+    -- Validate resolution_method
+    IF v_resolution_method NOT IN ('manual_admin', 'ai_oracle', 'expert_panel', 'external_api', 'community_vote', 'hybrid') THEN
+        v_resolution_method := 'manual_admin';
+    END IF;
     
     -- STEP 1: Insert Event (minimal required fields)
     INSERT INTO public.events (
@@ -80,12 +115,12 @@ BEGIN
         p_event_data->>'description',
         v_category,
         p_event_data->>'subcategory',
-        'active',  -- Use 'active' instead of 'published' to match constraint
+        'active',  -- Use 'active' for frontend visibility
         COALESCE((p_event_data->>'starts_at')::TIMESTAMPTZ, NOW()),
         COALESCE((p_event_data->>'trading_opens_at')::TIMESTAMPTZ, NOW()),
         v_trading_closes_at,
         v_trading_closes_at,
-        COALESCE(p_event_data->>'resolution_method', 'manual_admin'),
+        v_resolution_method,
         COALESCE((p_event_data->>'resolution_delay_hours')::INTEGER, 24),
         v_initial_liquidity,
         v_initial_liquidity,
@@ -162,7 +197,7 @@ GRANT EXECUTE ON FUNCTION create_event_complete(JSONB, UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION create_event_complete(JSONB, UUID) TO service_role;
 
 -- ============================================================================
--- STEP 2: Test the function
+-- STEP 3: Test the function
 -- ============================================================================
 DO $$
 DECLARE
@@ -205,7 +240,7 @@ BEGIN
 END $$;
 
 -- ============================================================================
--- STEP 3: Reload schema
+-- STEP 4: Reload schema
 -- ============================================================================
 NOTIFY pgrst, 'reload schema';
 
@@ -214,5 +249,5 @@ NOTIFY pgrst, 'reload schema';
 -- ============================================================================
 DO $$
 BEGIN
-    RAISE NOTICE 'Migration 139 applied: create_event_complete function simplified';
+    RAISE NOTICE 'Migration 139 applied: create_event_complete function and constraints fixed';
 END $$;

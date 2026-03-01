@@ -50,6 +50,9 @@ const RESOLUTION_METHODS = [
   { value: 'ai_oracle',      label: '🤖 AI Oracle'      },
   { value: 'expert_panel',   label: '👥 Expert Panel'   },
   { value: 'external_api',   label: '🔗 External API'   },
+  { value: 'consensus',      label: '📊 Consensus'      },
+  { value: 'community_vote', label: '👥 Community Vote' },
+  { value: 'hybrid',         label: '🔀 Hybrid'         },
 ]
 
 export default function CreateEventPage() {

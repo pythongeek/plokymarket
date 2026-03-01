@@ -4,14 +4,15 @@
  * Moonshot AI's Kimi models with strong Bengali support
  */
 
-const KIMI_API_KEY = process.env.KIMI_API_KEY;
+const KIMI_API_KEY = process.env.KIMI_API_KEY || process.env.NEXT_PUBLIC_KIMI_API_KEY;
 const KIMI_BASE_URL = "https://api.moonshot.cn/v1";
 
 /**
  * Check if Kimi API is properly configured
  */
 export function isKimiConfigured(): boolean {
-  return !!KIMI_API_KEY && KIMI_API_KEY.length > 0;
+  const key = process.env.KIMI_API_KEY || process.env.NEXT_PUBLIC_KIMI_API_KEY;
+  return !!key && key.length > 0 && key !== 'your_kimi_api_key_here';
 }
 
 export interface KimiMessage {
@@ -57,11 +58,10 @@ export async function callKimiAPI(
   const activeKey = kimiConfig?.is_active ? process.env.KIMI_API_KEY : KIMI_API_KEY;
   const activeBaseUrl = kimiConfig?.base_url || KIMI_BASE_URL;
 
-  // Check if Kimi API is configured
-  if (!activeKey || !kimiConfig?.is_active && !isKimiConfigured()) {
-    throw new Error(
-      "Kimi API not configured. Please set KIMI_API_KEY environment variable or enable Provider."
-    );
+  // Check if Kimi API is configured - return null instead of throwing
+  if (!activeKey || (!kimiConfig?.is_active && !isKimiConfigured())) {
+    console.warn("[Kimi] API not configured, skipping Kimi fallback");
+    return null as unknown as KimiCompletionResult;
   }
 
   const {

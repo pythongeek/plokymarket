@@ -1823,7 +1823,7 @@ export default function AdminMarketDashboard() {
         .from("markets")
         .select(`
   *,
-  events(name)
+  events:title
     `)
         .order("created_at", {ascending: false});
 
@@ -1831,7 +1831,7 @@ export default function AdminMarketDashboard() {
 
       const formattedMarkets: Market[] = (data || []).map((m: any) => ({
         ...m,
-        event_name: m.events?.name || m.event_name,
+        event_name: m.events?.title || m.event_name,
      }));
 
       setMarkets(formattedMarkets);

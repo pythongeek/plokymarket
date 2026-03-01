@@ -50,77 +50,34 @@ export async function POST(request: Request) {
         // Total cost for buyer = price * quantity
         const requiredFunds = price * quantity;
 
-        // Check the user's wallet has enough available (unlocked) balance
-        const { data: wallet } = await supabase
-            .from('wallets')
-            .select('*')
-            .eq('user_id', user.id)
-            .single();
+        // Idempotency key — client provided, or fallback generated
+        const idempotencyKey = body.idempotency_key || `order-${user.id}-${Date.now()}`;
 
-        if (!wallet || wallet.balance < requiredFunds) {
+        // ✅ SINGLE ATOMIC RPC — balance check + freeze + order insert
+        // Eliminates TOCTOU race condition
+        const { data: rawResult, error: atomicError } = await supabase.rpc('place_order_atomic', {
+            p_user_id: user.id,
+            p_market_id: market_id,
+            p_side: side,
+            p_outcome: outcome,
+            p_price: price,
+            p_quantity: quantity,
+            p_order_type: order_type,
+            p_idempotency_key: idempotencyKey,
+        });
+
+        const result = rawResult as { error?: string, order_id?: string } | null;
+
+        if (atomicError || result?.error) {
             return NextResponse.json(
-                { error: 'Insufficient balance' },
-                { status: 400 }
+                { error: result?.error || 'Order placement failed' },
+                { status: result?.error === 'Insufficient balance' ? 400 : 500 }
             );
         }
 
-        /*
-          For BUY orders, lock the required funds immediately so they
-          cannot be double-spent while the order is open.
-          Sell orders do not require upfront funds — they deliver shares.
-          The `freeze_funds` RPC must exist in Supabase and must:
-            1. Deduct `p_amount` from `balance`
-            2. Add `p_amount` to `locked_balance`
-            It should be atomic (run inside a transaction).
-        */
-        if (side === 'buy') {
-            const { error: lockError } = await supabase.rpc('freeze_funds', {
-                p_user_id: user.id,
-                p_amount: requiredFunds
-            });
-
-            if (lockError) {
-                return NextResponse.json(
-                    { error: 'Failed to lock funds' },
-                    { status: 500 }
-                );
-            }
-        }
-
-        // Insert the order record into the `orders` table
-        const { data: order, error: orderError } = await supabase
-            .from('orders')
-            .insert({
-                user_id: user.id,
-                market_id,
-                side,
-                outcome,
-                order_type,       // 'limit' by default; 'market' if specified
-                price,
-                quantity,
-                filled_quantity: 0,   // starts unfilled
-                status: 'open'    // initial status
-            })
-            .select()
-            .single();
-
-        if (orderError) {
-            /*
-              If order insertion fails, reverse the fund lock so the
-              user's balance is restored. This prevents locked funds
-              from being stranded on a failed order.
-              The `unfreeze_funds` RPC must do the exact inverse of `freeze_funds`.
-            */
-            if (side === 'buy') {
-                await supabase.rpc('unfreeze_funds', {
-                    p_user_id: user.id,
-                    p_amount: requiredFunds
-                });
-            }
-            return NextResponse.json(
-                { error: 'Failed to create order' },
-                { status: 500 }
-            );
+        const orderId = result?.order_id;
+        if (!orderId) {
+            return NextResponse.json({ error: 'Order placement failed (no ID)' }, { status: 500 });
         }
 
         /*
@@ -134,7 +91,7 @@ export async function POST(request: Request) {
           This call is fire-and-forget from the API's perspective;
           errors here do NOT roll back the order — it stays open for future matching.
         */
-        await supabase.rpc('match_order', { p_order_id: order.id });
+        await supabase.rpc('match_order', { p_order_id: orderId } as any);
 
         // Invalidate order book cache so next reader gets fresh data
         await orderBookService.invalidateCache(market_id);
@@ -158,7 +115,7 @@ export async function POST(request: Request) {
             console.warn('[Order API] Failed to log activity:', actError);
         }
 
-        return NextResponse.json({ success: true, order });
+        return NextResponse.json({ success: true, orderId });
 
     } catch (error) {
         console.error('Order placement error:', error);
