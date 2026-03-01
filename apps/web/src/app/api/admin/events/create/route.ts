@@ -1,235 +1,316 @@
 /**
- * ============================================================
- * app/api/admin/events/create/route.ts
- * ============================================================
- * POST /api/admin/events/create
- *
- * This is the FIXED version of the event creation route.
- *
- * What was broken before:
- *   - Scattered SQL logic duplicated across multiple routes
- *   - No atomic transaction → partial failures left orphaned rows
- *   - Liquidity never seeded → market appeared dead to users
- *   - trading_closes_at stored in local time instead of UTC
- *   - Slug generation was naive and could collide
- *
- * What this version does:
- *   1. Validates the request body (auth + required fields)
- *   2. Converts trading_closes_at from Dhaka local → UTC
- *   3. Delegates everything else to EventService.createEventAtomic()
- *      which calls the create_event_complete PostgreSQL RPC.
- *      That RPC is a single PG transaction: event + market + orderbook seed.
- *   4. Returns structured JSON with event_id, market_id, and slug.
- *
- * Error codes:
- *   400 — Validation failure (missing title, invalid date, etc.)
- *   401 — Not authenticated or not an admin
- *   500 — DB error (check server logs for detail)
+ * Event Creation API
+ * Creates events and markets with proper error handling and workflow integration
+ * Replaces the RPC-based approach with direct database operations
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { eventService, type CreateEventInput } from '@/lib/services/EventService';
-import { convertToUTC } from '@/lib/utils/timezone';
+import { createClient } from '@supabase/supabase-js';
+import { nanoid } from 'nanoid';
+import { Client as QStashClient } from '@upstash/qstash';
 
-// ── Request body shape ───────────────────────────────────────────────────────
+export const runtime = 'edge';
+export const maxDuration = 30;
 
-interface CreateEventRequestBody {
-  // Required
-  title:             string;
-  trading_closes_at: string;  // datetime-local string (Asia/Dhaka) OR UTC ISO
+// Initialize Supabase client
+const getSupabase = () => createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  { auth: { persistSession: false } }
+);
 
-  // Optional
-  question?:               string;
-  description?:            string;
-  category?:               string;
-  subcategory?:            string;
-  tags?:                   string | string[];   // Accept comma-separated string OR array
-  image_url?:              string;
-  slug?:                   string;
-  status?:                 'draft' | 'pending' | 'active';
-  answer1?:                string;
-  answer2?:                string;
-  answer_type?:            'binary' | 'multiple' | 'scalar';
-  resolution_method?:      string;
-  resolution_delay_hours?: number;
-  initial_liquidity?:      number;
-  is_featured?:            boolean;
-  ai_keywords?:            string | string[];
-  ai_sources?:             string | string[];
-  ai_confidence_threshold?: number;
-  is_custom_category?:     boolean;
-}
+// Generate unique slug
+function generateSlug(title: string): string {
+  const bnMap: Record<string, string> = {
+    'ক': 'k', 'খ': 'kh', 'গ': 'g', 'ঘ': 'gh', 'ঙ': 'ng',
+    'চ': 'ch', 'ছ': 'chh', 'জ': 'j', 'ঝ': 'jh', 'ঞ': 'n',
+    'ট': 't', 'ঠ': 'th', 'ড': 'd', 'ঢ': 'dh', 'ণ': 'n',
+    'ত': 't', 'থ': 'th', 'দ': 'd', 'ধ': 'dh', 'ন': 'n',
+    'প': 'p', 'ফ': 'ph', 'ব': 'b', 'ভ': 'bh', 'ম': 'm',
+    'য': 'j', 'র': 'r', 'ল': 'l', 'শ': 'sh', 'ষ': 'sh',
+    'স': 's', 'হ': 'h', 'ড়': 'r', 'ঢ়': 'rh', 'য়': 'y',
+    '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4',
+    '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9',
+  };
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-/** Normalize a value that might be a comma-separated string or an array into an array */
-function toArray(val: string | string[] | undefined): string[] {
-  if (!val) return [];
-  if (Array.isArray(val)) return val.filter(Boolean);
-  return val.split(',').map(s => s.trim()).filter(Boolean);
-}
-
-/**
- * Determine if a string is already a UTC ISO string (has Z or +offset suffix)
- * or is a naive datetime-local string that needs conversion.
- */
-function isUtcString(s: string): boolean {
-  return s.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(s);
-}
-
-// ── Route handler ────────────────────────────────────────────────────────────
-
-export async function POST(req: NextRequest) {
-  // ── 1. Authentication ─────────────────────────────────────────────────────
-  const supabase = await createClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return NextResponse.json(
-      { success: false, error: 'অনুমতি নেই — আপনাকে লগইন করতে হবে' },
-      { status: 401 }
-    );
+  let slug = title.toLowerCase().trim();
+  for (const [bn, en] of Object.entries(bnMap)) {
+    slug = slug.split(bn).join(en);
   }
 
-  // ── 2. Admin role check ───────────────────────────────────────────────────
-  // Check user_metadata.role OR a separate admin_users table.
-  // Adjust this check to match your actual admin verification logic.
-  const isAdmin =
-    user.user_metadata?.role === 'admin' ||
-    user.user_metadata?.is_admin === true ||
-    user.app_metadata?.role === 'admin';
+  slug = slug
+    .replace(/[^\x00-\x7F]/g, '')
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
 
-  if (!isAdmin) {
-    // Secondary check: look up profiles table if metadata isn't set
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .maybeSingle();
+  const timestamp = nanoid(6);
+  return slug.length > 5 ? `${slug}-${timestamp}` : `event-${timestamp}`;
+}
 
-    if (profile?.role !== 'admin') {
-      return NextResponse.json(
-        { success: false, error: 'শুধুমাত্র অ্যাডমিনরা ইভেন্ট তৈরি করতে পারেন' },
-        { status: 401 }
-      );
-    }
+// Validate request body
+function validateEventData(body: any): { valid: boolean; error?: string; data?: any } {
+  if (!body.title || typeof body.title !== 'string' || body.title.trim().length < 5) {
+    return { valid: false, error: 'Title is required and must be at least 5 characters' };
   }
 
-  // ── 3. Parse & validate body ──────────────────────────────────────────────
-  let body: CreateEventRequestBody;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json(
-      { success: false, error: 'Invalid JSON body' },
-      { status: 400 }
-    );
+  if (!body.question || typeof body.question !== 'string' || body.question.trim().length < 5) {
+    return { valid: false, error: 'Question is required and must be at least 5 characters' };
   }
 
-  // Required field validation
-  if (!body.title || body.title.trim().length < 5) {
-    return NextResponse.json(
-      { success: false, error: 'শিরোনাম কমপক্ষে ৫ অক্ষরের হতে হবে' },
-      { status: 400 }
-    );
+  if (!body.category || typeof body.category !== 'string') {
+    return { valid: false, error: 'Category is required' };
   }
 
   if (!body.trading_closes_at) {
-    return NextResponse.json(
-      { success: false, error: 'ট্রেডিং সমাপ্তির তারিখ আবশ্যক' },
-      { status: 400 }
-    );
+    return { valid: false, error: 'Trading close date is required' };
   }
 
-  // ── 4. Normalize trading_closes_at to UTC ─────────────────────────────────
-  // If the client sent a naive datetime-local string (from the admin form),
-  // we treat it as Asia/Dhaka and convert to UTC.
-  // If it's already a UTC ISO string, we leave it alone.
-  let tradingClosesUtc: string;
-  if (isUtcString(body.trading_closes_at)) {
-    tradingClosesUtc = body.trading_closes_at;
-  } else {
-    tradingClosesUtc = convertToUTC(body.trading_closes_at);
+  const tradingClosesAt = new Date(body.trading_closes_at);
+  if (isNaN(tradingClosesAt.getTime())) {
+    return { valid: false, error: 'Invalid trading close date' };
   }
 
-  if (!tradingClosesUtc) {
-    return NextResponse.json(
-      { success: false, error: 'trading_closes_at তারিখ ফরম্যাট ভুল' },
-      { status: 400 }
-    );
+  // Validate resolution method
+  const validMethods = ['manual_admin', 'ai_oracle', 'expert_panel', 'external_api', 'community_vote', 'hybrid'];
+  const resolutionMethod = body.resolution_method || 'manual_admin';
+  if (!validMethods.includes(resolutionMethod)) {
+    return { valid: false, error: `Invalid resolution method. Must be one of: ${validMethods.join(', ')}` };
   }
 
-  // Must be in the future
-  if (new Date(tradingClosesUtc) <= new Date()) {
-    return NextResponse.json(
-      { success: false, error: 'ট্রেডিং সমাপ্তির তারিখ ভবিষ্যতে হতে হবে' },
-      { status: 400 }
-    );
-  }
-
-  // ── 5. Build the CreateEventInput ─────────────────────────────────────────
-  const input: CreateEventInput = {
-    title:                   body.title.trim(),
-    trading_closes_at:       tradingClosesUtc,
-    question:                body.question?.trim()       || body.title.trim(),
-    description:             body.description?.trim()    || '',
-    category:                body.category               || 'general',
-    subcategory:             body.subcategory            || undefined,
-    tags:                    toArray(body.tags),
-    image_url:               body.image_url              || undefined,
-    slug:                    body.slug?.trim()            || undefined,
-    status:                  body.status                  || 'active',
-    answer1:                 body.answer1?.trim()         || 'হ্যাঁ (Yes)',
-    answer2:                 body.answer2?.trim()         || 'না (No)',
-    answer_type:             body.answer_type             || 'binary',
-    resolution_method:       body.resolution_method       || 'manual_admin',
-    resolution_delay_hours:  Number(body.resolution_delay_hours  ?? 24),
-    initial_liquidity:       Number(body.initial_liquidity       ?? 1000),
-    is_featured:             Boolean(body.is_featured             ?? false),
-    ai_keywords:             toArray(body.ai_keywords),
-    ai_sources:              toArray(body.ai_sources),
-    ai_confidence_threshold: Number(body.ai_confidence_threshold ?? 85),
-    is_custom_category:      Boolean(body.is_custom_category      ?? false),
+  return {
+    valid: true,
+    data: {
+      title: body.title.trim(),
+      question: body.question.trim(),
+      description: body.description?.trim() || null,
+      category: body.category.toLowerCase(),
+      subcategory: body.subcategory?.trim() || null,
+      tags: Array.isArray(body.tags) ? body.tags : [],
+      image_url: body.image_url?.trim() || null,
+      trading_closes_at: tradingClosesAt.toISOString(),
+      resolution_delay_hours: parseInt(body.resolution_delay_hours) || 24,
+      resolution_method: resolutionMethod,
+      answer1: body.answer1?.trim() || 'হ্যাঁ (Yes)',
+      answer2: body.answer2?.trim() || 'না (No)',
+      initial_liquidity: parseInt(body.initial_liquidity) || 10000,
+      is_featured: !!body.is_featured,
+      slug: generateSlug(body.title),
+    }
   };
+}
 
-  // ── 6. Delegate to EventService (atomic DB transaction) ───────────────────
-  console.log(`[/api/admin/events/create] Admin ${user.id} creating: "${input.title}"`);
+export async function POST(request: NextRequest) {
+  const startTime = Date.now();
+  const supabase = getSupabase();
 
-  const result = await eventService.createEventAtomic(input, user.id);
+  try {
+    // 1. Authenticate user
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized - Bearer token required' },
+        { status: 401 }
+      );
+    }
 
-  if (!result.success) {
-    console.error('[/api/admin/events/create] EventService failed:', result);
+    const token = authHeader.split(' ')[1];
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid token' },
+        { status: 401 }
+      );
+    }
+
+    // 2. Check admin status
+    const { data: profile, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('is_admin, is_super_admin')
+      .eq('id', user.id)
+      .single();
+
+    if (profileError || (!profile?.is_admin && !profile?.is_super_admin)) {
+      return NextResponse.json(
+        { success: false, error: 'Admin access required' },
+        { status: 403 }
+      );
+    }
+
+    // 3. Parse and validate request body
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { success: false, error: 'Invalid JSON in request body' },
+        { status: 400 }
+      );
+    }
+
+    const validation = validateEventData(body);
+    if (!validation.valid) {
+      return NextResponse.json(
+        { success: false, error: validation.error },
+        { status: 400 }
+      );
+    }
+
+    const data = validation.data!;
+
+    // 4. Create Event
+    const { data: event, error: eventError } = await supabase
+      .from('events')
+      .insert({
+        title: data.title,
+        name: data.title,
+        name_en: data.title,
+        slug: data.slug,
+        question: data.question,
+        description: data.description,
+        category: data.category,
+        subcategory: data.subcategory,
+        status: 'active',
+        starts_at: new Date().toISOString(),
+        trading_opens_at: new Date().toISOString(),
+        trading_closes_at: data.trading_closes_at,
+        event_date: data.trading_closes_at,
+        resolution_method: data.resolution_method,
+        resolution_delay_hours: data.resolution_delay_hours,
+        initial_liquidity: data.initial_liquidity,
+        current_liquidity: data.initial_liquidity,
+        is_featured: data.is_featured,
+        answer_type: 'binary',
+        answer1: data.answer1,
+        answer2: data.answer2,
+        created_by: user.id,
+        image_url: data.image_url,
+        tags: data.tags,
+      })
+      .select()
+      .single();
+
+    if (eventError) {
+      console.error('Event creation error:', eventError);
+      return NextResponse.json(
+        { success: false, error: `Failed to create event: ${eventError.message}` },
+        { status: 500 }
+      );
+    }
+
+    // 5. Create Market (linked to event)
+    const { data: market, error: marketError } = await supabase
+      .from('markets')
+      .insert({
+        event_id: event.id,
+        name: data.title,
+        question: data.question,
+        description: data.description,
+        category: data.category,
+        subcategory: data.subcategory,
+        trading_closes_at: data.trading_closes_at,
+        resolution_delay_hours: data.resolution_delay_hours,
+        initial_liquidity: data.initial_liquidity,
+        liquidity: data.initial_liquidity,
+        status: 'active',
+        slug: `${data.slug}-market`,
+        answer_type: 'binary',
+        answer1: data.answer1,
+        answer2: data.answer2,
+        is_featured: data.is_featured,
+        created_by: user.id,
+        image_url: data.image_url,
+      })
+      .select()
+      .single();
+
+    if (marketError) {
+      console.error('Market creation error:', marketError);
+      // Rollback: Delete the event we just created
+      await supabase.from('events').delete().eq('id', event.id);
+      return NextResponse.json(
+        { success: false, error: `Failed to create market: ${marketError.message}` },
+        { status: 500 }
+      );
+    }
+
+    // 6. Create resolution configuration
+    const { error: resolutionError } = await supabase
+      .from('resolution_systems')
+      .insert({
+        event_id: event.id,
+        primary_method: data.resolution_method,
+        ai_keywords: data.tags,
+        ai_sources: [],
+        confidence_threshold: 85,
+      });
+
+    if (resolutionError) {
+      console.warn('Resolution config creation warning:', resolutionError);
+      // Non-critical error, don't rollback
+    }
+
+    // 7. Log admin action
+    const { error: logError } = await supabase.rpc('log_admin_action', {
+      p_admin_id: user.id,
+      p_action_type: 'create_event',
+      p_resource_type: 'event',
+      p_resource_id: event.id,
+      p_new_values: {
+        title: data.title,
+        category: data.category,
+        market_id: market.id,
+      },
+      p_reason: 'Event created via admin panel',
+    });
+
+    if (logError) {
+      console.warn('Failed to log admin action:', logError);
+    }
+
+    if (process.env.QSTASH_TOKEN) {
+      try {
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL ||
+          (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+
+        const qstashClient = new QStashClient({ token: process.env.QSTASH_TOKEN });
+
+        // Trigger event post-processing workflow via QStash
+        await qstashClient.publishJSON({
+          url: `${baseUrl}/api/workflows/event-processor`,
+          body: {
+            event_id: event.id,
+            market_id: market.id,
+            action: 'post_create',
+          }
+        });
+      } catch (workflowError) {
+        console.warn('Workflow trigger error:', workflowError);
+      }
+    }
+
+    // 9. Return success response
+    return NextResponse.json({
+      success: true,
+      message: 'Event created successfully',
+      event_id: event.id,
+      market_id: market.id,
+      slug: data.slug,
+      title: data.title,
+      execution_time_ms: Date.now() - startTime,
+    });
+
+  } catch (error: any) {
+    console.error('Event creation error:', error);
     return NextResponse.json(
       {
         success: false,
-        error:   result.error  || 'ইভেন্ট তৈরিতে সমস্যা হয়েছে',
-        detail:  result.detail || '',
-        hint:    result.hint   || '',
+        error: error.message || 'Internal server error',
+        execution_time_ms: Date.now() - startTime,
       },
       { status: 500 }
     );
   }
-
-  // ── 7. Success response ───────────────────────────────────────────────────
-  return NextResponse.json(
-    {
-      success:   true,
-      event_id:  result.event_id,
-      market_id: result.market_id,
-      slug:      result.slug,
-      message:   result.message || 'ইভেন্ট ও মার্কেট সফলভাবে তৈরি হয়েছে',
-      // Convenience redirect URL for the admin to click
-      market_url: `/markets/${result.slug}`,
-    },
-    { status: 201 }
-  );
-}
-
-// ── Reject non-POST methods gracefully ───────────────────────────────────────
-export async function GET() {
-  return NextResponse.json(
-    { error: 'POST method required' },
-    { status: 405 }
-  );
 }

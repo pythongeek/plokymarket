@@ -52,62 +52,102 @@ export class EventMarketSync {
     try {
       const supabase = getSupabaseAdmin();
 
-      // Step 1: Create event using the RPC function
-      const eventPayload = {
-        title: data.event.title,
-        question: data.event.question || data.event.title,
-        description: data.event.description || '',
-        category: data.event.category || 'general',
-        subcategory: data.event.subcategory || null,
-        tags: data.event.tags || [],
-        image_url: data.event.image_url || null,
-        status: 'active',
-        starts_at: data.event.starts_at || new Date().toISOString(),
-        trading_opens_at: data.event.trading_opens_at || new Date().toISOString(),
-        trading_closes_at: data.event.trading_closes_at,
-        resolution_method: data.event.resolution_method || 'manual_admin',
-        resolution_delay_hours: data.event.resolution_delay_hours || 24,
-        initial_liquidity: data.event.initial_liquidity || 1000,
-        is_featured: data.event.is_featured || false,
-        answer1: data.event.answer1 || 'হ্যাঁ (Yes)',
-        answer2: data.event.answer2 || 'না (No)',
-        answer_type: data.markets[0]?.type || 'binary',
-      };
+      // Implement generating slug
+      const baseSlug = data.event.title?.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'event';
+      const slug = `${baseSlug}-${Date.now().toString(36)}`;
 
-      const { data: rpcResult, error: rpcError } = await supabase.rpc(
-        'create_event_complete',
-        {
-          p_event_data: eventPayload,
-          p_admin_id: data.createdBy,
-        }
-      );
+      const { data: event, error: eventError } = await supabase
+        .from('events')
+        .insert({
+          title: data.event.title,
+          name: data.event.title,
+          name_en: data.event.title,
+          slug: slug,
+          question: data.event.question || data.event.title,
+          description: data.event.description || null,
+          category: data.event.category || 'general',
+          subcategory: data.event.subcategory || null,
+          tags: data.event.tags || [],
+          image_url: data.event.image_url || null,
+          status: 'active',
+          starts_at: data.event.starts_at || new Date().toISOString(),
+          trading_opens_at: data.event.trading_opens_at || new Date().toISOString(),
+          trading_closes_at: data.event.trading_closes_at,
+          event_date: data.event.trading_closes_at,
+          resolution_method: data.event.resolution_method || 'manual_admin',
+          resolution_delay_hours: (data.event as any).resolution_delay_hours || 24,
+          initial_liquidity: data.event.initial_liquidity || 1000,
+          current_liquidity: data.event.initial_liquidity || 1000,
+          is_featured: data.event.is_featured || false,
+          answer_type: data.markets[0]?.type || 'binary',
+          answer1: (data.event as any).answer1 || 'হ্যাঁ (Yes)',
+          answer2: (data.event as any).answer2 || 'না (No)',
+          created_by: data.createdBy,
+        })
+        .select()
+        .single();
 
-      if (rpcError) {
-        console.error('[EventMarketSync] RPC Error:', rpcError);
-        throw new Error(`Event creation failed: ${rpcError.message}`);
+      if (eventError) {
+        throw new Error(`Event creation failed: ${eventError.message}`);
       }
 
-      const result = rpcResult as any;
-      
-      if (!result.success) {
-        throw new Error(result.error || 'Event creation failed');
+      const { data: market, error: marketError } = await supabase
+        .from('markets')
+        .insert({
+          event_id: event.id,
+          name: data.event.title,
+          question: data.event.question || data.event.title,
+          description: data.event.description || null,
+          category: data.event.category || 'general',
+          subcategory: data.event.subcategory || null,
+          trading_closes_at: data.event.trading_closes_at,
+          resolution_delay_hours: (data.event as any).resolution_delay_hours || 24,
+          initial_liquidity: data.event.initial_liquidity || 1000,
+          liquidity: data.event.initial_liquidity || 1000,
+          status: 'active',
+          slug: `${slug}-market`,
+          answer_type: data.markets[0]?.type || 'binary',
+          answer1: (data.event as any).answer1 || 'হ্যাঁ (Yes)',
+          answer2: (data.event as any).answer2 || 'না (No)',
+          is_featured: data.event.is_featured || false,
+          created_by: data.createdBy,
+          image_url: data.event.image_url,
+        })
+        .select()
+        .single();
+
+      if (marketError) {
+        await supabase.from('events').delete().eq('id', event.id);
+        throw new Error(`Market creation failed: ${marketError.message}`);
       }
 
-      const eventId = result.event_id;
-      const primaryMarketId = result.market_id;
+      // Create resolution system config automatically
+      await supabase
+        .from('resolution_systems')
+        .insert({
+          event_id: event.id,
+          primary_method: data.event.resolution_method || 'manual_admin',
+          ai_keywords: data.event.tags || [],
+          ai_sources: [],
+          confidence_threshold: 85,
+        });
+
+      const eventId = event.id;
+      const primaryMarketId = market.id;
+      const resultSlug = slug;
 
       console.log('[EventMarketSync] Event created:', {
         eventId,
         primaryMarketId,
-        slug: result.slug,
+        slug: resultSlug,
       });
 
       // Step 2: Create additional markets (if any)
       const marketIds: string[] = primaryMarketId ? [primaryMarketId] : [];
-      
+
       // Skip the first market as it's already created by RPC
       const additionalMarkets = data.markets.slice(1);
-      
+
       for (const proposedMarket of additionalMarkets) {
         try {
           const { data: marketData, error: marketError } = await supabase
@@ -121,11 +161,11 @@ export class EventMarketSync {
               subcategory: data.event.subcategory || null,
               tags: data.event.tags || [],
               trading_closes_at: data.event.trading_closes_at,
-              resolution_delay_hours: data.event.resolution_delay_hours || 24,
+              resolution_delay_hours: (data.event as any).resolution_delay_hours || 24,
               initial_liquidity: proposedMarket.suggestedLiquidity,
               liquidity: proposedMarket.suggestedLiquidity,
               status: 'active',
-              slug: `${result.slug}-market-${marketIds.length + 1}`,
+              slug: `${resultSlug}-market-${marketIds.length + 1}`,
               answer_type: proposedMarket.type,
               answer1: proposedMarket.outcomes[0] || 'হ্যাঁ',
               answer2: proposedMarket.outcomes[1] || 'না',
@@ -152,7 +192,7 @@ export class EventMarketSync {
         success: true,
         eventId,
         marketIds,
-        slug: result.slug,
+        slug: resultSlug,
       };
 
     } catch (error: any) {

@@ -561,22 +561,21 @@ export default function EventCreationPage() {
         status: 'active' as EventStatus,
       };
 
-      const { data: rpcResultRaw, error: rpcError } = await (supabase.rpc as any)(
-        'create_event_complete',
-        {
-          p_event_data: payload,
-          p_admin_id: user.id,
-        }
-      );
+      const { data: sessionData } = await supabase.auth.getSession();
 
-      const result = rpcResultRaw as any;
+      const response = await fetch('/api/admin/events/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${sessionData.session?.access_token}`,
+        },
+        body: JSON.stringify(payload),
+      });
 
-      if (rpcError) {
-        throw new Error(rpcError.message || 'ডাটাবেস এরর: ইভেন্ট তৈরি করা যায়নি।');
-      }
+      const result = await response.json();
 
-      if (!result?.success) {
-        throw new Error(result?.error || 'ইভেন্ট তৈরি করা সম্ভব হয়নি');
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'ইভেন্ট তৈরি করা সম্ভব হয়নি (API Error)');
       }
 
       setSuccessData({

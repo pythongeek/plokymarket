@@ -51,11 +51,14 @@ export async function POST(req: NextRequest) {
     // STEP 2: Parse & Validate Input
     // ============================================================================
     const body = await req.json();
+    console.log('[Create Event] Received body:', JSON.stringify(body, null, 2));
+    
     const { event_data, markets_data, resolution_config } = body;
 
     if (!event_data?.title) {
+      console.error('[Create Event] Missing title:', event_data);
       return NextResponse.json(
-        { error: 'Bad Request', message: 'Event title is required' },
+        { error: 'Bad Request', message: 'Event title is required', received: body },
         { status: 400 }
       );
     }
@@ -106,7 +109,7 @@ export async function POST(req: NextRequest) {
     }
 
     // ============================================================================
-    // STEP 5: Prepare Event Data for RPC
+    // STEP 5: Prepare Event Data for RPC (using create_event_complete)
     // ============================================================================
     const eventDataForRPC = {
       title: event_data.title,
@@ -118,49 +121,33 @@ export async function POST(req: NextRequest) {
       slug: finalSlug,
       image_url: event_data.image_url || '',
       trading_closes_at: tradingClosesAtUTC,
-      resolution_date: resolutionDateUTC || tradingClosesAtUTC,
-      resolution_method: event_data.resolution_method || 'MANUAL',
-      resolution_config: resolution_config || {},
+      resolution_delay_hours: event_data.resolution_delay_hours || 24,
+      resolution_method: event_data.resolution_method === 'MANUAL' ? 'manual_admin' : 
+                        event_data.resolution_method === 'AI_ORACLE' ? 'ai_oracle' :
+                        event_data.resolution_method === 'HYBRID' ? 'hybrid' :
+                        (event_data.resolution_method || 'manual_admin').toLowerCase(),
+      resolution_source: event_data.resolution_source || '',
+      answer_type: 'binary',
+      answer1: 'হ্যাঁ (Yes)',
+      answer2: 'না (No)',
       status: 'active',
       is_featured: event_data.is_featured || false,
-      created_by: user.id,
-      initial_liquidity: event_data.initial_liquidity || 5000,
-      b_parameter: event_data.b_parameter || 100,
+      initial_liquidity: event_data.initial_liquidity || 1000,
+      ai_keywords: event_data.ai_keywords || [],
+      ai_sources: event_data.ai_sources || [],
+      ai_confidence_threshold: event_data.ai_confidence_threshold || 85,
     };
 
     // ============================================================================
-    // STEP 6: Prepare Markets Data for RPC
+    // STEP 6: Execute Atomic Transaction via RPC (create_event_complete)
     // ============================================================================
-    let marketsDataForRPC: any[] = [];
-
-    if (markets_data && Array.isArray(markets_data) && markets_data.length > 0) {
-      marketsDataForRPC = markets_data.map((market: any) => ({
-        question: market.question || event_data.title,
-        description: market.description || '',
-        outcomes: market.outcomes || ['হ্যাঁ', 'না'],
-        liquidity: market.liquidity || event_data.initial_liquidity || 5000,
-        trading_fee: market.trading_fee || 0.02,
-        min_trade_amount: market.min_trade_amount || 10,
-        max_trade_amount: market.max_trade_amount || 10000,
-        trading_closes_at: market.trading_closes_at
-          ? convertToUTC(market.trading_closes_at)
-          : tradingClosesAtUTC,
-        resolution_date: market.resolution_date
-          ? convertToUTC(market.resolution_date)
-          : resolutionDateUTC || tradingClosesAtUTC,
-      }));
-    }
-
-    // ============================================================================
-    // STEP 7: Execute Atomic Transaction via RPC
-    // ============================================================================
-    console.log('[Create Event] Executing atomic transaction...');
+    console.log('[Create Event] Executing atomic transaction with create_event_complete...');
 
     const { data: result, error: rpcError } = await (supabase as any).rpc(
-      'create_event_with_markets',
+      'create_event_complete',
       {
         p_event_data: eventDataForRPC,
-        p_markets_data: marketsDataForRPC,
+        p_admin_id: user.id,
       }
     );
 
