@@ -493,9 +493,15 @@ export default function EventCreationPage() {
   const validateStep = useCallback((s: number): boolean => {
     const e: Partial<Record<keyof FormData, string>> = {};
     if (s === 1) {
-      if (!form.title.trim()) e.title = 'ইভেন্টের শিরোনাম আবশ্যক';
-      else if (form.title.length < 10) e.title = 'শিরোনাম কমপক্ষে ১০ অক্ষরের হতে হবে';
-      if (!form.question.trim()) e.question = 'প্রশ্ন আবশ্যক';
+      // Use fallback: title can come from question and vice versa
+      const hasTitle = form.title.trim() || form.question.trim();
+      const hasQuestion = form.question.trim() || form.title.trim();
+      
+      if (!hasTitle) e.title = 'ইভেন্টের শিরোনাম বা প্রশ্ন আবশ্যক';
+      else if ((form.title || form.question).length < 10) {
+        e.title = 'শিরোনাম/প্রশ্ন কমপক্ষে ১০ অক্ষরের হতে হবে';
+      }
+      if (!hasQuestion) e.question = 'প্রশ্ন বা শিরোনাম আবশ্যক';
     }
     if (s === 2) {
       if (!form.category) e.category = 'ক্যাটাগরি নির্বাচন করুন';
@@ -536,9 +542,17 @@ export default function EventCreationPage() {
         throw new Error('অনুগ্রহ করে লগইন করুন');
       }
 
+      // Ensure title and question have fallbacks
+      const title = form.title.trim() || form.question.trim();
+      const question = form.question.trim() || form.title.trim();
+      
+      if (!title || !question) {
+        throw new Error('টাইটেল বা প্রশ্ন আবশ্যক');
+      }
+      
       const payload = {
-        title: form.title.trim(),
-        question: form.question.trim(),
+        title: title,
+        question: question,
         description: form.description.trim() || null,
         category: form.category,
         subcategory: form.subcategory || null,
@@ -826,7 +840,14 @@ export default function EventCreationPage() {
                   <input
                     type="text"
                     value={form.question}
-                    onChange={(e) => set('question', e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      set('question', val);
+                      // Auto-populate title from question if title is empty
+                      if (!form.title.trim()) {
+                        set('title', val);
+                      }
+                    }}
                     placeholder="যেমন: ২০২৭ সালের বিপিএল চ্যাম্পিয়ন কোন দল হবে?"
                     className={`w-full px-3 py-2.5 rounded-lg border text-sm ${errors.question ? 'border-red-400 bg-red-50' : 'border-gray-300'
                       } focus:outline-none focus:ring-2 focus:ring-indigo-500`}
