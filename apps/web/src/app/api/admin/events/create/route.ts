@@ -1,7 +1,7 @@
 /**
  * Event Creation API
  * Creates events and markets with proper error handling and workflow integration
- * Replaces the RPC-based approach with direct database operations
+ * Uses direct database inserts (RPC function removed in migration 139 cleanup)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -171,50 +171,89 @@ export async function POST(request: NextRequest) {
 
     const data = validation.data!;
 
-    // 4. Create Event using existing RPC function
-    console.log('[Event Create] Calling create_event_complete RPC with title:', data.title);
+    // 4. Create Event using direct inserts (RPC function removed)
+    console.log('[Event Create] Creating event with title:', data.title);
     
-    const { data: result, error: rpcError } = await supabase.rpc('create_event_complete', {
-      p_event_data: {
+    // Insert Event
+    const { data: event, error: eventError } = await supabase
+      .from('events')
+      .insert({
         title: data.title,
+        name: data.title,
+        name_en: data.title,
+        slug: data.slug,
+        question: data.question,
+        description: data.description,
+        category: data.category,
+        subcategory: data.subcategory,
+        status: 'active',
+        starts_at: new Date().toISOString(),
+        trading_opens_at: new Date().toISOString(),
+        trading_closes_at: data.trading_closes_at,
+        event_date: data.trading_closes_at,
+        resolution_method: data.resolution_method,
+        resolution_delay_hours: data.resolution_delay_hours,
+        initial_liquidity: data.initial_liquidity,
+        current_liquidity: data.initial_liquidity,
+        is_featured: data.is_featured,
+        answer_type: 'binary',
+        answer1: data.answer1,
+        answer2: data.answer2,
+        created_by: user.id,
+        image_url: data.image_url,
+        tags: data.tags,
+      })
+      .select()
+      .single();
+
+    if (eventError) {
+      console.error('[Event Create] Event insert error:', eventError);
+      return NextResponse.json(
+        { success: false, error: `Failed to create event: ${eventError.message}` },
+        { status: 500 }
+      );
+    }
+
+    const eventId = event.id;
+    console.log('[Event Create] Event created:', eventId);
+
+    // Insert Market
+    const { data: market, error: marketError } = await supabase
+      .from('markets')
+      .insert({
+        event_id: eventId,
+        name: data.title,
         question: data.question,
         description: data.description,
         category: data.category,
         subcategory: data.subcategory,
         trading_closes_at: data.trading_closes_at,
-        resolution_method: data.resolution_method,
+        resolution_delay_hours: data.resolution_delay_hours,
         initial_liquidity: data.initial_liquidity,
+        liquidity: data.initial_liquidity,
+        status: 'active',
+        slug: `${data.slug}-market`,
+        answer_type: 'binary',
+        answer1: data.answer1,
+        answer2: data.answer2,
         is_featured: data.is_featured,
-        image_url: data.image_url,
-        tags: data.tags,
-      },
-      p_admin_id: user.id,
-    });
+        created_by: user.id,
+      })
+      .select()
+      .single();
 
-    if (rpcError) {
-      console.error('[Event Create] RPC error:', rpcError);
+    if (marketError) {
+      console.error('[Event Create] Market insert error:', marketError);
+      // Rollback: delete the event we just created
+      await supabase.from('events').delete().eq('id', eventId);
       return NextResponse.json(
-        { success: false, error: `Failed to create event: ${rpcError.message}`, details: rpcError },
+        { success: false, error: `Failed to create market: ${marketError.message}` },
         { status: 500 }
       );
     }
 
-    // Parse result
-    const eventResult = typeof result === 'string' ? JSON.parse(result) : result;
-    
-    if (!eventResult.success) {
-      console.error('[Event Create] RPC returned error:', eventResult.error);
-      return NextResponse.json(
-        { success: false, error: eventResult.error || 'Event creation failed' },
-        { status: 500 }
-      );
-    }
-
-    const eventId = eventResult.event_id;
-    const marketId = eventResult.market_id;
-    const slug = eventResult.slug;
-
-    console.log('[Event Create] Event created:', eventId, 'Market:', marketId);
+    const marketId = market.id;
+    console.log('[Event Create] Market created:', marketId);
 
     // 7. Log admin action (non-critical)
     try {
@@ -222,11 +261,11 @@ export async function POST(request: NextRequest) {
         p_admin_id: user.id,
         p_action_type: 'create_event',
         p_resource_type: 'event',
-        p_resource_id: event.id,
+        p_resource_id: eventId,
         p_new_values: {
           title: data.title,
           category: data.category,
-          market_id: market.id,
+          market_id: marketId,
         },
         p_reason: 'Event created via admin panel',
       });
@@ -245,8 +284,8 @@ export async function POST(request: NextRequest) {
         await qstashClient.publishJSON({
           url: `${baseUrl}/api/workflows/event-processor`,
           body: {
-            event_id: event.id,
-            market_id: market.id,
+            event_id: eventId,
+            market_id: marketId,
             action: 'post_create',
           }
         });
@@ -262,7 +301,7 @@ export async function POST(request: NextRequest) {
       message: 'Event created successfully',
       event_id: eventId,
       market_id: marketId,
-      slug: slug,
+      slug: data.slug,
       title: data.title,
       execution_time_ms: Date.now() - startTime,
     });
