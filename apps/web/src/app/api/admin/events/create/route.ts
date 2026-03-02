@@ -171,99 +171,50 @@ export async function POST(request: NextRequest) {
 
     const data = validation.data!;
 
-    // 4. Create Event
-    console.log('[Event Create] Creating event with title:', data.title);
-    const eventInsertData = {
-      title: data.title,
-      name: data.title,
-      name_en: data.title,
-      slug: data.slug,
-      question: data.question,
-      description: data.description,
-      category: data.category,
-      subcategory: data.subcategory,
-      status: 'active',
-      starts_at: new Date().toISOString(),
-      trading_opens_at: new Date().toISOString(),
-      trading_closes_at: data.trading_closes_at,
-      event_date: data.trading_closes_at,
-      resolution_method: data.resolution_method,
-      resolution_delay_hours: data.resolution_delay_hours,
-      initial_liquidity: data.initial_liquidity,
-      current_liquidity: data.initial_liquidity,
-      is_featured: data.is_featured,
-      answer_type: 'binary',
-      answer1: data.answer1,
-      answer2: data.answer2,
-      created_by: user.id,
-      image_url: data.image_url,
-      tags: data.tags,
-    };
+    // 4. Create Event using existing RPC function
+    console.log('[Event Create] Calling create_event_complete RPC with title:', data.title);
+    
+    const { data: result, error: rpcError } = await supabase.rpc('create_event_complete', {
+      p_event_data: {
+        title: data.title,
+        question: data.question,
+        description: data.description,
+        category: data.category,
+        subcategory: data.subcategory,
+        trading_closes_at: data.trading_closes_at,
+        resolution_method: data.resolution_method,
+        initial_liquidity: data.initial_liquidity,
+        is_featured: data.is_featured,
+        image_url: data.image_url,
+        tags: data.tags,
+      },
+      p_admin_id: user.id,
+    });
 
-    const { data: event, error: eventError } = await supabase
-      .from('events')
-      .insert(eventInsertData)
-      .select()
-      .single();
-
-    if (eventError) {
-      console.error('[Event Create] Event creation error:', eventError);
+    if (rpcError) {
+      console.error('[Event Create] RPC error:', rpcError);
       return NextResponse.json(
-        { success: false, error: `Failed to create event: ${eventError.message}`, details: eventError },
+        { success: false, error: `Failed to create event: ${rpcError.message}`, details: rpcError },
         { status: 500 }
       );
     }
 
-    console.log('[Event Create] Event created:', event.id);
-
-    // 5. Create Market (linked to event)
-    const marketInsertData = {
-      event_id: event.id,
-      question: data.question,
-      description: data.description,
-      category: data.category,
-      trading_closes_at: data.trading_closes_at,
-      status: 'active',
-      slug: `${data.slug}-market`,
-      min_price: 0.01,
-      max_price: 0.99,
-      tick_size: 0.01,
-      event_date: data.trading_closes_at,
-    };
-
-    const { data: market, error: marketError } = await supabase
-      .from('markets')
-      .insert(marketInsertData)
-      .select()
-      .single();
-
-    if (marketError) {
-      console.error('[Event Create] Market creation error:', marketError);
-      // Rollback: Delete the event we just created
-      await supabase.from('events').delete().eq('id', event.id);
+    // Parse result
+    const eventResult = typeof result === 'string' ? JSON.parse(result) : result;
+    
+    if (!eventResult.success) {
+      console.error('[Event Create] RPC returned error:', eventResult.error);
       return NextResponse.json(
-        { success: false, error: `Failed to create market: ${marketError.message}`, details: marketError },
+        { success: false, error: eventResult.error || 'Event creation failed' },
         { status: 500 }
       );
     }
 
-    console.log('[Event Create] Market created:', market.id);
+    const eventId = eventResult.event_id;
+    const marketId = eventResult.market_id;
+    const slug = eventResult.slug;
 
-    // 6. Create resolution configuration (non-critical)
-    try {
-      await supabase
-        .from('resolution_systems')
-        .insert({
-          event_id: event.id,
-          primary_method: data.resolution_method,
-          ai_keywords: data.tags,
-          ai_sources: [],
-          confidence_threshold: 85,
-        });
-    } catch (resolutionError: any) {
-      console.warn('[Event Create] Resolution config warning:', resolutionError.message);
-      // Non-critical error, don't rollback
-    }
+    console.log('[Event Create] Event created:', eventId, 'Market:', marketId);
 
     // 7. Log admin action (non-critical)
     try {
@@ -304,14 +255,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 9. Return success response
-    console.log('[Event Create] Success! Event:', event.id, 'Market:', market.id);
+    // 6. Return success response
+    console.log('[Event Create] Success! Event:', eventId, 'Market:', marketId);
     return NextResponse.json({
       success: true,
       message: 'Event created successfully',
-      event_id: event.id,
-      market_id: market.id,
-      slug: data.slug,
+      event_id: eventId,
+      market_id: marketId,
+      slug: slug,
       title: data.title,
       execution_time_ms: Date.now() - startTime,
     });
