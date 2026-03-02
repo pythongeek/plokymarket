@@ -679,3 +679,306 @@ ON CONFLICT DO NOTHING;
 GRANT EXECUTE ON FUNCTION match_order(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION get_market_prices(UUID) TO authenticated, anon;
 GRANT EXECUTE ON FUNCTION get_orderbook(UUID, outcome_type, order_side) TO authenticated, anon;
+
+-- ===================================
+-- PART 9: EVENTS SYSTEM (Migration 142)
+-- ===================================
+
+-- Events table
+CREATE TABLE IF NOT EXISTS public.events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title TEXT NOT NULL,
+    slug TEXT UNIQUE NOT NULL,
+    question TEXT,
+    description TEXT,
+    category VARCHAR(100) NOT NULL DEFAULT 'general',
+    subcategory VARCHAR(100),
+    tags TEXT[] DEFAULT '{}',
+    image_url TEXT,
+    status VARCHAR(20) DEFAULT 'draft' CHECK (status IN ('draft', 'pending', 'active', 'paused', 'closed', 'resolved', 'cancelled')),
+    is_featured BOOLEAN DEFAULT FALSE,
+    is_trending BOOLEAN DEFAULT FALSE,
+    answer_type VARCHAR(20) DEFAULT 'binary' CHECK (answer_type IN ('binary', 'multiple', 'scalar')),
+    answer1 VARCHAR(200) DEFAULT 'হ্যাঁ (Yes)',
+    answer2 VARCHAR(200) DEFAULT 'না (No)',
+    starts_at TIMESTAMPTZ DEFAULT NOW(),
+    trading_opens_at TIMESTAMPTZ DEFAULT NOW(),
+    trading_closes_at TIMESTAMPTZ,
+    event_date TIMESTAMPTZ,
+    resolved_at TIMESTAMPTZ,
+    resolution_method VARCHAR(50) DEFAULT 'manual_admin' CHECK (resolution_method IN ('manual_admin', 'ai_oracle', 'expert_panel', 'external_api', 'community_vote', 'hybrid')),
+    resolution_delay_hours INTEGER DEFAULT 24,
+    resolved_outcome INTEGER,
+    initial_liquidity NUMERIC DEFAULT 1000,
+    current_liquidity NUMERIC DEFAULT 1000,
+    total_volume NUMERIC DEFAULT 0,
+    total_trades INTEGER DEFAULT 0,
+    unique_traders INTEGER DEFAULT 0,
+    created_by UUID REFERENCES auth.users(id),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Add event_id to markets if not exists
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'markets' AND column_name = 'event_id') THEN
+        ALTER TABLE public.markets ADD COLUMN event_id UUID REFERENCES public.events(id) ON DELETE SET NULL;
+    END IF;
+END $$;
+
+-- Event indexes
+CREATE INDEX IF NOT EXISTS idx_events_slug ON public.events(slug);
+CREATE INDEX IF NOT EXISTS idx_events_category ON public.events(category);
+CREATE INDEX IF NOT EXISTS idx_events_status ON public.events(status);
+CREATE INDEX IF NOT EXISTS idx_events_is_featured ON public.events(is_featured) WHERE is_featured = TRUE;
+CREATE INDEX IF NOT EXISTS idx_events_created_at ON public.events(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_markets_event_id ON public.markets(event_id);
+
+-- Event RLS
+ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "events_public_read" ON public.events;
+CREATE POLICY "events_public_read"
+    ON public.events
+    FOR SELECT
+    USING (status IN ('active', 'closed', 'resolved'));
+
+DROP POLICY IF EXISTS "events_authenticated_read" ON public.events;
+CREATE POLICY "events_authenticated_read"
+    ON public.events
+    FOR SELECT
+    TO authenticated
+    USING (true);
+
+DROP POLICY IF EXISTS "events_admin_all" ON public.events;
+CREATE POLICY "events_admin_all"
+    ON public.events
+    FOR ALL
+    TO authenticated
+    USING (EXISTS (
+        SELECT 1 FROM public.user_profiles 
+        WHERE id = auth.uid() AND (is_admin = TRUE OR is_super_admin = TRUE)
+    ));
+
+-- ===================================
+-- PART 10: UPSTASH WORKFLOW SYSTEM (Migration 142b)
+-- ===================================
+
+-- Upstash workflow runs table
+CREATE TABLE IF NOT EXISTS public.upstash_workflow_runs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    workflow_run_id TEXT UNIQUE NOT NULL,
+    message_id TEXT,
+    event_id UUID REFERENCES public.events(id) ON DELETE SET NULL,
+    market_id UUID REFERENCES public.markets(id) ON DELETE SET NULL,
+    workflow_type VARCHAR(50) NOT NULL CHECK (
+        workflow_type IN (
+            'event_creation', 'market_resolution', 'deposit_notification',
+            'withdrawal_processing', 'daily_report', 'auto_verification',
+            'exchange_rate_update', 'price_snapshot', 'market_close_check',
+            'settlement', 'ai_oracle', 'batch_markets', 'cleanup'
+        )
+    ),
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING' CHECK (
+        status IN ('PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'RETRYING', 'CANCELLED')
+    ),
+    started_at TIMESTAMPTZ DEFAULT NOW(),
+    completed_at TIMESTAMPTZ,
+    next_run_at TIMESTAMPTZ,
+    retry_count INTEGER DEFAULT 0,
+    max_retries INTEGER DEFAULT 3,
+    error_message TEXT,
+    error_details JSONB DEFAULT '{}'::jsonb,
+    payload JSONB DEFAULT '{}'::jsonb,
+    result JSONB DEFAULT '{}'::jsonb,
+    execution_time_ms INTEGER,
+    steps_completed INTEGER DEFAULT 0,
+    total_steps INTEGER DEFAULT 1,
+    source VARCHAR(20) DEFAULT 'upstash' CHECK (source IN ('upstash', 'n8n_migrated', 'manual')),
+    migrated_from_id TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Workflow DLQ (Dead Letter Queue)
+CREATE TABLE IF NOT EXISTS public.workflow_dlq (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    workflow_run_id TEXT NOT NULL REFERENCES public.upstash_workflow_runs(workflow_run_id),
+    error_message TEXT NOT NULL,
+    error_stack TEXT,
+    error_code VARCHAR(50),
+    failed_at TIMESTAMPTZ DEFAULT NOW(),
+    failed_step VARCHAR(100),
+    payload_snapshot JSONB DEFAULT '{}'::jsonb,
+    resolved_at TIMESTAMPTZ,
+    resolved_by UUID REFERENCES auth.users(id),
+    resolution_action VARCHAR(20) CHECK (resolution_action IN ('retry', 'discard', 'manual_resolve', 'archived')),
+    resolution_notes TEXT,
+    retry_attempts INTEGER DEFAULT 0,
+    last_retry_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Workflow schedules
+CREATE TABLE IF NOT EXISTS public.workflow_schedules (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    schedule_id TEXT UNIQUE,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    workflow_type VARCHAR(50) NOT NULL,
+    cron_expression TEXT NOT NULL,
+    timezone VARCHAR(50) DEFAULT 'Asia/Dhaka',
+    endpoint_url TEXT NOT NULL,
+    method VARCHAR(10) DEFAULT 'POST',
+    headers JSONB DEFAULT '{}'::jsonb,
+    default_payload JSONB DEFAULT '{}'::jsonb,
+    is_active BOOLEAN DEFAULT TRUE,
+    last_run_at TIMESTAMPTZ,
+    last_run_status VARCHAR(20),
+    next_run_at TIMESTAMPTZ,
+    total_runs INTEGER DEFAULT 0,
+    successful_runs INTEGER DEFAULT 0,
+    failed_runs INTEGER DEFAULT 0,
+    description TEXT,
+    created_by UUID REFERENCES auth.users(id),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Workflow indexes
+CREATE INDEX IF NOT EXISTS idx_upstash_workflow_runs_event_id ON public.upstash_workflow_runs(event_id) WHERE event_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_upstash_workflow_runs_market_id ON public.upstash_workflow_runs(market_id) WHERE market_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_upstash_workflow_runs_status ON public.upstash_workflow_runs(status);
+CREATE INDEX IF NOT EXISTS idx_upstash_workflow_runs_workflow_type ON public.upstash_workflow_runs(workflow_type);
+CREATE INDEX IF NOT EXISTS idx_workflow_dlq_workflow_run_id ON public.workflow_dlq(workflow_run_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_dlq_resolved ON public.workflow_dlq(resolved_at) WHERE resolved_at IS NULL;
+
+-- Workflow RLS
+ALTER TABLE public.upstash_workflow_runs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.workflow_dlq ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.workflow_schedules ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Service role full access workflow runs"
+    ON public.upstash_workflow_runs
+    FOR ALL
+    TO service_role
+    USING (TRUE)
+    WITH CHECK (TRUE);
+
+CREATE POLICY "Service role full access DLQ"
+    ON public.workflow_dlq
+    FOR ALL
+    TO service_role
+    USING (TRUE)
+    WITH CHECK (TRUE);
+
+-- ===================================
+-- PART 11: WORKFLOW HELPER FUNCTIONS
+-- ===================================
+
+-- Record workflow start
+CREATE OR REPLACE FUNCTION record_workflow_start(
+    p_workflow_run_id TEXT,
+    p_workflow_type VARCHAR,
+    p_event_id UUID DEFAULT NULL,
+    p_market_id UUID DEFAULT NULL,
+    p_payload JSONB DEFAULT '{}'::jsonb,
+    p_message_id TEXT DEFAULT NULL
+)
+RETURNS UUID AS $$
+DECLARE
+    v_id UUID;
+BEGIN
+    INSERT INTO public.upstash_workflow_runs (
+        workflow_run_id, message_id, workflow_type, event_id, market_id,
+        status, payload, started_at
+    ) VALUES (
+        p_workflow_run_id, p_message_id, p_workflow_type, p_event_id, p_market_id,
+        'RUNNING', p_payload, NOW()
+    )
+    ON CONFLICT (workflow_run_id) 
+    DO UPDATE SET 
+        status = 'RUNNING',
+        started_at = NOW(),
+        retry_count = public.upstash_workflow_runs.retry_count + 1,
+        updated_at = NOW()
+    RETURNING id INTO v_id;
+    
+    RETURN v_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Record workflow completion
+CREATE OR REPLACE FUNCTION record_workflow_complete(
+    p_workflow_run_id TEXT,
+    p_status VARCHAR,
+    p_result JSONB DEFAULT '{}'::jsonb,
+    p_error_message TEXT DEFAULT NULL,
+    p_execution_time_ms INTEGER DEFAULT NULL
+)
+RETURNS VOID AS $$
+BEGIN
+    UPDATE public.upstash_workflow_runs
+    SET 
+        status = p_status,
+        result = p_result,
+        error_message = p_error_message,
+        completed_at = NOW(),
+        execution_time_ms = p_execution_time_ms,
+        updated_at = NOW()
+    WHERE workflow_run_id = p_workflow_run_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Add to DLQ
+CREATE OR REPLACE FUNCTION add_to_workflow_dlq(
+    p_workflow_run_id TEXT,
+    p_error_message TEXT,
+    p_error_stack TEXT DEFAULT NULL,
+    p_failed_step VARCHAR DEFAULT NULL
+)
+RETURNS UUID AS $$
+DECLARE
+    v_id UUID;
+BEGIN
+    INSERT INTO public.workflow_dlq (
+        workflow_run_id, error_message, error_stack, failed_step, payload_snapshot
+    )
+    SELECT 
+        p_workflow_run_id, p_error_message, p_error_stack, p_failed_step,
+        COALESCE(payload, '{}'::jsonb)
+    FROM public.upstash_workflow_runs
+    WHERE workflow_run_id = p_workflow_run_id
+    RETURNING id INTO v_id;
+    
+    UPDATE public.upstash_workflow_runs
+    SET status = 'FAILED', error_message = p_error_message, updated_at = NOW()
+    WHERE workflow_run_id = p_workflow_run_id;
+    
+    RETURN v_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ===================================
+-- PART 12: TITLE/QUESTION SYNC TRIGGER
+-- ===================================
+
+CREATE OR REPLACE FUNCTION sync_event_title_question()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.title IS DISTINCT FROM OLD.title AND NEW.question IS NULL THEN
+        NEW.question := NEW.title;
+    END IF;
+    IF NEW.question IS DISTINCT FROM OLD.question AND NEW.title IS NULL THEN
+        NEW.title := NEW.question;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_sync_event_title_question ON public.events;
+CREATE TRIGGER trigger_sync_event_title_question
+    BEFORE INSERT OR UPDATE ON public.events
+    FOR EACH ROW
+    EXECUTE FUNCTION sync_event_title_question();

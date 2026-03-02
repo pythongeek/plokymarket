@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "@supabase/supabase-js": "^2.98.0",
     "@upstash/qstash": "^2.9.0",
     "pg": "^8.18.0",
     "uuid": "^13.0.0"

@@ -109,6 +109,7 @@ export async function POST(request: NextRequest) {
     // 1. Authenticate user
     const authHeader = request.headers.get('authorization');
     if (!authHeader?.startsWith('Bearer ')) {
+      console.error('[Event Create] No authorization header');
       return NextResponse.json(
         { success: false, error: 'Unauthorized - Bearer token required' },
         { status: 401 }
@@ -119,6 +120,7 @@ export async function POST(request: NextRequest) {
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
 
     if (authError || !user) {
+      console.error('[Event Create] Auth error:', authError);
       return NextResponse.json(
         { success: false, error: 'Invalid token' },
         { status: 401 }
@@ -132,7 +134,12 @@ export async function POST(request: NextRequest) {
       .eq('id', user.id)
       .single();
 
-    if (profileError || (!profile?.is_admin && !profile?.is_super_admin)) {
+    if (profileError) {
+      console.error('[Event Create] Profile fetch error:', profileError);
+    }
+
+    if (!profile?.is_admin && !profile?.is_super_admin) {
+      console.error('[Event Create] User not admin:', user.id);
       return NextResponse.json(
         { success: false, error: 'Admin access required' },
         { status: 403 }
@@ -143,15 +150,19 @@ export async function POST(request: NextRequest) {
     let body;
     try {
       body = await request.json();
-    } catch {
+    } catch (e) {
+      console.error('[Event Create] JSON parse error:', e);
       return NextResponse.json(
         { success: false, error: 'Invalid JSON in request body' },
         { status: 400 }
       );
     }
 
+    console.log('[Event Create] Request body:', JSON.stringify(body, null, 2));
+
     const validation = validateEventData(body);
     if (!validation.valid) {
+      console.error('[Event Create] Validation error:', validation.error);
       return NextResponse.json(
         { success: false, error: validation.error },
         { status: 400 }
@@ -161,115 +172,118 @@ export async function POST(request: NextRequest) {
     const data = validation.data!;
 
     // 4. Create Event
+    console.log('[Event Create] Creating event with title:', data.title);
+    const eventInsertData = {
+      title: data.title,
+      name: data.title,
+      name_en: data.title,
+      slug: data.slug,
+      question: data.question,
+      description: data.description,
+      category: data.category,
+      subcategory: data.subcategory,
+      status: 'active',
+      starts_at: new Date().toISOString(),
+      trading_opens_at: new Date().toISOString(),
+      trading_closes_at: data.trading_closes_at,
+      event_date: data.trading_closes_at,
+      resolution_method: data.resolution_method,
+      resolution_delay_hours: data.resolution_delay_hours,
+      initial_liquidity: data.initial_liquidity,
+      current_liquidity: data.initial_liquidity,
+      is_featured: data.is_featured,
+      answer_type: 'binary',
+      answer1: data.answer1,
+      answer2: data.answer2,
+      created_by: user.id,
+      image_url: data.image_url,
+      tags: data.tags,
+    };
+
     const { data: event, error: eventError } = await supabase
       .from('events')
-      .insert({
-        title: data.title,
-        name: data.title,
-        name_en: data.title,
-        slug: data.slug,
-        question: data.question,
-        description: data.description,
-        category: data.category,
-        subcategory: data.subcategory,
-        status: 'active',
-        starts_at: new Date().toISOString(),
-        trading_opens_at: new Date().toISOString(),
-        trading_closes_at: data.trading_closes_at,
-        event_date: data.trading_closes_at,
-        resolution_method: data.resolution_method,
-        resolution_delay_hours: data.resolution_delay_hours,
-        initial_liquidity: data.initial_liquidity,
-        current_liquidity: data.initial_liquidity,
-        is_featured: data.is_featured,
-        answer_type: 'binary',
-        answer1: data.answer1,
-        answer2: data.answer2,
-        created_by: user.id,
-        image_url: data.image_url,
-        tags: data.tags,
-      })
+      .insert(eventInsertData)
       .select()
       .single();
 
     if (eventError) {
-      console.error('Event creation error:', eventError);
+      console.error('[Event Create] Event creation error:', eventError);
       return NextResponse.json(
-        { success: false, error: `Failed to create event: ${eventError.message}` },
+        { success: false, error: `Failed to create event: ${eventError.message}`, details: eventError },
         { status: 500 }
       );
     }
 
+    console.log('[Event Create] Event created:', event.id);
+
     // 5. Create Market (linked to event)
+    const marketInsertData = {
+      event_id: event.id,
+      question: data.question,
+      description: data.description,
+      category: data.category,
+      trading_closes_at: data.trading_closes_at,
+      status: 'active',
+      slug: `${data.slug}-market`,
+      min_price: 0.01,
+      max_price: 0.99,
+      tick_size: 0.01,
+      event_date: data.trading_closes_at,
+    };
+
     const { data: market, error: marketError } = await supabase
       .from('markets')
-      .insert({
-        event_id: event.id,
-        name: data.title,
-        question: data.question,
-        description: data.description,
-        category: data.category,
-        subcategory: data.subcategory,
-        trading_closes_at: data.trading_closes_at,
-        resolution_delay_hours: data.resolution_delay_hours,
-        initial_liquidity: data.initial_liquidity,
-        liquidity: data.initial_liquidity,
-        status: 'active',
-        slug: `${data.slug}-market`,
-        answer_type: 'binary',
-        answer1: data.answer1,
-        answer2: data.answer2,
-        is_featured: data.is_featured,
-        created_by: user.id,
-        image_url: data.image_url,
-      })
+      .insert(marketInsertData)
       .select()
       .single();
 
     if (marketError) {
-      console.error('Market creation error:', marketError);
+      console.error('[Event Create] Market creation error:', marketError);
       // Rollback: Delete the event we just created
       await supabase.from('events').delete().eq('id', event.id);
       return NextResponse.json(
-        { success: false, error: `Failed to create market: ${marketError.message}` },
+        { success: false, error: `Failed to create market: ${marketError.message}`, details: marketError },
         { status: 500 }
       );
     }
 
-    // 6. Create resolution configuration
-    const { error: resolutionError } = await supabase
-      .from('resolution_systems')
-      .insert({
-        event_id: event.id,
-        primary_method: data.resolution_method,
-        ai_keywords: data.tags,
-        ai_sources: [],
-        confidence_threshold: 85,
-      });
+    console.log('[Event Create] Market created:', market.id);
 
-    if (resolutionError) {
-      console.warn('Resolution config creation warning:', resolutionError);
+    // 6. Create resolution configuration (non-critical)
+    try {
+      await supabase
+        .from('resolution_systems')
+        .insert({
+          event_id: event.id,
+          primary_method: data.resolution_method,
+          ai_keywords: data.tags,
+          ai_sources: [],
+          confidence_threshold: 85,
+        });
+    } catch (resolutionError: any) {
+      console.warn('[Event Create] Resolution config warning:', resolutionError.message);
       // Non-critical error, don't rollback
     }
 
-    // 7. Log admin action
-    const { error: logError } = await supabase.rpc('log_admin_action', {
-      p_admin_id: user.id,
-      p_action_type: 'create_event',
-      p_resource_type: 'event',
-      p_resource_id: event.id,
-      p_new_values: {
-        title: data.title,
-        category: data.category,
-        market_id: market.id,
-      },
-      p_reason: 'Event created via admin panel',
-    });
-
-    if (logError) {
-      console.warn('Failed to log admin action:', logError);
+    // 7. Log admin action (non-critical)
+    try {
+      await supabase.rpc('log_admin_action', {
+        p_admin_id: user.id,
+        p_action_type: 'create_event',
+        p_resource_type: 'event',
+        p_resource_id: event.id,
+        p_new_values: {
+          title: data.title,
+          category: data.category,
+          market_id: market.id,
+        },
+        p_reason: 'Event created via admin panel',
+      });
+    } catch (logError: any) {
+      console.warn('[Event Create] Admin log warning:', logError.message);
     }
 
+    // 8. Trigger workflow (non-critical)
     if (process.env.QSTASH_TOKEN) {
       try {
         const baseUrl = process.env.NEXT_PUBLIC_APP_URL ||
@@ -277,7 +291,6 @@ export async function POST(request: NextRequest) {
 
         const qstashClient = new QStashClient({ token: process.env.QSTASH_TOKEN });
 
-        // Trigger event post-processing workflow via QStash
         await qstashClient.publishJSON({
           url: `${baseUrl}/api/workflows/event-processor`,
           body: {
@@ -286,12 +299,13 @@ export async function POST(request: NextRequest) {
             action: 'post_create',
           }
         });
-      } catch (workflowError) {
-        console.warn('Workflow trigger error:', workflowError);
+      } catch (workflowError: any) {
+        console.warn('[Event Create] Workflow trigger warning:', workflowError.message);
       }
     }
 
     // 9. Return success response
+    console.log('[Event Create] Success! Event:', event.id, 'Market:', market.id);
     return NextResponse.json({
       success: true,
       message: 'Event created successfully',
@@ -303,11 +317,12 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error: any) {
-    console.error('Event creation error:', error);
+    console.error('[Event Create] Fatal error:', error);
     return NextResponse.json(
       {
         success: false,
         error: error.message || 'Internal server error',
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
         execution_time_ms: Date.now() - startTime,
       },
       { status: 500 }
