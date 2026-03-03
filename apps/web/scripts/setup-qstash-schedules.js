@@ -18,18 +18,18 @@ function loadEnvFile(filePath) {
   try {
     const envContent = fs.readFileSync(filePath, 'utf8');
     const lines = envContent.split('\n');
-    
+
     for (const line of lines) {
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith('#')) continue;
-      
+
       const match = trimmed.match(/^([^=]+)=(.*)$/);
       if (match) {
         const key = match[1].trim();
         let value = match[2].trim();
         // Remove surrounding quotes if present
-        if ((value.startsWith('"') && value.endsWith('"')) || 
-            (value.startsWith("'") && value.endsWith("'"))) {
+        if ((value.startsWith('"') && value.endsWith('"')) ||
+          (value.startsWith("'") && value.endsWith("'"))) {
           value = value.slice(1, -1);
         }
         if (!process.env[key]) {
@@ -61,8 +61,24 @@ if (!QSTASH_TOKEN) {
 // Initialize QStash client
 const client = new Client({ token: QSTASH_TOKEN });
 
-// Consolidated Schedule Configurations (4 core automated workflows)
+// Consolidated Schedule Configurations (6 core automated workflows)
 const schedules = [
+  {
+    name: 'Hourly Price Snapshot',
+    description: 'Records hourly price snapshots and updates 24h changes',
+    cron: '0 * * * *',
+    endpoint: '/api/upstash-workflow/price-snapshot',
+    method: 'POST',
+    retries: 3
+  },
+  {
+    name: 'Market Close Check',
+    description: 'Checks for markets closing soon and notifies followers',
+    cron: '*/15 * * * *',
+    endpoint: '/api/upstash-workflow/market-close-check',
+    method: 'POST',
+    retries: 3
+  },
   {
     name: 'Combined Market Data',
     description: 'Fetch crypto and sports market data (consolidated from execute-crypto + execute-sports)',
@@ -107,14 +123,17 @@ const manualWorkflows = [
   { name: 'Auto-Verification', endpoint: '/api/workflows/auto-verify', description: 'Check pending deposits' },
   { name: 'Combined Market Data', endpoint: '/api/workflows/combined-market-data', description: 'Manual run of combined market data' },
   { name: 'Combined Analytics', endpoint: '/api/workflows/combined-analytics', description: 'Manual run of combined analytics' },
-  { name: 'Combined Daily Ops', endpoint: '/api/workflows/combined-daily-ops', description: 'Manual run of daily operations' }
+  { name: 'Combined Daily Ops', endpoint: '/api/workflows/combined-daily-ops', description: 'Manual run of daily operations' },
+  // Phase 2 Workflows
+  { name: 'Price Snapshot', endpoint: '/api/upstash-workflow/price-snapshot', description: 'Hourly price snapshot recording' },
+  { name: 'Market Close Check', endpoint: '/api/upstash-workflow/market-close-check', description: 'Check markets closing soon' }
 ];
 
 async function createSchedule(schedule) {
   const destinationUrl = `${APP_URL}${schedule.endpoint}`;
-  
+
   console.log(`   Destination: ${destinationUrl}`);
-  
+
   try {
     const result = await client.schedules.create({
       destination: destinationUrl,
@@ -122,7 +141,7 @@ async function createSchedule(schedule) {
       method: schedule.method,
       retries: schedule.retries
     });
-    
+
     return { success: true, scheduleId: result.id };
   } catch (error) {
     return { success: false, error: error.message };
@@ -157,13 +176,13 @@ async function main() {
   // Check for existing schedules
   console.log('📋 Checking existing schedules...');
   const existingSchedules = await listExistingSchedules();
-  
+
   if (existingSchedules.length > 0) {
     console.log(`Found ${existingSchedules.length} existing schedule(s):`);
     existingSchedules.forEach(s => {
       console.log(`  - ${s.scheduleId}: ${s.destination}`);
     });
-    
+
     // Ask if user wants to clean up (in non-interactive mode, we'll skip)
     console.log('\n⚠️  Existing schedules will be preserved. New schedules will be added.\n');
   }
@@ -171,15 +190,15 @@ async function main() {
   console.log('⏰ Creating new schedules...\n');
 
   const results = [];
-  
+
   for (const schedule of schedules) {
     console.log(`📌 ${schedule.name}`);
     console.log(`   Endpoint: ${schedule.endpoint}`);
     console.log(`   Cron: ${schedule.cron}`);
     if (schedule.timezone) console.log(`   Timezone: ${schedule.timezone}`);
-    
+
     const result = await createSchedule(schedule);
-    
+
     if (result.success) {
       console.log(`   ✅ Created (ID: ${result.scheduleId})\n`);
       results.push({ ...schedule, status: 'created', scheduleId: result.scheduleId });
@@ -200,15 +219,14 @@ async function main() {
   const output = {
     timestamp: new Date().toISOString(),
     appUrl: APP_URL,
-    qstashUrl: QSTASH_URL,
     schedules: results
   };
-  
+
   fs.writeFileSync(
     'qstash-schedules.json',
     JSON.stringify(output, null, 2)
   );
-  
+
   console.log('\n📝 Results saved to qstash-schedules.json');
   console.log('\n✨ Done!');
 }

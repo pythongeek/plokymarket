@@ -1,49 +1,63 @@
 {
-  "timestamp": "2026-02-17T22:26:29.417Z",
+  "timestamp": "2026-03-03T13:18:44.326Z",
   "appUrl": "https://polymarket-bangladesh.vercel.app",
-  "qstashUrl": "https://qstash.upstash.io",
   "schedules": [
     {
-      "name": "Daily Report",
-      "description": "Send daily summary report at 9 AM BD time",
-      "cron": "0 9 * * *",
-      "timezone": "Asia/Dhaka",
-      "endpoint": "/api/workflows/daily-report",
+      "name": "Hourly Price Snapshot",
+      "description": "Records hourly price snapshots and updates 24h changes",
+      "cron": "0 * * * *",
+      "endpoint": "/api/upstash-workflow/price-snapshot",
       "method": "POST",
       "retries": 3,
-      "status": "failed",
-      "error": "HTTP 400: {\"error\":\"invalid destination url: endpoint has invalid scheme, add http:// or https://\"}"
+      "status": "created"
     },
     {
-      "name": "Exchange Rate Update",
-      "description": "Update USDT/BDT exchange rate every 5 minutes",
+      "name": "Market Close Check",
+      "description": "Checks for markets closing soon and notifies followers",
+      "cron": "*/15 * * * *",
+      "endpoint": "/api/upstash-workflow/market-close-check",
+      "method": "POST",
+      "retries": 3,
+      "status": "created"
+    },
+    {
+      "name": "Combined Market Data",
+      "description": "Fetch crypto and sports market data (consolidated from execute-crypto + execute-sports)",
       "cron": "*/5 * * * *",
-      "endpoint": "/api/workflows/exchange-rate",
+      "endpoint": "/api/workflows/combined-market-data",
       "method": "POST",
       "retries": 3,
-      "status": "failed",
-      "error": "HTTP 400: {\"error\":\"invalid destination url: endpoint has invalid scheme, add http:// or https://\"}"
+      "status": "created"
     },
     {
-      "name": "Auto-Verification Check",
-      "description": "Check pending deposits for auto-verification every 10 minutes",
-      "cron": "*/10 * * * *",
-      "endpoint": "/api/workflows/auto-verify",
+      "name": "Combined Analytics",
+      "description": "Run analytics, tick adjustment, and exchange rate updates (consolidated)",
+      "cron": "0 * * * *",
+      "endpoint": "/api/workflows/combined-analytics",
       "method": "POST",
-      "retries": 2,
-      "status": "failed",
-      "error": "HTTP 400: {\"error\":\"invalid destination url: endpoint has invalid scheme, add http:// or https://\"}"
+      "retries": 3,
+      "status": "created"
     },
     {
-      "name": "Expired Deposit Cleanup",
-      "description": "Clean up expired pending deposits daily at midnight",
+      "name": "Combined Daily Operations",
+      "description": "Daily leaderboard update, AI topics generation, and cleanup (consolidated)",
       "cron": "0 0 * * *",
       "timezone": "Asia/Dhaka",
-      "endpoint": "/api/workflows/cleanup-expired",
+      "endpoint": "/api/workflows/combined-daily-ops",
+      "method": "POST",
+      "retries": 3,
+      "status": "failed",
+      "error": "{\"error\":\"quota maxSchedules exceeded, current limit: 10\"}"
+    },
+    {
+      "name": "Check Escalations",
+      "description": "Check support escalations every 5 minutes",
+      "cron": "*/5 * * * *",
+      "endpoint": "/api/workflows/check-escalations",
       "method": "POST",
       "retries": 2,
       "status": "failed",
-      "error": "HTTP 400: {\"error\":\"invalid destination url: endpoint has invalid scheme, add http:// or https://\"}"
+      "error": "{\"error\":\"quota maxSchedules exceeded, current limit: 10\"}"
     }
   ]
 }
