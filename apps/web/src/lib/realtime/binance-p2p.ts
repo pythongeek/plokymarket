@@ -184,7 +184,7 @@ export async function fetchBinanceSpotPrice(): Promise<number | null> {
     // Convert USDT to BDT using approximate rate (120 BDT per USDT as fallback)
     // This is a rough estimate - P2P rates are more accurate for BDT
     const usdtPrice = parseFloat(data.price);
-    return usdtPrice * 120; // Approximate BDT rate
+    return usdtPrice * 119; // Approximate BDT rate (updated 2026)
   } catch (error) {
     console.error('[Binance Spot] Error fetching price:', error);
     return null;
@@ -213,12 +213,12 @@ export async function getExchangeRate(): Promise<ExchangeRate> {
 
   // Final fallback
   return {
-    usdt_to_bdt: 120.00,
-    bdt_to_usdt: 0.008333,
+    usdt_to_bdt: 119.00,
+    bdt_to_usdt: 0.008403,
     source: 'manual',
     fetched_at: new Date().toISOString(),
-    buy_rate: 120.00,
-    sell_rate: 118.80
+    buy_rate: 119.00,
+    sell_rate: 117.81
   };
 }
 

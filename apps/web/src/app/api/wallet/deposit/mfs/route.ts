@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
         }
 
         const body = await request.json();
-        const { payment_method, bdt_amount, usdt_amount, sender_number, sender_name, txn_id, exchange_rate } = body;
+        const { payment_method, bdt_amount, sender_number, sender_name, txn_id } = body;
 
         // Validate
         if (!payment_method || !['bkash', 'nagad', 'rocket'].includes(payment_method)) {
@@ -39,20 +39,32 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'এই TXN ID আগে ব্যবহার হয়েছে' }, { status: 400 });
         }
 
-        // Create deposit request
+        // SECURITY: Fetch exchange rate server-side — never trust client-supplied rate
+        const { data: rateData } = await supabase
+            .from('exchange_rates_live')
+            .select('usdt_to_bdt')
+            .eq('is_active', true)
+            .order('fetched_at', { ascending: false })
+            .limit(1)
+            .single();
+
+        const serverRate = rateData?.usdt_to_bdt || 119;
+        const calculatedUsdt = parseFloat((bdt_amount / serverRate).toFixed(6));
+
+        // Create deposit request with server-enforced rate
         const { data: deposit, error } = await supabase
             .from('deposit_requests')
             .insert({
                 user_id: user.id,
                 payment_method,
                 bdt_amount,
-                usdt_amount: usdt_amount || (bdt_amount / (exchange_rate || 120)),
-                amount_usdt: usdt_amount || (bdt_amount / (exchange_rate || 120)),
+                usdt_amount: calculatedUsdt,
+                amount_usdt: calculatedUsdt,
                 amount_bdt: bdt_amount,
                 sender_number,
                 sender_name: sender_name || null,
                 txn_id,
-                exchange_rate: exchange_rate || 120,
+                exchange_rate: serverRate,
                 status: 'pending',
             })
             .select()

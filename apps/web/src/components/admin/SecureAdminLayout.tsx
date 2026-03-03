@@ -41,6 +41,7 @@ const SECURE_PATHS = {
   kyc: '/sys-cmd-7x9k2/kyc',
   p2p: '/sys-cmd-7x9k2/p2p',
   depositSettings: '/sys-cmd-7x9k2/deposit-settings',
+  exchangeRateConfig: '/sys-cmd-7x9k2/exchange-rate',
   deposits: '/sys-cmd-7x9k2/deposits',
   dailyTopics: '/sys-cmd-7x9k2/daily-topics',
   aiConfigs: '/sys-cmd-7x9k2/ai-configs',
@@ -312,6 +313,13 @@ export function SecureAdminLayout({
       label: 'ডিপোজিট সেটিংস',
       labelEn: 'Deposit Settings',
       icon: Settings,
+      requiresSuper: true,
+    },
+    {
+      path: SECURE_PATHS.exchangeRateConfig,
+      label: 'এক্সচেঞ্জ রেট',
+      labelEn: 'Exchange Rate',
+      icon: ArrowLeftRight,
       requiresSuper: true,
     },
     {

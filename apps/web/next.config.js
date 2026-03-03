@@ -18,4 +18,4 @@ module.exports = withSentryConfig(nextConfig, {
 
     // Upload source maps for readable stack traces
     authToken: process.env.SENTRY_AUTH_TOKEN,
-  
+});

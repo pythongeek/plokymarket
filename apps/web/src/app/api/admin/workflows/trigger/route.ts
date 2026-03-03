@@ -6,7 +6,7 @@ import { NextResponse } from 'next/server';
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
-    
+
     // Verify admin authentication
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
@@ -67,6 +67,17 @@ export async function POST(request: Request) {
         endpoint: '/api/workflows/combined-daily-ops',
         method: 'POST',
         description: 'Run combined leaderboard + AI topics + cleanup'
+      },
+      // Scheduled-only workflows (can also be triggered manually)
+      'price-snapshot': {
+        endpoint: '/api/upstash-workflow/price-snapshot',
+        method: 'POST',
+        description: 'Record hourly price snapshots (also runs on schedule)'
+      },
+      'market-close-check': {
+        endpoint: '/api/upstash-workflow/market-close-check',
+        method: 'POST',
+        description: 'Check markets closing soon (also runs on schedule)'
       }
     };
 
@@ -79,7 +90,7 @@ export async function POST(request: Request) {
 
     const config = workflowEndpoints[workflow];
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://polymarket-bangladesh.vercel.app';
-    
+
     console.log(`Admin ${user.id} triggering workflow: ${workflow}`);
 
     // Trigger the workflow

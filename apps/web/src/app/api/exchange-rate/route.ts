@@ -108,7 +108,7 @@ export async function GET() {
 
     // Layer 5: Hard fallback
     if (rate === null) {
-      rate = 120;
+      rate = 119;
       source = 'fallback';
     }
 
@@ -118,8 +118,8 @@ export async function GET() {
 
     // Maintain existing database recording logic
     const supabase = await createClient();
-    await supabase.from('exchange_rates').insert({
-      bdt_to_usdt: rate,
+    await (supabase as any).from('exchange_rates').insert({
+      bdt_to_usdt: parseFloat((1 / rate).toFixed(6)),
       usdt_to_bdt: rate,
       source: source,
       created_at: new Date().toISOString(),
@@ -138,7 +138,7 @@ export async function GET() {
     return NextResponse.json(
       {
         success: true,
-        rate: instanceCachedRate ?? 120,
+        rate: instanceCachedRate ?? 119,
         source: 'error_fallback',
         updated_at: new Date().toISOString(),
         cached: true,
@@ -176,9 +176,9 @@ export async function POST() {
     instanceCachedRate = priceData.price;
     instanceLastFetch = Date.now();
 
-    // Store in database
-    await supabase.from('exchange_rates').insert({
-      bdt_to_usdt: priceData.price,
+    // Store in database with correct inverse values
+    await (supabase as any).from('exchange_rates').insert({
+      bdt_to_usdt: parseFloat((1 / priceData.price).toFixed(6)),
       usdt_to_bdt: priceData.price,
       source: priceData.source,
       metadata: {

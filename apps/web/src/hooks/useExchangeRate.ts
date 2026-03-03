@@ -13,7 +13,7 @@ interface ExchangeRateData {
 }
 
 const REFRESH_INTERVAL = 5 * 60 * 1000; // Refresh every 5 minutes
-const FALLBACK_RATE = 120;
+const FALLBACK_RATE = 119;
 
 export function useExchangeRate(): ExchangeRateData {
   const [rate, setRate] = useState<number>(FALLBACK_RATE);

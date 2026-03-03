@@ -6,10 +6,10 @@ import { NextResponse } from 'next/server';
 export async function GET(request: Request) {
   try {
     const supabase = await createClient();
-    
+
     // Get user session
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
+
     if (authError || !user) {
       return NextResponse.json(
         { error: 'Authentication required' },
@@ -69,16 +69,16 @@ export async function GET(request: Request) {
       );
     }
 
-    // Get current exchange rate for BDT conversion
+    // Get current exchange rate for BDT conversion from live table
     const { data: exchangeRateData, error: rateError } = await supabase
-      .from('exchange_rates')
-      .select('bdt_to_usdt')
-      .eq('effective_until', null)
-      .order('effective_from', { ascending: false })
+      .from('exchange_rates_live')
+      .select('usdt_to_bdt')
+      .eq('is_active', true)
+      .order('fetched_at', { ascending: false })
       .limit(1)
       .single();
 
-    const exchangeRate = rateError ? 100.0000 : exchangeRateData.bdt_to_usdt;
+    const exchangeRate = rateError ? 119.0000 : exchangeRateData.usdt_to_bdt;
 
     // Format transactions with additional metadata
     const formattedTransactions = (transactions || []).map((tx: any) => ({

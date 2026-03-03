@@ -22,10 +22,24 @@ export const preferredRegion = 'sin1';
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
 
-  try {
-    const payload = await request.json();
-    const { step, data } = payload;
+  let payload: Record<string, unknown> = {};
+  let step = 'record-snapshots';
 
+  // Try to parse JSON body, fall back to defaults if empty or invalid
+  try {
+    const contentType = request.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      const text = await request.text();
+      if (text && text.trim()) {
+        payload = JSON.parse(text);
+        step = (payload.step as string) || step;
+      }
+    }
+  } catch (parseError) {
+    console.log('[PriceSnapshot] No valid JSON payload, using defaults');
+  }
+
+  try {
     const supabase = await createServiceClient();
 
     // Step 1: Record price snapshots

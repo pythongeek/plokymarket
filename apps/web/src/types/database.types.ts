@@ -7486,7 +7486,7 @@ export type Database = {
       | "off_topic"
       | "trolling"
       | "other"
-      market_status: "active" | "closed" | "resolved" | "cancelled"
+      market_status: "active" | "closed" | "resolved" | "cancelled" | "draft" | "paused" | "rejected"
       moderation_status:
       | "clean"
       | "pending_review"
@@ -7689,7 +7689,7 @@ export const Constants = {
         "trolling",
         "other",
       ],
-      market_status: ["active", "closed", "resolved", "cancelled"],
+      market_status: ["active", "closed", "resolved", "cancelled", "draft", "paused", "rejected"],
       moderation_status: [
         "clean",
         "pending_review",

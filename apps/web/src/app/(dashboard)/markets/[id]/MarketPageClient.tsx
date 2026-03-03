@@ -39,6 +39,7 @@ import { MarketStatsBanner } from '@/components/market/MarketStatsBanner';
 import { TopPositionsLeaderboard } from '@/components/market/TopPositionsLeaderboard';
 import { MarketActions } from '@/components/market/MarketActions';
 import { MultiOutcomeList } from '@/components/market/MultiOutcomeList';
+import { RelatedMarkets } from '@/components/market/RelatedMarkets';
 import { MarketOutcome } from '@/types';
 import { MobileTradingBar } from '@/components/trading/MobileTradingBar';
 
@@ -466,6 +467,14 @@ export function MarketPageClient({ initialMarket }: MarketPageClientProps) {
                                 <TopPositionsLeaderboard marketId={market.id} />
                             </TabsContent>
                         </Tabs>
+                    </div>
+
+                    {/* Related Markets */}
+                    <div className="mt-10 pt-10 border-t border-primary/10">
+                        <RelatedMarkets
+                            currentMarketId={market.id}
+                            category={market.category}
+                        />
                     </div>
                 </div>
 

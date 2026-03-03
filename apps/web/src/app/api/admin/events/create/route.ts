@@ -230,40 +230,152 @@ export async function POST(request: NextRequest) {
     const eventId = event.id;
     console.log('[Event Create] Event created:', eventId);
 
-    // 5. Trigger Upstash Workflow for asynchronous Market Creation
+    // 5. Create Market SYNCHRONOUSLY (not async) to ensure reliability
+    // We create the market immediately in the same request to guarantee it exists
+    console.log('[Event Create] Creating market for event:', eventId);
+
+    // Only use columns that exist in the markets table
+    const marketInsertData = {
+      event_id: eventId,
+      name: data.title,
+      question: data.question,
+      description: data.description || null,
+      category: data.category,
+      subcategory: data.subcategory || null,
+      trading_closes_at: data.trading_closes_at,
+      event_date: data.trading_closes_at,  // Required field
+      initial_liquidity: data.initial_liquidity,
+      liquidity: data.initial_liquidity,
+      status: 'active',
+      slug: `${data.slug}-market`,
+      answer_type: 'binary',
+      answer1: data.answer1,
+      answer2: data.answer2,
+      is_featured: data.is_featured || false,
+      created_by: user.id,
+      image_url: data.image_url || null,
+      total_volume: 0,
+    };
+
+    const { data: market, error: marketError } = await supabase
+      .from('markets')
+      .insert(marketInsertData)
+      .select()
+      .single();
+
+    if (marketError) {
+      console.error('[Event Create] Market insert error:', marketError);
+      // Don't fail the whole request - event is already created
+      // Return success but with warning
+      return NextResponse.json({
+        success: true,
+        warning: 'Event created but market creation failed. Please create market manually.',
+        event_id: eventId,
+        market_id: null,
+        slug: data.slug,
+        title: data.title,
+        execution_time_ms: Date.now() - startTime,
+      });
+    }
+
+    const marketId = market.id;
+    console.log('[Event Create] Market created:', marketId);
+
+    // 6. Update event with market_id
+    await supabase
+      .from('events')
+      .update({ market_id: marketId })
+      .eq('id', eventId);
+
+    // 7. Create outcomes in the outcomes table
+    try {
+      const outcomes = [
+        {
+          market_id: marketId,
+          label: 'Yes',
+          label_bn: data.answer1 || 'হ্যাঁ (Yes)',
+          current_price: 0.5,
+          display_order: 0,
+        },
+        {
+          market_id: marketId,
+          label: 'No',
+          label_bn: data.answer2 || 'না (No)',
+          current_price: 0.5,
+          display_order: 1,
+        }
+      ];
+
+      const { error: outcomesError } = await supabase.from('outcomes').insert(outcomes);
+      if (outcomesError) {
+        console.warn('[Event Create] Outcomes creation error:', outcomesError.message);
+      } else {
+        console.log('[Event Create] Outcomes created for market:', marketId);
+      }
+    } catch (outcomesError: any) {
+      console.warn('[Event Create] Outcomes creation failed:', outcomesError.message);
+    }
+
+    // 8. Seed initial orderbook for the market
+    try {
+      const seedOrders = [
+        {
+          market_id: marketId,
+          user_id: user.id,
+          order_type: 'limit',
+          side: 'buy',
+          outcome: 'YES',
+          price: 0.48,
+          quantity: Math.floor(data.initial_liquidity / 2 / 0.48),
+          status: 'open',
+          filled_quantity: 0,
+        },
+        {
+          market_id: marketId,
+          user_id: user.id,
+          order_type: 'limit',
+          side: 'buy',
+          outcome: 'NO',
+          price: 0.48,
+          quantity: Math.floor(data.initial_liquidity / 2 / 0.48),
+          status: 'open',
+          filled_quantity: 0,
+        }
+      ];
+
+      const { error: seedError } = await supabase.from('orders').insert(seedOrders);
+      if (seedError) {
+        console.warn('[Event Create] Orderbook seeding error:', seedError.message);
+      } else {
+        console.log('[Event Create] Orderbook seeded with initial liquidity');
+      }
+    } catch (seedError: any) {
+      console.warn('[Event Create] Orderbook seeding failed:', seedError.message);
+    }
+
+    // 9. Also trigger async workflow for any additional processing (non-critical)
     if (process.env.QSTASH_TOKEN) {
       try {
         const baseUrl = process.env.NEXT_PUBLIC_APP_URL ||
           (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
-
         const qstashClient = new QStashClient({ token: process.env.QSTASH_TOKEN });
-
-        console.log('[Event Create] Publishing market creation job to QStash for event:', eventId);
         await qstashClient.publishJSON({
-          url: `${baseUrl}/api/workflows/create-market`,
-          body: {
-            eventId,
-            userId: user.id,
-            eventData: data
-          },
-          retries: 3
+          url: `${baseUrl}/api/workflows/event-processor`,
+          body: { event_id: eventId, market_id: marketId, action: 'post_create' },
+          retries: 2
         });
       } catch (workflowError: any) {
-        console.error('[Event Create] Failed to push to QStash:', workflowError.message);
-        // It's critical we don't completely swallow this if QStash is down, but we return a partial success
-        // or we could throw. For now, we proceed so the event is created.
+        console.warn('[Event Create] Async workflow trigger failed:', workflowError.message);
       }
-    } else {
-      console.warn('[Event Create] QSTASH_TOKEN not found — skipping async market creation.');
     }
 
-    // 6. Return success response (marketId is null initially because it creates asynchronously)
-    console.log('[Event Create] Success! Event:', eventId, '(Market creating async)');
+    // 9. Return success response
+    console.log('[Event Create] Success! Event:', eventId, 'Market:', marketId);
     return NextResponse.json({
       success: true,
-      message: 'Event created. Market is being configured asynchronously.',
+      message: 'Event and market created successfully',
       event_id: eventId,
-      market_id: null,
+      market_id: marketId,
       slug: data.slug,
       title: data.title,
       execution_time_ms: Date.now() - startTime,

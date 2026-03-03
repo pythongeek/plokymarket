@@ -22,8 +22,8 @@ export async function GET() {
             return NextResponse.json({
                 success: true,
                 rate: {
-                    usdt_to_bdt: 120,
-                    bdt_to_usdt: 0.0083,
+                    usdt_to_bdt: 119,
+                    bdt_to_usdt: 0.008403,
                     source: 'default',
                     fetched_at: new Date().toISOString()
                 }

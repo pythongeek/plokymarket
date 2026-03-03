@@ -22,10 +22,26 @@ export const preferredRegion = 'sin1';
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
 
-  try {
-    const payload = await request.json();
-    const { step, data } = payload;
+  let payload: Record<string, unknown> = {};
+  let step = 'find-closing-markets';
+  let workflowData: Record<string, unknown> = {};
 
+  // Try to parse JSON body, fall back to defaults if empty or invalid
+  try {
+    const contentType = request.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      const text = await request.text();
+      if (text && text.trim()) {
+        payload = JSON.parse(text);
+        step = (payload.step as string) || step;
+        workflowData = (payload.data as Record<string, unknown>) || {};
+      }
+    }
+  } catch (parseError) {
+    console.log('[MarketCloseCheck] No valid JSON payload, using defaults');
+  }
+
+  try {
     const supabase = await createServiceClient();
 
     // Step 1: Find markets closing in next hour
@@ -37,7 +53,7 @@ export async function POST(request: NextRequest) {
 
       const { data: closingMarkets, error: marketError } = await supabase
         .from('markets')
-        .select('id, name, name_bn')
+        .select('id, name')
         .eq('status', 'active')
         .lte('trading_closes_at', in1Hour)
         .gt('trading_closes_at', now)
@@ -61,7 +77,7 @@ export async function POST(request: NextRequest) {
 
     // Step 2: Notify followers
     if (step === 'notify-followers') {
-      const { closingMarkets } = data;
+      const closingMarkets = workflowData.closingMarkets as Array<{ id: string, name: string }> || [];
       let totalNotifications = 0;
 
       for (const market of closingMarkets) {
@@ -88,7 +104,7 @@ export async function POST(request: NextRequest) {
             title: '⏰ মার্কেট শীঘ্রই বন্ধ হবে',
             title_bn: '⏰ মার্কেট শীঘ্রই বন্ধ হবে',
             body: `${market.name} — ১ ঘণ্টার মধ্যে ট্রেডিং বন্ধ হবে`,
-            body_bn: `${market.name_bn || market.name} — ১ ঘণ্টার মধ্যে ট্রেডিং বন্ধ হবে`,
+            body_bn: `${market.name} — ১ ঘণ্টার মধ্যে ট্রেডিং বন্ধ হবে`,
             market_id: market.id,
             action_url: `/markets/${market.id}`,
           }));
@@ -122,7 +138,7 @@ export async function POST(request: NextRequest) {
 
     // Step 3: Mark markets as warned
     if (step === 'mark-warned') {
-      const { closingMarkets } = data;
+      const closingMarkets = workflowData.closingMarkets as Array<{ id: string }> || [];
       let markedCount = 0;
 
       for (const market of closingMarkets) {

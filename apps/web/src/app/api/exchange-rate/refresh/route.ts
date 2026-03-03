@@ -77,8 +77,8 @@ export async function POST(request: NextRequest) {
             success: false,
             error: error.message,
             rate: lastRate || {
-                usdt_to_bdt: 120,
-                bdt_to_usdt: 0.0083,
+                usdt_to_bdt: 119,
+                bdt_to_usdt: 0.008403,
                 source: 'fallback',
                 fetched_at: new Date().toISOString()
             }

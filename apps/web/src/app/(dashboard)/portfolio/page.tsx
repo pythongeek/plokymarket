@@ -29,6 +29,7 @@ import { Progress } from '@/components/ui/progress';
 import { useUser } from '@/hooks/useUser';
 import { PnLDashboard } from '@/components/portfolio/PnLDashboard';
 import { PositionHistory } from '@/components/portfolio/PositionHistory';
+import { PositionDashboard } from '@/components/portfolio/PositionDashboard';
 import { PerformanceCharts } from '@/components/portfolio/PerformanceCharts';
 import { TransactionHistory } from '@/components/portfolio/TransactionHistory';
 import { PortfolioErrorBoundary } from '@/components/portfolio/ErrorBoundary';
@@ -412,7 +413,10 @@ export default function PortfolioPage() {
                       exit={{ opacity: 0, y: -20 }}
                     >
                       <PortfolioErrorBoundary>
-                        <PositionHistory userId={user?.id} />
+                        <PositionDashboard userId={user?.id} />
+                        <div className="mt-6">
+                          <PositionHistory userId={user?.id} />
+                        </div>
                       </PortfolioErrorBoundary>
                     </motion.div>
                   </TabsContent>

@@ -114,19 +114,15 @@ const schedules = [
   }
 ];
 
-// Manual Workflows (can be triggered from admin panel)
+// Manual Workflows (can be triggered from admin panel - NO duplicates from scheduled)
 const manualWorkflows = [
   { name: 'Dispute Workflow', endpoint: '/api/dispute-workflow', description: 'Process pending disputes' },
   { name: 'News Market Data', endpoint: '/api/workflows/execute-news', description: 'Fetch news market data' },
   { name: 'Batch Markets', endpoint: '/api/cron/batch-markets', description: 'Batch process markets' },
   { name: 'Daily Report', endpoint: '/api/workflows/daily-report', description: 'Generate daily report' },
   { name: 'Auto-Verification', endpoint: '/api/workflows/auto-verify', description: 'Check pending deposits' },
-  { name: 'Combined Market Data', endpoint: '/api/workflows/combined-market-data', description: 'Manual run of combined market data' },
-  { name: 'Combined Analytics', endpoint: '/api/workflows/combined-analytics', description: 'Manual run of combined analytics' },
-  { name: 'Combined Daily Ops', endpoint: '/api/workflows/combined-daily-ops', description: 'Manual run of daily operations' },
-  // Phase 2 Workflows
-  { name: 'Price Snapshot', endpoint: '/api/upstash-workflow/price-snapshot', description: 'Hourly price snapshot recording' },
-  { name: 'Market Close Check', endpoint: '/api/upstash-workflow/market-close-check', description: 'Check markets closing soon' }
+  // Note: Combined Market Data, Combined Analytics, Combined Daily Ops, Price Snapshot, Market Close Check
+  // are already in the scheduled list above - no need to duplicate in manual
 ];
 
 async function createSchedule(schedule) {

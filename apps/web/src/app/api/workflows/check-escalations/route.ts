@@ -17,70 +17,67 @@ export async function POST(request: NextRequest) {
 
     const supabase = await createClient();
 
-    // Find escalated events that need manual review
-    const { data: escalations, error } = await supabase
-      .from('workflow_executions')
-      .select(`
-        id,
-        event_id,
-        workflow_id,
-        outcome,
-        confidence,
-        created_at,
-        markets:event_id (question, category)
-      `)
-      .eq('outcome', 'escalated')
-      .eq('notified', false)
+    // Note: The workflow_executions table schema doesn't match what this endpoint expects
+    // The table has: id, workflow_name, status, results, error_message, started_at, completed_at, duration_ms, created_at
+    // It does NOT have: event_id, outcome, confidence, notified columns
+    // This endpoint was designed for a different schema - returning success for now
+
+    // Check for escalated settlements in the proper table instead
+    const { data: settlementEscalations, error: settlementError } = await supabase
+      .from('settlement_escalations')
+      .select('id, market_id, reason, status, created_at')
+      .eq('status', 'open')
       .order('created_at', { ascending: false })
       .limit(50);
 
-    if (error) {
-      console.error('[Escalation Check] Database error:', error);
+    if (settlementError) {
+      console.error('[Escalation Check] Database error:', settlementError);
       return NextResponse.json({ error: 'Database error' }, { status: 500 });
     }
 
-    if (!escalations || escalations.length === 0) {
-      return NextResponse.json({ 
-        success: true, 
+    if (!settlementEscalations || settlementEscalations.length === 0) {
+      return NextResponse.json({
+        success: true,
         message: 'No new escalations to process',
-        escalations: 0 
+        escalations: 0
       });
     }
 
+    // Process settlement escalations
     const processed = [];
 
-    // Process each escalation
-    for (const escalation of escalations) {
+    for (const escalation of settlementEscalations) {
       try {
+        // Get market info
+        const { data: market } = await supabase
+          .from('markets')
+          .select('question, name_bn')
+          .eq('id', escalation.market_id)
+          .single();
+
         // Create notification for admin
         await supabase.from('notifications').insert({
-          user_id: null, // System notification
-          type: 'escalation',
-          title: 'Event Requires Manual Review',
-          message: `Event "${escalation.markets?.question}" has been escalated with ${escalation.confidence}% confidence`,
+          user_id: null,
+          type: 'settlement_escalation',
+          title: 'Settlement Escalation Requires Review',
+          message: `Market "${market?.question || escalation.market_id}" has a settlement issue: ${escalation.reason}`,
           data: {
-            eventId: escalation.event_id,
-            workflowId: escalation.workflow_id,
-            executionId: escalation.id
+            marketId: escalation.market_id,
+            escalationId: escalation.id,
+            reason: escalation.reason
           },
           created_at: new Date().toISOString()
         });
 
-        // Mark as notified
-        await supabase
-          .from('workflow_executions')
-          .update({ notified: true })
-          .eq('id', escalation.id);
-
         processed.push({
-          executionId: escalation.id,
-          eventId: escalation.event_id,
-          category: escalation.markets?.category
+          escalationId: escalation.id,
+          marketId: escalation.market_id,
+          reason: escalation.reason
         });
 
-        console.log(`[Escalation Check] Notified for ${escalation.event_id}`);
+        console.log(`[Escalation Check] Processed settlement escalation for ${escalation.market_id}`);
       } catch (notifyError) {
-        console.error(`[Escalation Check] Failed to notify ${escalation.id}:`, notifyError);
+        console.error(`[Escalation Check] Failed to process ${escalation.id}:`, notifyError);
       }
     }
 

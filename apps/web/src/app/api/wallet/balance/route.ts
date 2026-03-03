@@ -39,16 +39,16 @@ export async function GET(request: Request) {
       );
     }
 
-    // Get current exchange rate
+    // Get current exchange rate from live table
     const { data: exchangeRateData, error: rateError } = await supabase
-      .from('exchange_rates')
-      .select('bdt_to_usdt')
-      .eq('effective_until', null)
-      .order('effective_from', { ascending: false })
+      .from('exchange_rates_live')
+      .select('usdt_to_bdt')
+      .eq('is_active', true)
+      .order('fetched_at', { ascending: false })
       .limit(1)
       .single();
 
-    const exchangeRate = rateError ? 100.0000 : exchangeRateData.bdt_to_usdt;
+    const exchangeRate = rateError ? 119.0000 : exchangeRateData.usdt_to_bdt;
 
     // Calculate BDT equivalent
     const bdtEquivalent = parseFloat((profile.balance * exchangeRate).toFixed(2));
