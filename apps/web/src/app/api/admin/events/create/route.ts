@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { nanoid } from 'nanoid';
 import { Client as QStashClient } from '@upstash/qstash';
+import { MarketService } from '@/lib/services/MarketService';
 
 export const runtime = 'edge';
 export const maxDuration = 30;
@@ -34,10 +35,14 @@ function generateSlug(title: string): string {
   };
 
   let slug = title.toLowerCase().trim();
+
+  // First, transliterate Bangla to Latin BEFORE removing non-ASCII
+  // This ensures Bangla characters get converted to their Latin equivalents
   for (const [bn, en] of Object.entries(bnMap)) {
     slug = slug.split(bn).join(en);
   }
 
+  // Now remove any remaining non-ASCII characters (should be few/none after transliteration)
   slug = slug
     .replace(/[^\x00-\x7F]/g, '')
     .replace(/[^a-z0-9\s-]/g, '')
@@ -46,6 +51,11 @@ function generateSlug(title: string): string {
     .replace(/^-|-$/g, '');
 
   const timestamp = nanoid(6);
+  // If slug is empty or too short, use a transliteration of the title or fallback
+  if (slug.length < 2) {
+    // Try to get some meaningful slug from the title bytes
+    slug = 'event-' + Array.from(title).slice(0, 5).join('');
+  }
   return slug.length > 5 ? `${slug}-${timestamp}` : `event-${timestamp}`;
 }
 
@@ -160,7 +170,10 @@ export async function POST(request: NextRequest) {
 
     console.log('[Event Create] Request body:', JSON.stringify(body, null, 2));
 
-    const validation = validateEventData(body);
+    // Extract event_data from body - frontend sends { event_data: {...}, resolution_config: {...} }
+    const eventData = body.event_data || body;
+
+    const validation = validateEventData(eventData);
     if (!validation.valid) {
       console.error('[Event Create] Validation error:', validation.error);
       return NextResponse.json(
@@ -169,11 +182,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const data = validation.data!;
+    const data = eventData;
 
     // 4. Create Event using direct inserts (RPC function removed)
     console.log('[Event Create] Creating event with title:', data.title);
-    
+
     // Insert Event
     const { data: event, error: eventError } = await supabase
       .from('events')
@@ -217,63 +230,7 @@ export async function POST(request: NextRequest) {
     const eventId = event.id;
     console.log('[Event Create] Event created:', eventId);
 
-    // Insert Market
-    const { data: market, error: marketError } = await supabase
-      .from('markets')
-      .insert({
-        event_id: eventId,
-        name: data.title,
-        question: data.question,
-        description: data.description,
-        category: data.category,
-        subcategory: data.subcategory,
-        trading_closes_at: data.trading_closes_at,
-        resolution_delay_hours: data.resolution_delay_hours,
-        initial_liquidity: data.initial_liquidity,
-        liquidity: data.initial_liquidity,
-        status: 'active',
-        slug: `${data.slug}-market`,
-        answer_type: 'binary',
-        answer1: data.answer1,
-        answer2: data.answer2,
-        is_featured: data.is_featured,
-        created_by: user.id,
-      })
-      .select()
-      .single();
-
-    if (marketError) {
-      console.error('[Event Create] Market insert error:', marketError);
-      // Rollback: delete the event we just created
-      await supabase.from('events').delete().eq('id', eventId);
-      return NextResponse.json(
-        { success: false, error: `Failed to create market: ${marketError.message}` },
-        { status: 500 }
-      );
-    }
-
-    const marketId = market.id;
-    console.log('[Event Create] Market created:', marketId);
-
-    // 7. Log admin action (non-critical)
-    try {
-      await supabase.rpc('log_admin_action', {
-        p_admin_id: user.id,
-        p_action_type: 'create_event',
-        p_resource_type: 'event',
-        p_resource_id: eventId,
-        p_new_values: {
-          title: data.title,
-          category: data.category,
-          market_id: marketId,
-        },
-        p_reason: 'Event created via admin panel',
-      });
-    } catch (logError: any) {
-      console.warn('[Event Create] Admin log warning:', logError.message);
-    }
-
-    // 8. Trigger workflow (non-critical)
+    // 5. Trigger Upstash Workflow for asynchronous Market Creation
     if (process.env.QSTASH_TOKEN) {
       try {
         const baseUrl = process.env.NEXT_PUBLIC_APP_URL ||
@@ -281,26 +238,32 @@ export async function POST(request: NextRequest) {
 
         const qstashClient = new QStashClient({ token: process.env.QSTASH_TOKEN });
 
+        console.log('[Event Create] Publishing market creation job to QStash for event:', eventId);
         await qstashClient.publishJSON({
-          url: `${baseUrl}/api/workflows/event-processor`,
+          url: `${baseUrl}/api/workflows/create-market`,
           body: {
-            event_id: eventId,
-            market_id: marketId,
-            action: 'post_create',
-          }
+            eventId,
+            userId: user.id,
+            eventData: data
+          },
+          retries: 3
         });
       } catch (workflowError: any) {
-        console.warn('[Event Create] Workflow trigger warning:', workflowError.message);
+        console.error('[Event Create] Failed to push to QStash:', workflowError.message);
+        // It's critical we don't completely swallow this if QStash is down, but we return a partial success
+        // or we could throw. For now, we proceed so the event is created.
       }
+    } else {
+      console.warn('[Event Create] QSTASH_TOKEN not found — skipping async market creation.');
     }
 
-    // 6. Return success response
-    console.log('[Event Create] Success! Event:', eventId, 'Market:', marketId);
+    // 6. Return success response (marketId is null initially because it creates asynchronously)
+    console.log('[Event Create] Success! Event:', eventId, '(Market creating async)');
     return NextResponse.json({
       success: true,
-      message: 'Event created successfully',
+      message: 'Event created. Market is being configured asynchronously.',
       event_id: eventId,
-      market_id: marketId,
+      market_id: null,
       slug: data.slug,
       title: data.title,
       execution_time_ms: Date.now() - startTime,

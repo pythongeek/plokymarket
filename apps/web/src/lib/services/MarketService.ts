@@ -23,7 +23,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 function getAdminClient(): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-           || process.env.SUPABASE_SECRET_KEY!;
+    || process.env.SUPABASE_SECRET_KEY!;
   if (!url || !key) {
     throw new Error('[MarketService] Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
   }
@@ -35,25 +35,74 @@ function getAdminClient(): SupabaseClient {
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export interface MarketStats {
-  market_id:    string;
-  yes_price:    number;   // 0.00 – 1.00
-  no_price:     number;
+  market_id: string;
+  yes_price: number;   // 0.00 – 1.00
+  no_price: number;
   total_volume: number;   // BDT
-  liquidity:    number;   // BDT in orderbook
+  liquidity: number;   // BDT in orderbook
   trader_count: number;
-  trade_count:  number;
+  trade_count: number;
   price_24h_delta: number; // percentage points, e.g. +3.5
 }
 
 export interface OrderbookSeedResult {
-  success:  boolean;
+  success: boolean;
   order_ids: string[];
-  error?:   string;
+  error?: string;
 }
 
 // ── MarketService ────────────────────────────────────────────────────────────
 
 export class MarketService {
+
+  /**
+   * Create a market and immediately seed the initial orderbook.
+   * This ensures the market is tradeable from the moment it is visible.
+   */
+  async createMarketWithLiquidity(
+    eventId: string,
+    marketData: any,
+    initialLiquidity: number
+  ): Promise<any> {
+    const supabase = getAdminClient();
+
+    // 1. Prepare data with Safe Mapping for event_date
+    // সিনিয়র ইঞ্জিনিয়াররা কখনোই আশা করেন না যে সব ডেটা পারফেক্ট থাকবে।
+    const finalMarketData = {
+      ...marketData,
+      event_id: eventId,
+      // যদি event_date না থাকে, তবে trading_closes_at ব্যবহার করো, তাও না থাকলে বর্তমান সময়
+      event_date: marketData.event_date || marketData.trading_closes_at || new Date().toISOString(),
+      status: marketData.status || 'active'
+    };
+
+    // 2. Insert market
+    const { data: market, error } = await supabase
+      .from('markets')
+      .insert(finalMarketData)
+      .select()
+      .single();
+
+    if (error || !market) {
+      console.error('[MarketService] createMarketWithLiquidity: Error creating market', error);
+      throw new Error(error?.message || 'Failed to create market');
+    }
+
+    // 3. Seed initial orderbook
+    // Use creator_id for seeding if available
+    const adminIdForSeeding = marketData.creator_id || market.created_by;
+
+    if (adminIdForSeeding && initialLiquidity > 0) {
+      try {
+        await this.seedInitialOrderbook(market.id, adminIdForSeeding, initialLiquidity);
+      } catch (seedError) {
+        console.error('[MarketService] createMarketWithLiquidity: Liquidity seeding failed', seedError);
+        // We don't throw here as the market is already created, but we log it
+      }
+    }
+
+    return market;
+  }
 
   /**
    * Seed the orderbook for a freshly created market.
@@ -94,28 +143,28 @@ export class MarketService {
 
     const seedOrders = [
       {
-        market_id:    marketId,
-        user_id:      adminId,
-        order_type:   'limit',
-        side:         'buy',
-        outcome:      'yes',
-        price:        0.48,
-        quantity:     halfLiquidity,
-        filled:       0,
-        status:       'open',
-        created_at:   new Date().toISOString(),
+        market_id: marketId,
+        user_id: adminId,
+        order_type: 'limit',
+        side: 'buy',
+        outcome: 'yes',
+        price: 0.48,
+        quantity: halfLiquidity,
+        filled: 0,
+        status: 'open',
+        created_at: new Date().toISOString(),
       },
       {
-        market_id:    marketId,
-        user_id:      adminId,
-        order_type:   'limit',
-        side:         'buy',
-        outcome:      'no',
-        price:        0.48,
-        quantity:     halfLiquidity,
-        filled:       0,
-        status:       'open',
-        created_at:   new Date().toISOString(),
+        market_id: marketId,
+        user_id: adminId,
+        order_type: 'limit',
+        side: 'buy',
+        outcome: 'no',
+        price: 0.48,
+        quantity: halfLiquidity,
+        filled: 0,
+        status: 'open',
+        created_at: new Date().toISOString(),
       },
     ];
 
@@ -169,23 +218,23 @@ export class MarketService {
     const calcWeightedAvg = (outcome: 'yes' | 'no') => {
       const relevant = trades.filter(t => t.outcome === outcome);
       if (relevant.length === 0) return 0.50; // fair default
-      const totalQty   = relevant.reduce((s, t) => s + t.quantity, 0);
+      const totalQty = relevant.reduce((s, t) => s + t.quantity, 0);
       const weightedSum = relevant.reduce((s, t) => s + t.price * t.quantity, 0);
       return totalQty > 0 ? weightedSum / totalQty : 0.50;
     };
 
     const yesPrice = parseFloat(calcWeightedAvg('yes').toFixed(4));
-    const noPrice  = parseFloat((1 - yesPrice).toFixed(4)); // binary constraint: yes + no = 1
+    const noPrice = parseFloat((1 - yesPrice).toFixed(4)); // binary constraint: yes + no = 1
 
     const totalVolume = trades.reduce((s, t) => s + (t.quantity * t.price), 0);
 
     await supabase
       .from('markets')
       .update({
-        yes_price:    yesPrice,
-        no_price:     noPrice,
+        yes_price: yesPrice,
+        no_price: noPrice,
         total_volume: totalVolume,
-        updated_at:   new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       })
       .eq('id', marketId);
 
@@ -227,9 +276,9 @@ export class MarketService {
 
     const traderSet = new Set<string>();
     (traderRows || []).forEach(t => {
-      if (t.buyer_id)  traderSet.add(t.buyer_id);
+      if (t.buyer_id) traderSet.add(t.buyer_id);
       if (t.seller_id) traderSet.add(t.seller_id);
-      if (t.user_id)   traderSet.add(t.user_id);
+      if (t.user_id) traderSet.add(t.user_id);
     });
 
     // 24h price delta: compare current yes_price with price 24h ago
@@ -244,17 +293,17 @@ export class MarketService {
       .maybeSingle();
 
     const currentYes = market.yes_price ?? 0.50;
-    const oldYes     = oldPriceRow?.yes_price ?? currentYes;
-    const delta24h   = parseFloat(((currentYes - oldYes) * 100).toFixed(2)); // in % points
+    const oldYes = oldPriceRow?.yes_price ?? currentYes;
+    const delta24h = parseFloat(((currentYes - oldYes) * 100).toFixed(2)); // in % points
 
     return {
-      market_id:       marketId,
-      yes_price:       currentYes,
-      no_price:        market.no_price ?? (1 - currentYes),
-      total_volume:    market.total_volume ?? 0,
-      liquidity:       market.liquidity ?? 0,
-      trader_count:    traderSet.size,
-      trade_count:     tradeCount ?? 0,
+      market_id: marketId,
+      yes_price: currentYes,
+      no_price: market.no_price ?? (1 - currentYes),
+      total_volume: market.total_volume ?? 0,
+      liquidity: market.liquidity ?? 0,
+      trader_count: traderSet.size,
+      trade_count: tradeCount ?? 0,
       price_24h_delta: delta24h,
     };
   }
@@ -281,7 +330,7 @@ export class MarketService {
       return { seeded: [], skipped: [] };
     }
 
-    const seeded:  string[] = [];
+    const seeded: string[] = [];
     const skipped: string[] = [];
 
     for (const { id } of markets) {

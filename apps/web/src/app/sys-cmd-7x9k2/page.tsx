@@ -123,13 +123,13 @@ export default function AdminDashboard() {
         .select('*', { count: 'exact', head: true })
         .eq('status', 'active');
 
-      // Fetch pending market reviews (graceful fallback if table missing)
+      // Fetch pending market reviews - use correct field name legal_review_status
       let pendingMarkets = 0;
       try {
         const { count, error } = await supabase
           .from('market_creation_drafts')
           .select('*', { count: 'exact', head: true })
-          .in('status', ['legal_review', 'liquidity_commitment']);
+          .in('legal_review_status', ['pending', 'escalated']);
         if (!error) pendingMarkets = count || 0;
       } catch {
         // table may not exist
@@ -148,13 +148,13 @@ export default function AdminDashboard() {
         // trades table may not exist
       }
 
-      // Fetch pending reviews (graceful fallback)
+      // Fetch pending reviews - use correct field name legal_review_status
       let pendingReviews = 0;
       try {
         const { count, error } = await supabase
           .from('market_creation_drafts')
           .select('*', { count: 'exact', head: true })
-          .eq('status', 'legal_review');
+          .eq('legal_review_status', 'pending');
         if (!error) pendingReviews = count || 0;
       } catch {
         // table may not exist

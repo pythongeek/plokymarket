@@ -1,3 +1,5 @@
+const { withSentryConfig } = require("@sentry/nextjs");
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
     // Build checks - temporarily allowing TypeScript errors
@@ -10,4 +12,10 @@ const nextConfig = {
     },
 };
 
-module.exports = nextConfig;
+module.exports = withSentryConfig(nextConfig, {
+    org: "bdowneer-llc",
+    project: "sentry-bronze-marble",
+
+    // Upload source maps for readable stack traces
+    authToken: process.env.SENTRY_AUTH_TOKEN,
+  

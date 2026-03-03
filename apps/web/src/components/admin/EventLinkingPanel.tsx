@@ -40,8 +40,7 @@ export function EventLinkingPanel({ onSelectEvent }: EventLinkingPanelProps) {
     const fetchUnlinkedEvents = async () => {
         setLoading(true);
         try {
-            // Fetch events that don't have an associated market
-            // Using a subquery or a left join approach via Supabase
+            // First try with the FK subquery approach
             const { data, error } = await supabase
                 .from("events")
                 .select(`
@@ -51,13 +50,33 @@ export function EventLinkingPanel({ onSelectEvent }: EventLinkingPanelProps) {
           category, 
           trading_closes_at,
           status,
-          markets(id)
+          markets!event_id(id)
         `)
                 .eq("status", "active")
                 .is("markets.id", null)
                 .order("trading_closes_at", { ascending: true });
 
-            if (error) throw error;
+            if (error) {
+                // If FK error (400), fall back to simple query
+                console.warn("[EventLinkingPanel] FK query failed, using fallback:", error.message);
+                const { data: fallbackData } = await supabase
+                    .from("events")
+                    .select("id, title, question, category, trading_closes_at, status")
+                    .eq("status", "active")
+                    .order("trading_closes_at", { ascending: true });
+
+                // Filter out events that already have markets in separate query
+                if (fallbackData) {
+                    const { data: marketsData } = await supabase
+                        .from("markets")
+                        .select("event_id");
+
+                    const linkedEventIds = new Set((marketsData || []).map((m: any) => m.event_id).filter(Boolean));
+                    const unlinked = (fallbackData as any[]).filter((e: any) => !linkedEventIds.has(e.id));
+                    setEvents(unlinked);
+                }
+                return;
+            }
 
             // Filter out events that somehow still show markets array with data
             // (Supabase subquery might return empty array for unlinked)

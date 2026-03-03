@@ -28,7 +28,7 @@ export class PortfolioService {
             .from('positions')
             .select(`
         *,
-        market:markets!inner(id, question, current_yes_price, current_no_price)
+        market:markets!market_id!inner(id, question, current_yes_price, current_no_price)
       `)
             .eq('user_id', userId)
             .gt('total_shares', 0);

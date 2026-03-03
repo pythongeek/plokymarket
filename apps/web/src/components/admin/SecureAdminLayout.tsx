@@ -184,12 +184,12 @@ export function SecureAdminLayout({
       let pendingMarkets = 0;
       let supportTickets = 0;
 
-      // Graceful: market_creation_drafts may not exist
+      // Check market_creation_drafts - use correct field name legal_review_status
       try {
         const { count, error } = await supabase
           .from('market_creation_drafts')
           .select('*', { count: 'exact', head: true })
-          .eq('status', 'legal_review');
+          .eq('legal_review_status', 'pending');
         if (!error) pendingMarkets = count || 0;
       } catch { /* table may not exist */ }
 
@@ -321,7 +321,7 @@ export function SecureAdminLayout({
       icon: DollarSign,
       requiresSuper: false,
     },
-        {
+    {
       path: SECURE_PATHS.workflows,
       label: 'ওয়ার্কফ্লো',
       labelEn: 'Workflows',
@@ -467,7 +467,7 @@ export function SecureAdminLayout({
       <div className="flex">
         {/* Sidebar */}
         <aside className="w-64 min-h-[calc(100vh-4rem)] border-r border-gray-200 bg-gray-50 p-4">
-                    <nav className="space-y-1">
+          <nav className="space-y-1">
             {navItems.map((item, index) => {
               if (item.requiresSuper && !admin.is_super_admin) return null;
 

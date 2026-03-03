@@ -84,7 +84,7 @@ export function usePositionHistory(userId?: string, filters?: PositionFilters) {
         .from('positions')
         .select(`
           *,
-          markets:market_id (question, category, status, winning_outcome)
+          markets!market_id (question, category, status, winning_outcome)
         `)
         .eq('user_id', userId)
         .order('created_at', { ascending: false });

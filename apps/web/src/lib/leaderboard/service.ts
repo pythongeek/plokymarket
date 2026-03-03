@@ -11,7 +11,7 @@ export class LeaderboardService {
         // 1. Fetch Positions & Trades for PnL calculation
         const { data: positions } = await supabase
             .from('positions')
-            .select('*, markets(status, winning_outcome)')
+            .select('*, markets!market_id(status, winning_outcome)')
             .eq('user_id', userId);
 
         if (!positions || positions.length === 0) return;

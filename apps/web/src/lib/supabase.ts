@@ -125,7 +125,7 @@ export async function fetchPositions(userId: string) {
   if (!supabase) return [];
   const { data, error } = await supabase
     .from('positions')
-    .select('*, markets(*)')
+    .select('*, markets!market_id(*)')
     .eq('user_id', userId)
     .gt('quantity', 0);
   if (error) throw error;

@@ -8,23 +8,23 @@ import { supabase } from '@/lib/supabase';
 
 interface LogAdminActionParams {
   admin_id: string;
-  action_type: 
-    | 'create_event' 
-    | 'update_event' 
-    | 'delete_event' 
-    | 'resolve_event'
-    | 'approve_topic' 
-    | 'reject_topic' 
-    | 'pause_market' 
-    | 'resume_market'
-    | 'add_expert' 
-    | 'remove_expert' 
-    | 'resolve_dispute' 
-    | 'manual_override'
-    | 'update_oracle' 
-    | 'emergency_action'
-    | 'verify_expert'
-    | 'create_dispute';
+  action_type:
+  | 'create_event'
+  | 'update_event'
+  | 'delete_event'
+  | 'resolve_event'
+  | 'approve_topic'
+  | 'reject_topic'
+  | 'pause_market'
+  | 'resume_market'
+  | 'add_expert'
+  | 'remove_expert'
+  | 'resolve_dispute'
+  | 'manual_override'
+  | 'update_oracle'
+  | 'emergency_action'
+  | 'verify_expert'
+  | 'create_dispute';
   resource_type?: string;
   resource_id?: string;
   old_values?: Record<string, any>;
@@ -106,9 +106,9 @@ export async function logAdminActionServer(params: LogAdminActionParams & {
 
     if (params.request) {
       const headers = params.request.headers;
-      ip_address = headers.get('x-forwarded-for') || 
-                   headers.get('x-real-ip') || 
-                   'unknown';
+      ip_address = headers.get('x-forwarded-for') ||
+        headers.get('x-real-ip') ||
+        'unknown';
       user_agent = headers.get('user-agent') || 'unknown';
     }
 
@@ -120,7 +120,8 @@ export async function logAdminActionServer(params: LogAdminActionParams & {
         ...params,
         ip_address,
         user_agent
-      })
+      }),
+      keepalive: true // ENSURE log reaches server even on page navigation
     });
 
     if (!response.ok) {

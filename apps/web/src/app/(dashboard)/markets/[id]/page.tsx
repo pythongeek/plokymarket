@@ -7,13 +7,25 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const supabase = await createClient();
 
   // Try to find market by ID or event_id
+  // Use safe approach - try simple select first, then fetch events separately if needed
   const { data } = await supabase
     .from('markets')
-    .select('*, events(*)')
+    .select('*')
     .or(`id.eq.${id},event_id.eq.${id}`)
     .maybeSingle();
 
   const market = data as any;
+
+  // If market has event_id, try to fetch event name separately
+  let eventData = null;
+  if (market?.event_id) {
+    const { data: evt } = await supabase
+      .from('events')
+      .select('title, question, description')
+      .eq('id', market.event_id)
+      .maybeSingle();
+    eventData = evt;
+  }
 
   if (!market) {
     return {

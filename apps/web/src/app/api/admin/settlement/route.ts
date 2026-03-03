@@ -20,7 +20,7 @@ export async function GET(request: Request) {
         // Fetch claims
         let claimsQuery = supabase
             .from('settlement_claims')
-            .select('*, markets(question, status)')
+            .select('*, markets!market_id(question, status)')
             .order('created_at', { ascending: false })
             .limit(100);
 
@@ -30,7 +30,7 @@ export async function GET(request: Request) {
         // Fetch batches
         let batchesQuery = supabase
             .from('settlement_batches')
-            .select('*, markets(question, status)')
+            .select('*, markets!market_id(question, status)')
             .order('created_at', { ascending: false })
             .limit(50);
 

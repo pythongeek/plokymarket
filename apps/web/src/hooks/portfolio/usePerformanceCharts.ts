@@ -88,7 +88,7 @@ export function usePerformanceCharts(userId?: string, timeframe: '1M' | '3M' | '
         .from('trades')
         .select(`
           *,
-          markets:market_id (question, category, status, winning_outcome)
+          markets!market_id (question, category, status, winning_outcome)
         `)
         .eq('maker_id', userId)
         .gte('created_at', startDate.toISOString())
@@ -98,7 +98,7 @@ export function usePerformanceCharts(userId?: string, timeframe: '1M' | '3M' | '
         .from('trades')
         .select(`
           *,
-          markets:market_id (question, category, status, winning_outcome)
+          markets!market_id (question, category, status, winning_outcome)
         `)
         .eq('taker_id', userId)
         .gte('created_at', startDate.toISOString())
@@ -112,7 +112,7 @@ export function usePerformanceCharts(userId?: string, timeframe: '1M' | '3M' | '
         .from('positions')
         .select(`
           *,
-          markets:market_id (question, category, status, winning_outcome)
+          markets!market_id (question, category, status, winning_outcome)
         `)
         .eq('user_id', userId)
         .gte('created_at', startDate.toISOString());

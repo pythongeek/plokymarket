@@ -14,6 +14,16 @@ export default function RootLayout({
 }) {
   return (
     <html lang="bn" suppressHydrationWarning>
+      <head>
+        {(process.env.NODE_ENV === "development" || process.env.VERCEL_ENV === "preview") && (
+          // eslint-disable-next-line @next/next/no-sync-scripts
+          <script
+            data-recording-token="VveqfkUtMLGIWPhY9x57voUBCes5QuGPMavcjPp1"
+            data-is-production-environment="false"
+            src="https://snippet.meticulous.ai/v1/meticulous.js"
+          />
+        )}
+      </head>
       <body>
         <ClientProviders>
           {children}

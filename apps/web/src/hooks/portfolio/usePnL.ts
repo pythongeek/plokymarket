@@ -113,7 +113,7 @@ export function usePnL(userId?: string, timeHorizon: TimeHorizon = 'allTime') {
         .from('trades')
         .select(`
           *,
-          markets:market_id (question, category, status, winning_outcome)
+          markets!market_id (question, category, status, winning_outcome)
         `)
         .eq('maker_id', userId)
         .gte('created_at', startDate.toISOString());
@@ -122,7 +122,7 @@ export function usePnL(userId?: string, timeHorizon: TimeHorizon = 'allTime') {
         .from('trades')
         .select(`
           *,
-          markets:market_id (question, category, status, winning_outcome)
+          markets!market_id (question, category, status, winning_outcome)
         `)
         .eq('taker_id', userId)
         .gte('created_at', startDate.toISOString());
@@ -135,7 +135,7 @@ export function usePnL(userId?: string, timeHorizon: TimeHorizon = 'allTime') {
         .from('positions')
         .select(`
           *,
-          markets:market_id (question, category, status, winning_outcome, total_volume)
+          markets!market_id (question, category, status, winning_outcome, total_volume)
         `)
         .eq('user_id', userId)
         .gt('quantity', 0);
