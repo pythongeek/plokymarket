@@ -60,7 +60,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const data: AutoVerifyPayload = JSON.parse(body);
+    // Handle empty body - use default payload
+    let data: AutoVerifyPayload;
+    try {
+      data = body ? JSON.parse(body) : { workflowType: 'auto_verification', timestamp: new Date().toISOString() };
+    } catch (parseError) {
+      // If JSON parsing fails, use default payload
+      data = { workflowType: 'auto_verification', timestamp: new Date().toISOString() };
+    }
 
     // Create workflow execution record
     executionId = await createWorkflowExecution('auto_verification', { timestamp: data.timestamp });

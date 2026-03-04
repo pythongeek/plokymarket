@@ -26,6 +26,7 @@ import {
 // AI Agent Components
 import { AIAgentStatus } from '@/components/admin/AIAgentStatus';
 import { AIProposalPanel } from '@/components/admin/AIProposalPanel';
+import { MoAgentToolsPanel } from '@/components/admin/MoAgentToolsPanel';
 import { useAIAgents, useQuickEnhance, useDuplicateCheck, useRiskCheck } from '@/hooks/useAIAgents';
 import { useMarketProposals } from '@/hooks/useMarketProposals';
 import { AgentState, AgentOrchestrationResult } from '@/lib/ai-agents/types';
@@ -496,7 +497,7 @@ export default function EventCreationPage() {
       // Use fallback: title can come from question and vice versa
       const hasTitle = form.title.trim() || form.question.trim();
       const hasQuestion = form.question.trim() || form.title.trim();
-      
+
       if (!hasTitle) e.title = 'ইভেন্টের শিরোনাম বা প্রশ্ন আবশ্যক';
       else if ((form.title || form.question).length < 10) {
         e.title = 'শিরোনাম/প্রশ্ন কমপক্ষে ১০ অক্ষরের হতে হবে';
@@ -545,11 +546,11 @@ export default function EventCreationPage() {
       // Ensure title and question have fallbacks
       const title = form.title.trim() || form.question.trim();
       const question = form.question.trim() || form.title.trim();
-      
+
       if (!title || !question) {
         throw new Error('টাইটেল বা প্রশ্ন আবশ্যক');
       }
-      
+
       const payload = {
         title: title,
         question: question,
@@ -611,13 +612,28 @@ export default function EventCreationPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* AI Agent Status Panel */}
+      {/* MoAgent Tools Panel (non-blocking sidebar) */}
       {showAIAgents && (
-        <AIAgentStatus
-          agents={agents}
-          currentStep={agentStep}
-          isProcessing={isAIProcessing}
-          onRotateProvider={rotateProvider}
+        <MoAgentToolsPanel
+          formData={{
+            title: form.title,
+            question: form.question,
+            description: form.description,
+            category: form.category,
+            subcategory: form.subcategory,
+            tradingClosesAt: form.tradingClosesAt,
+            answer1: form.answer1,
+            answer2: form.answer2,
+            initialLiquidity: form.initialLiquidity,
+            tags: form.tags,
+          }}
+          onApplyResult={(field, value) => set(field as keyof FormData, value)}
+          onApplyMultiple={(updates) => {
+            Object.entries(updates).forEach(([field, value]) => {
+              set(field as keyof FormData, value);
+            });
+          }}
+          className="fixed right-4 top-20 w-80 z-20"
         />
       )}
 
@@ -640,7 +656,7 @@ export default function EventCreationPage() {
                 }`}
             >
               <Bot className="h-4 w-4" />
-              AI Agents
+              🤖 MoAgent AI
             </button>
             <button
               onClick={() => setShowPreview(!showPreview)}
@@ -1146,11 +1162,14 @@ export default function EventCreationPage() {
               <p className="text-gray-600 mb-4">{successData.title}</p>
               <div className="space-y-2 text-sm text-gray-500 mb-6">
                 <p>Event ID: <code className="bg-gray-100 px-2 py-1 rounded">{successData.eventId}</code></p>
+                {successData.marketId && (
+                  <p>Market ID: <code className="bg-gray-100 px-2 py-1 rounded">{successData.marketId}</code></p>
+                )}
                 <p>Slug: <code className="bg-gray-100 px-2 py-1 rounded">{successData.slug}</code></p>
               </div>
               <div className="flex gap-3">
                 <button
-                  onClick={() => router.push(`/markets/${successData.slug}`)}
+                  onClick={() => router.push(`/markets/${successData.marketId}`)}
                   className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
                 >
                   মার্কেট দেখুন

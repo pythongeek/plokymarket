@@ -410,7 +410,7 @@ export default function EventCreationPage() {
       toast.error('αªƒαª╛αªçαªƒαºçαª▓ αª¼αª╛ αª¬αºìαª░αª╢αºìαª¿ αª▓αª┐αªûαºüαª¿');
       return;
     }
-    
+
     await runWorkflow({
       title: form.title || form.question,
       description: form.description,
@@ -563,7 +563,7 @@ export default function EventCreationPage() {
         slug: result.slug,
         title: form.title,
       });
-      
+
       toast.success('Γ£à αªçαª¡αºçαª¿αºìαªƒ αª╕αª½αª▓αª¡αª╛αª¼αºç αªñαºêαª░αª┐ αª╣αª»αª╝αºçαª¢αºç!');
     } catch (err: any) {
       toast.error(err.message || 'αªòαª┐αª¢αºü αªÅαªòαªƒαª╛ αª¡αºüαª▓ αª╣αª»αª╝αºçαª¢αºç');
@@ -601,9 +601,8 @@ export default function EventCreationPage() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowAIAgents(!showAIAgents)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm transition-colors ${
-                showAIAgents ? 'bg-indigo-50 border-indigo-300 text-indigo-600' : 'border-gray-300 text-gray-600'
-              }`}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm transition-colors ${showAIAgents ? 'bg-indigo-50 border-indigo-300 text-indigo-600' : 'border-gray-300 text-gray-600'
+                }`}
             >
               <Bot className="h-4 w-4" />
               AI Agents
@@ -702,18 +701,15 @@ export default function EventCreationPage() {
 
         {/* Risk Warning */}
         {riskCheck && riskCheck.riskLevel !== 'low' && (
-          <div className={`mb-4 p-3 rounded-lg border ${
-            riskCheck.riskLevel === 'high' 
-              ? 'bg-red-50 border-red-200' 
+          <div className={`mb-4 p-3 rounded-lg border ${riskCheck.riskLevel === 'high'
+              ? 'bg-red-50 border-red-200'
               : 'bg-yellow-50 border-yellow-200'
-          }`}>
+            }`}>
             <div className="flex items-center gap-2">
-              <Shield className={`h-4 w-4 ${
-                riskCheck.riskLevel === 'high' ? 'text-red-500' : 'text-yellow-500'
-              }`} />
-              <span className={`text-sm ${
-                riskCheck.riskLevel === 'high' ? 'text-red-700' : 'text-yellow-700'
-              }`}>
+              <Shield className={`h-4 w-4 ${riskCheck.riskLevel === 'high' ? 'text-red-500' : 'text-yellow-500'
+                }`} />
+              <span className={`text-sm ${riskCheck.riskLevel === 'high' ? 'text-red-700' : 'text-yellow-700'
+                }`}>
                 Risk Level: {riskCheck.riskLevel.toUpperCase()}
               </span>
             </div>
@@ -738,7 +734,7 @@ export default function EventCreationPage() {
                 {isGeneratingProposals ? 'αª£αºçαª¿αª╛αª░αºçαªƒ αª╣αªÜαºìαª¢αºç...' : 'αª«αª╛αª░αºìαªòαºçαªƒ αª¬αºìαª░αª╕αºìαªñαª╛αª¼αª¿αª╛'}
               </button>
             </div>
-            
+
             <AIProposalPanel
               proposals={marketProposals}
               isLoading={isGeneratingProposals}
@@ -795,9 +791,8 @@ export default function EventCreationPage() {
                     value={form.title}
                     onChange={(e) => set('title', e.target.value)}
                     placeholder="αª»αºçαª«αª¿: αª¼αª┐αª¬αª┐αªÅαª▓ αº¿αºªαº¿αº¡-αªÅ αªÜαºìαª»αª╛αª«αºìαª¬αª┐αª»αª╝αª¿ αªòαºç αª╣αª¼αºç?"
-                    className={`w-full px-3 py-2.5 rounded-lg border text-sm ${
-                      errors.title ? 'border-red-400 bg-red-50' : 'border-gray-300'
-                    } focus:outline-none focus:ring-2 focus:ring-indigo-500`}
+                    className={`w-full px-3 py-2.5 rounded-lg border text-sm ${errors.title ? 'border-red-400 bg-red-50' : 'border-gray-300'
+                      } focus:outline-none focus:ring-2 focus:ring-indigo-500`}
                   />
                   {errors.title && <p className="mt-1 text-xs text-red-500">{errors.title}</p>}
                   <p className="mt-1 text-xs text-gray-500">SEO-optimized title for better visibility</p>
@@ -812,9 +807,8 @@ export default function EventCreationPage() {
                     value={form.question}
                     onChange={(e) => set('question', e.target.value)}
                     placeholder="αª»αºçαª«αª¿: αº¿αºªαº¿αº¡ αª╕αª╛αª▓αºçαª░ αª¼αª┐αª¬αª┐αªÅαª▓ αªÜαºìαª»αª╛αª«αºìαª¬αª┐αª»αª╝αª¿ αªòαºïαª¿ αªªαª▓ αª╣αª¼αºç?"
-                    className={`w-full px-3 py-2.5 rounded-lg border text-sm ${
-                      errors.question ? 'border-red-400 bg-red-50' : 'border-gray-300'
-                    } focus:outline-none focus:ring-2 focus:ring-indigo-500`}
+                    className={`w-full px-3 py-2.5 rounded-lg border text-sm ${errors.question ? 'border-red-400 bg-red-50' : 'border-gray-300'
+                      } focus:outline-none focus:ring-2 focus:ring-indigo-500`}
                   />
                   {errors.question && <p className="mt-1 text-xs text-red-500">{errors.question}</p>}
                 </div>
@@ -853,17 +847,16 @@ export default function EventCreationPage() {
           {step === 2 && (
             <div className="p-6 space-y-5">
               <h2 className="text-lg font-semibold text-gray-900">αªòαºìαª»αª╛αªƒαª╛αªùαª░αª┐ αª¿αª┐αª░αºìαª¼αª╛αªÜαª¿</h2>
-              
+
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {BD_CATEGORIES.map((cat) => (
                   <button
                     key={cat.value}
                     onClick={() => { set('category', cat.value); set('subcategory', ''); }}
-                    className={`p-4 rounded-xl border-2 text-left transition-all ${
-                      form.category === cat.value
+                    className={`p-4 rounded-xl border-2 text-left transition-all ${form.category === cat.value
                         ? `${cat.color} border-current ring-2 ring-offset-1`
                         : 'bg-white border-gray-200 hover:border-gray-300'
-                    }`}
+                      }`}
                   >
                     <span className="text-2xl mb-2 block">{cat.icon}</span>
                     <span className="text-sm font-medium">{cat.label}</span>
@@ -895,7 +888,7 @@ export default function EventCreationPage() {
           {step === 3 && (
             <div className="p-6 space-y-5">
               <h2 className="text-lg font-semibold text-gray-900">αª╕αª«αª»αª╝αª╕αºÇαª«αª╛ (Timing)</h2>
-              
+
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -905,9 +898,8 @@ export default function EventCreationPage() {
                     type="datetime-local"
                     value={form.tradingClosesAt}
                     onChange={(e) => set('tradingClosesAt', e.target.value)}
-                    className={`w-full px-3 py-2.5 rounded-lg border text-sm ${
-                      errors.tradingClosesAt ? 'border-red-400 bg-red-50' : 'border-gray-300'
-                    } focus:outline-none focus:ring-2 focus:ring-indigo-500`}
+                    className={`w-full px-3 py-2.5 rounded-lg border text-sm ${errors.tradingClosesAt ? 'border-red-400 bg-red-50' : 'border-gray-300'
+                      } focus:outline-none focus:ring-2 focus:ring-indigo-500`}
                   />
                   {errors.tradingClosesAt && <p className="mt-1 text-xs text-red-500">{errors.tradingClosesAt}</p>}
                   <p className="mt-1 text-xs text-gray-500">Asia/Dhaka timezone (UTC+6)</p>
@@ -935,7 +927,7 @@ export default function EventCreationPage() {
           {step === 4 && (
             <div className="p-6 space-y-5">
               <h2 className="text-lg font-semibold text-gray-900">αªëαªñαºìαªñαª░αª╕αª«αºéαª╣ (Outcomes)</h2>
-              
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -945,9 +937,8 @@ export default function EventCreationPage() {
                     type="text"
                     value={form.answer1}
                     onChange={(e) => set('answer1', e.target.value)}
-                    className={`w-full px-3 py-2.5 rounded-lg border text-sm ${
-                      errors.answer1 ? 'border-red-400 bg-red-50' : 'border-gray-300'
-                    } focus:outline-none focus:ring-2 focus:ring-indigo-500`}
+                    className={`w-full px-3 py-2.5 rounded-lg border text-sm ${errors.answer1 ? 'border-red-400 bg-red-50' : 'border-gray-300'
+                      } focus:outline-none focus:ring-2 focus:ring-indigo-500`}
                   />
                   {errors.answer1 && <p className="mt-1 text-xs text-red-500">{errors.answer1}</p>}
                 </div>
@@ -960,9 +951,8 @@ export default function EventCreationPage() {
                     type="text"
                     value={form.answer2}
                     onChange={(e) => set('answer2', e.target.value)}
-                    className={`w-full px-3 py-2.5 rounded-lg border text-sm ${
-                      errors.answer2 ? 'border-red-400 bg-red-50' : 'border-gray-300'
-                    } focus:outline-none focus:ring-2 focus:ring-indigo-500`}
+                    className={`w-full px-3 py-2.5 rounded-lg border text-sm ${errors.answer2 ? 'border-red-400 bg-red-50' : 'border-gray-300'
+                      } focus:outline-none focus:ring-2 focus:ring-indigo-500`}
                   />
                   {errors.answer2 && <p className="mt-1 text-xs text-red-500">{errors.answer2}</p>}
                 </div>
@@ -981,7 +971,7 @@ export default function EventCreationPage() {
           {step === 5 && (
             <div className="p-6 space-y-5">
               <h2 className="text-lg font-semibold text-gray-900">αª░αºçαª£αºïαª▓αª┐αªëαª╢αª¿ αª¬αªªαºìαªºαªñαª┐</h2>
-              
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {RESOLUTION_METHODS.map((method) => {
                   const Icon = method.icon;
@@ -990,9 +980,8 @@ export default function EventCreationPage() {
                     <button
                       key={method.value}
                       onClick={() => set('resolutionMethod', method.value)}
-                      className={`p-4 rounded-xl border-2 text-left transition-all ${
-                        isSelected ? method.activeColor : `${method.color} hover:opacity-80`
-                      }`}
+                      className={`p-4 rounded-xl border-2 text-left transition-all ${isSelected ? method.activeColor : `${method.color} hover:opacity-80`
+                        }`}
                     >
                       <div className="flex items-start gap-3">
                         <Icon className="h-5 w-5 mt-0.5" />
@@ -1025,7 +1014,7 @@ export default function EventCreationPage() {
           {step === 6 && (
             <div className="p-6 space-y-5">
               <h2 className="text-lg font-semibold text-gray-900">αª«αª╛αª░αºìαªòαºçαªƒ αª╕αºçαªƒαª┐αªéαª╕</h2>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">αª¬αºìαª░αª╛αªÑαª«αª┐αªò αª▓αª┐αªòαºüαªçαªíαª┐αªƒαª┐</label>
                 <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
@@ -1033,11 +1022,10 @@ export default function EventCreationPage() {
                     <button
                       key={preset.value}
                       onClick={() => set('initialLiquidity', preset.value)}
-                      className={`p-3 rounded-lg border text-center transition-all ${
-                        form.initialLiquidity === preset.value
+                      className={`p-3 rounded-lg border text-center transition-all ${form.initialLiquidity === preset.value
                           ? 'bg-indigo-50 border-indigo-500 text-indigo-700'
                           : 'bg-white border-gray-200 hover:border-gray-300'
-                      }`}
+                        }`}
                     >
                       <span className="block text-sm font-semibold">{preset.label}</span>
                       <span className="text-[10px] text-gray-500">{preset.desc}</span>
@@ -1119,7 +1107,7 @@ export default function EventCreationPage() {
               </div>
               <div className="flex gap-3">
                 <button
-                  onClick={() => router.push(`/markets/${successData.slug}`)}
+                  onClick={() => router.push(`/markets/${successData.marketId}`)}
                   className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
                 >
                   αª«αª╛αª░αºìαªòαºçαªƒ αªªαºçαªûαºüαª¿

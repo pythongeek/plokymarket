@@ -23,13 +23,83 @@ import {
   CheckCircle2,
   ShieldCheck,
 } from 'lucide-react';
-import {
-  validatePassword,
-  validateEmail,
-  sanitizeInput,
-  registerRateLimiter,
-} from '@/lib/security';
 import { useTranslation } from 'react-i18next';
+
+// ============================================
+// INLINED SECURITY FUNCTIONS (to avoid server-side imports)
+// ============================================
+
+// Password strength requirements
+const PASSWORD_REQUIREMENTS = {
+  minLength: 8,
+  requireUppercase: true,
+  requireLowercase: true,
+  requireNumber: true,
+  requireSpecial: true,
+};
+
+interface PasswordValidationResult {
+  isValid: boolean;
+  errors: string[];
+  strength: 'weak' | 'medium' | 'strong';
+}
+
+function validatePassword(password: string): PasswordValidationResult {
+  const errors: string[] = [];
+  let score = 0;
+
+  if (password.length < PASSWORD_REQUIREMENTS.minLength) {
+    errors.push(`Password must be at least ${PASSWORD_REQUIREMENTS.minLength} characters`);
+  } else {
+    score++;
+    if (password.length >= 12) score++;
+    if (password.length >= 16) score++;
+  }
+
+  if (PASSWORD_REQUIREMENTS.requireUppercase && !/[A-Z]/.test(password)) {
+    errors.push('Password must contain at least one uppercase letter');
+  } else if (/[A-Z]/.test(password)) {
+    score++;
+  }
+
+  if (PASSWORD_REQUIREMENTS.requireLowercase && !/[a-z]/.test(password)) {
+    errors.push('Password must contain at least one lowercase letter');
+  } else if (/[a-z]/.test(password)) {
+    score++;
+  }
+
+  if (PASSWORD_REQUIREMENTS.requireNumber && !/[0-9]/.test(password)) {
+    errors.push('Password must contain at least one number');
+  } else if (/[0-9]/.test(password)) {
+    score++;
+  }
+
+  if (PASSWORD_REQUIREMENTS.requireSpecial && !/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+    errors.push('Password must contain at least one special character (!@#$%^&*...)');
+  } else if (/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+    score++;
+  }
+
+  let strength: 'weak' | 'medium' | 'strong' = 'weak';
+  if (score >= 4) strength = 'medium';
+  if (score >= 6) strength = 'strong';
+
+  return { isValid: errors.length === 0, errors, strength };
+}
+
+function validateEmail(email: string): boolean {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+}
+
+function sanitizeInput(input: string): string {
+  return input
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;')
+    .replace(/\//g, '&#x2F');
+}
 
 export default function RegisterPage() {
   const { t } = useTranslation();
@@ -68,13 +138,7 @@ export default function RegisterPage() {
     e.preventDefault();
     setError('');
 
-    // Check rate limit
-    if (registerRateLimiter.isRateLimited('register')) {
-      const remaining = registerRateLimiter.getRemainingTime('register');
-      setRateLimitSeconds(remaining);
-      setError(t('auth.rate_limited_desc', { seconds: remaining }));
-      return;
-    }
+    // Note: Rate limiting is now handled server-side via API
 
     // Sanitize inputs
     const sanitizedName = sanitizeInput(fullName.trim());
@@ -103,14 +167,12 @@ export default function RegisterPage() {
       return;
     }
 
-    // Record attempt for rate limiting
-    registerRateLimiter.recordAttempt('register');
+    // Note: Rate limiting is now handled server-side
     setIsLoading(true);
 
     try {
       const result = await register(sanitizedEmail, password, sanitizedName);
       if (result === true) {
-        registerRateLimiter.reset('register');
         setIsSuccess(true);
         setTimeout(() => {
           router.push('/markets');

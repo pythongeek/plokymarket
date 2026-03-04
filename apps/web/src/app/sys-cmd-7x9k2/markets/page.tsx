@@ -1813,6 +1813,7 @@ export default function AdminMarketDashboard() {
   const [activeTab, setActiveTab] = useState("all");
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isVerifyingAll, setIsVerifyingAll] = useState(false);
   const { toast } = useToast();
   const supabase = createClient();
 
@@ -1910,6 +1911,76 @@ export default function AdminMarketDashboard() {
         title: "ডিলিট করা সম্ভব হয়নি",
         variant: "destructive",
       });
+    }
+  };
+
+  // Verify all markets - check and update market data integrity
+  const handleVerifyAllMarkets = async () => {
+    setIsVerifyingAll(true);
+    try {
+      // Get all markets
+      const { data: allMarkets, error: fetchError } = await supabase
+        .from("markets")
+        .select("id, event_id, status, question, category");
+
+      if (fetchError) throw fetchError;
+
+      let verifiedCount = 0;
+      const issues: { id: string; question: string; issues: string[] }[] = [];
+
+      // Check each market for issues
+      for (const market of allMarkets || []) {
+        const marketIssues: string[] = [];
+
+        // Check if market has required fields
+        if (!market.question || market.question.trim() === '') {
+          marketIssues.push('missing_question');
+        }
+        if (!market.category || market.category.trim() === '') {
+          marketIssues.push('missing_category');
+        }
+
+        // Check if linked event exists
+        if (market.event_id) {
+          const { data: event } = await supabase
+            .from("events")
+            .select("id")
+            .eq("id", market.event_id)
+            .single();
+
+          if (!event) {
+            marketIssues.push('invalid_event_id');
+          }
+        }
+
+        if (marketIssues.length > 0) {
+          issues.push({
+            id: market.id,
+            question: market.question || 'Untitled',
+            issues: marketIssues
+          });
+        } else {
+          verifiedCount++;
+        }
+      }
+
+      toast({
+        title: "✅ যাচাই সম্পন্ন",
+        description: `${verifiedCount}টি মার্কেট সঠিক আছে। ${issues.length}টি মার্কেটে সমস্যা পাওয়া গেছে।`,
+      });
+
+      if (issues.length > 0) {
+        console.log("[Verify] Markets with issues:", issues);
+      }
+    } catch (error: any) {
+      console.error("Verify all error:", error);
+      toast({
+        title: "যাচাই সম্ভব হয়নি",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsVerifyingAll(false);
     }
   };
 
@@ -2134,6 +2205,20 @@ export default function AdminMarketDashboard() {
               <SelectItem value="rejected">প্রত্যাখ্যাত</SelectItem>
             </SelectContent>
           </Select>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleVerifyAllMarkets}
+            disabled={isVerifyingAll}
+            className="bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20"
+          >
+            {isVerifyingAll ? (
+              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Shield className="w-4 h-4 mr-2" />
+            )}
+            সব যাচাই করুন
+          </Button>
         </div>
 
         {/* Market Grid */}

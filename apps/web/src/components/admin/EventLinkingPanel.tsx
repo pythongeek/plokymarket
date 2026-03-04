@@ -40,49 +40,35 @@ export function EventLinkingPanel({ onSelectEvent }: EventLinkingPanelProps) {
     const fetchUnlinkedEvents = async () => {
         setLoading(true);
         try {
-            // First try with the FK subquery approach
-            const { data, error } = await supabase
+            // Use a simpler approach - fetch all active events and filter out ones with markets
+            // This avoids the FK relationship ambiguity issue
+            const { data: fallbackData, error: fetchError } = await supabase
                 .from("events")
-                .select(`
-          id, 
-          title, 
-          question, 
-          category, 
-          trading_closes_at,
-          status,
-          markets!event_id(id)
-        `)
+                .select("id, title, question, category, trading_closes_at, status")
                 .eq("status", "active")
-                .is("markets.id", null)
                 .order("trading_closes_at", { ascending: true });
 
-            if (error) {
-                // If FK error (400), fall back to simple query
-                console.warn("[EventLinkingPanel] FK query failed, using fallback:", error.message);
-                const { data: fallbackData } = await supabase
-                    .from("events")
-                    .select("id, title, question, category, trading_closes_at, status")
-                    .eq("status", "active")
-                    .order("trading_closes_at", { ascending: true });
-
-                // Filter out events that already have markets in separate query
-                if (fallbackData) {
-                    const { data: marketsData } = await supabase
-                        .from("markets")
-                        .select("event_id");
-
-                    const linkedEventIds = new Set((marketsData || []).map((m: any) => m.event_id).filter(Boolean));
-                    const unlinked = (fallbackData as any[]).filter((e: any) => !linkedEventIds.has(e.id));
-                    setEvents(unlinked);
-                }
+            if (fetchError) {
+                console.error("[EventLinkingPanel] Error fetching events:", fetchError.message);
+                setEvents([]);
                 return;
             }
 
-            // Filter out events that somehow still show markets array with data
-            // (Supabase subquery might return empty array for unlinked)
-            const unlinked = (data as any[]).filter(e => !e.markets || e.markets.length === 0);
+            // Get all markets with event_id to find unlinked events
+            const { data: marketsData } = await supabase
+                .from("markets")
+                .select("event_id");
+
+            const linkedEventIds = new Set(
+                (marketsData || [])
+                    .map((m: any) => m.event_id)
+                    .filter(Boolean)
+            );
+
+            // Filter to only unlinked events
+            const unlinked = (fallbackData || []).filter((e: any) => !linkedEventIds.has(e.id));
             setEvents(unlinked);
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error fetching unlinked events:", error);
         } finally {
             setLoading(false);
@@ -94,9 +80,9 @@ export function EventLinkingPanel({ onSelectEvent }: EventLinkingPanelProps) {
     }, []);
 
     const filteredEvents = events.filter(e =>
-        e.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        e.question?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        e.category?.toLowerCase().includes(searchQuery.toLowerCase())
+        (e.title?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+        (e.question?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+        (e.category?.toLowerCase() || '').includes(searchQuery.toLowerCase())
     );
 
     return (
@@ -155,20 +141,20 @@ export function EventLinkingPanel({ onSelectEvent }: EventLinkingPanelProps) {
                                 <div className="flex-1 min-w-0 pr-3">
                                     <div className="flex items-center gap-2 mb-1">
                                         <span className="text-xs font-medium text-blue-400 px-1.5 py-0.5 rounded bg-blue-500/10">
-                                            {event.category}
+                                            {event.category || 'Uncategorized'}
                                         </span>
                                         <span className="text-[10px] text-slate-500 font-mono">
-                                            {event.id.split('-')[0]}
+                                            {event.id ? event.id.split('-')[0] : 'N/A'}
                                         </span>
                                     </div>
                                     <h4 className="text-sm font-medium text-slate-200 truncate">
-                                        {event.title}
+                                        {event.title || 'Untitled Event'}
                                     </h4>
-                                    <p className="text-xs text-slate-400 truncate">{event.question}</p>
+                                    <p className="text-xs text-slate-400 truncate">{event.question || ''}</p>
                                     <div className="flex items-center gap-3 mt-1.5">
                                         <div className="flex items-center gap-1 text-[10px] text-slate-500">
                                             <Calendar className="w-3 h-3" />
-                                            {new Date(event.trading_closes_at).toLocaleDateString('bn-BD')}
+                                            {event.trading_closes_at ? new Date(event.trading_closes_at).toLocaleDateString('bn-BD') : 'N/A'}
                                         </div>
                                     </div>
                                 </div>

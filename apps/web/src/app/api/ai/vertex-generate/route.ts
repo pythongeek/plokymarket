@@ -359,6 +359,276 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // ─── chronos: MoAgent Garden Chronos Timing Architect (direct call) ────
+    if (type === 'chronos') {
+      try {
+        const { runChronosAgent } = await import('@/lib/ai-agents/vertex-timing-agent');
+        const chronosResult = await runChronosAgent(context);
+
+        console.log(`[Vertex API][${requestId}] chronos Success via MoAgent Garden agent`);
+
+        return NextResponse.json({
+          success: true,
+          result: chronosResult,
+          provider: 'vertex-moagent-chronos',
+          model: 'gemini-2.5-flash',
+        }, {
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+        });
+      } catch (chronosErr: any) {
+        console.error(`[Vertex API][${requestId}] chronos error:`, chronosErr.message);
+        return NextResponse.json(
+          { error: 'MoAgent Chronos Agent failed', message: chronosErr.message },
+          { status: 500 }
+        );
+      }
+    }
+
+    // ─── sentinel: MoAgent Garden Sentinel Shield Pro (direct call) ────────
+    if (type === 'sentinel') {
+      try {
+        const { runSentinelAgent } = await import('@/lib/ai-agents/vertex-sentinel-agent');
+        const sentinelResult = await runSentinelAgent({
+          userId: context.userId || 'anonymous',
+          behaviorLog: context.behaviorLog,
+          currentTrade: context.currentTrade,
+          marketId: context.marketId,
+          rawQuery: context.rawInput || context.title,
+        });
+
+        console.log(`[Vertex API][${requestId}] sentinel Success — risk: ${sentinelResult.fraud_assessment.risk_score}/10`);
+
+        return NextResponse.json({
+          success: true,
+          result: sentinelResult,
+          provider: 'vertex-moagent-sentinel',
+          model: 'gemini-2.5-flash',
+        }, {
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+        });
+      } catch (sentinelErr: any) {
+        console.error(`[Vertex API][${requestId}] sentinel error:`, sentinelErr.message);
+        return NextResponse.json(
+          { error: 'MoAgent Sentinel Agent failed', message: sentinelErr.message },
+          { status: 500 }
+        );
+      }
+    }
+
+    // ─── oracle-resolve: MoAgent Garden Oracle Guardian BD Prime ────────────
+    if (type === 'oracle-resolve') {
+      try {
+        // If marketId is provided, use the full resolution service
+        if (context.marketId) {
+          const { resolveMarket } = await import('@/lib/oracle/resolution-service');
+          const resolutionResult = await resolveMarket(
+            context.marketId,
+            context.marketQuestion || context.title || context.rawInput || '',
+            context.category,
+            context.resolutionCriteria,
+            context.existingSources
+          );
+
+          console.log(`[Vertex API][${requestId}] oracle-resolve Success — status: ${resolutionResult.status}`);
+
+          return NextResponse.json({
+            success: true,
+            result: resolutionResult,
+            provider: 'vertex-moagent-oracle',
+            model: 'gemini-2.5-flash',
+          }, {
+            headers: { 'Content-Type': 'application/json; charset=utf-8' },
+          });
+        }
+
+        // If no marketId, just run the raw Oracle Guardian agent
+        const { runOracleGuardianAgent } = await import('@/lib/oracle/ai/agents/VertexOracleGuardianAgent');
+        const oracleResult = await runOracleGuardianAgent(
+          context.marketQuestion || context.title || context.rawInput || '',
+          context.resolutionCriteria,
+          context.existingSources
+        );
+
+        console.log(`[Vertex API][${requestId}] oracle-resolve (raw) Success — outcome: ${oracleResult.oracle_decision.outcome}`);
+
+        return NextResponse.json({
+          success: true,
+          result: oracleResult,
+          provider: 'vertex-moagent-oracle',
+          model: 'gemini-2.5-flash',
+        }, {
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+        });
+      } catch (oracleErr: any) {
+        console.error(`[Vertex API][${requestId}] oracle-resolve error:`, oracleErr.message);
+        return NextResponse.json(
+          { error: 'MoAgent Oracle Guardian failed', message: oracleErr.message },
+          { status: 500 }
+        );
+      }
+    }
+
+    // ─── concierge: MoAgent Garden Concierge Mentor Pro (direct call) ──────
+    if (type === 'concierge') {
+      try {
+        // If userId is provided, use the full support service with account context
+        if (context.userId) {
+          const { handleSupportQuery } = await import('@/lib/support-service');
+          const supportResult = await handleSupportQuery(
+            context.message || context.rawInput || context.title || '',
+            context.userId,
+            context.conversationHistory
+          );
+
+          console.log(`[Vertex API][${requestId}] concierge (support) Success — category: ${supportResult.category}`);
+
+          return NextResponse.json({
+            success: true,
+            result: supportResult,
+            provider: 'vertex-moagent-concierge',
+            model: 'gemini-2.5-flash',
+          }, {
+            headers: { 'Content-Type': 'application/json; charset=utf-8' },
+          });
+        }
+
+        // Raw concierge call without user context
+        const { runConciergeAgent } = await import('@/lib/ai-agents/vertex-concierge-agent');
+        const conciergeResult = await runConciergeAgent({
+          message: context.message || context.rawInput || context.title || '',
+          conversationHistory: context.conversationHistory,
+        });
+
+        console.log(`[Vertex API][${requestId}] concierge (raw) Success — category: ${conciergeResult.category}`);
+
+        return NextResponse.json({
+          success: true,
+          result: conciergeResult,
+          provider: 'vertex-moagent-concierge',
+          model: 'gemini-2.5-flash',
+        }, {
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+        });
+      } catch (conciergeErr: any) {
+        console.error(`[Vertex API][${requestId}] concierge error:`, conciergeErr.message);
+        return NextResponse.json(
+          { error: 'MoAgent Concierge Agent failed', message: conciergeErr.message },
+          { status: 500 }
+        );
+      }
+    }
+
+    // ─── tribunal: MoAgent Garden Supreme Tribunal Pro (direct call) ───────
+    if (type === 'tribunal') {
+      try {
+        const { runTribunalAgent } = await import('@/lib/oracle/ai/agents/VertexTribunalAgent');
+        const tribunalResult = await runTribunalAgent({
+          marketId: context.marketId || '',
+          marketQuestion: context.marketQuestion || context.title || context.rawInput || '',
+          originalOutcome: context.originalOutcome || '',
+          challengerUserId: context.challengerUserId || context.userId,
+          challengeReason: context.challengeReason,
+          evidenceUrls: context.evidenceUrls || context.existingSources,
+          oracleEvidence: context.oracleEvidence,
+        });
+
+        console.log(`[Vertex API][${requestId}] tribunal Success — verdict: ${tribunalResult.tribunal_verdict.final_outcome}, action: ${tribunalResult.admin_action}`);
+
+        return NextResponse.json({
+          success: true,
+          result: tribunalResult,
+          provider: 'vertex-moagent-tribunal',
+          model: 'gemini-2.5-flash',
+        }, {
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+        });
+      } catch (tribunalErr: any) {
+        console.error(`[Vertex API][${requestId}] tribunal error:`, tribunalErr.message);
+        return NextResponse.json(
+          { error: 'MoAgent Tribunal Agent failed', message: tribunalErr.message },
+          { status: 500 }
+        );
+      }
+    }
+
+    // ─── growth: MoAgent Garden Viral Growth Machine (direct call) ─────────
+    if (type === 'growth') {
+      try {
+        const { runGrowthAgent } = await import('@/lib/ai-agents/vertex-growth-agent');
+        const growthResult = await runGrowthAgent({
+          topic: context.topic || context.title,
+          category: context.category,
+          rawTrends: context.rawTrends,
+          rawQuery: context.rawInput || context.rawQuery,
+        });
+
+        console.log(`[Vertex API][${requestId}] growth Success — VPS: ${growthResult.trend_analysis.viral_score}/10, markets: ${growthResult.market_suggestions.length}`);
+
+        return NextResponse.json({
+          success: true,
+          result: growthResult,
+          provider: 'vertex-moagent-growth',
+          model: 'gemini-2.5-flash',
+        }, {
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+        });
+      } catch (growthErr: any) {
+        console.error(`[Vertex API][${requestId}] growth error:`, growthErr.message);
+        return NextResponse.json(
+          { error: 'MoAgent Growth Agent failed', message: growthErr.message },
+          { status: 500 }
+        );
+      }
+    }
+
+    // ─── audit: MoAgent Garden Audit Fiscal Integrity Agent ─────────────────
+    if (type === 'audit') {
+      try {
+        // If platformStats provided, use full audit; otherwise use fiscal watchdog
+        if (context.platformStats) {
+          const { runAuditAgent } = await import('@/lib/ai-agents/vertex-audit-agent');
+          const auditResult = await runAuditAgent({
+            platformStats: context.platformStats,
+            rawQuery: context.rawInput || context.rawQuery,
+            specificUserId: context.userId,
+            specificMarketId: context.marketId,
+          });
+
+          console.log(`[Vertex API][${requestId}] audit Success — status: ${auditResult.audit_report.status}`);
+
+          return NextResponse.json({
+            success: true,
+            result: auditResult,
+            provider: 'vertex-moagent-audit',
+            model: 'gemini-2.5-flash',
+          }, {
+            headers: { 'Content-Type': 'application/json; charset=utf-8' },
+          });
+        }
+
+        // Full cron-style audit with DB fetch
+        const { runFiscalAudit } = await import('@/lib/admin/fiscal-watchdog');
+        const fiscalResult = await runFiscalAudit();
+
+        console.log(`[Vertex API][${requestId}] audit (watchdog) Success — status: ${fiscalResult.status}`);
+
+        return NextResponse.json({
+          success: true,
+          result: fiscalResult,
+          provider: 'vertex-moagent-audit',
+          model: 'gemini-2.5-flash',
+        }, {
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+        });
+      } catch (auditErr: any) {
+        console.error(`[Vertex API][${requestId}] audit error:`, auditErr.message);
+        return NextResponse.json(
+          { error: 'MoAgent Audit Agent failed', message: auditErr.message },
+          { status: 500 }
+        );
+      }
+    }
+
     switch (type) {
       case 'content':
         prompt = getContentPrompt(context);
@@ -382,7 +652,7 @@ export async function POST(req: NextRequest) {
         break;
       default:
         return NextResponse.json(
-          { error: 'Invalid type', received: type, validTypes: ['content', 'content-v2', 'osint', 'quant-logic', 'market-logic', 'timing', 'risk', 'market-proposal'] },
+          { error: 'Invalid type', received: type, validTypes: ['content', 'content-v2', 'osint', 'quant-logic', 'chronos', 'sentinel', 'oracle-resolve', 'concierge', 'tribunal', 'growth', 'audit', 'market-logic', 'timing', 'risk', 'market-proposal'] },
           { status: 400 }
         );
     }

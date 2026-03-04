@@ -34,7 +34,7 @@ import {
   updateSuggestionStatus,
   deleteSuggestion,
 } from '@/lib/supabase';
-import { loginRateLimiter } from '@/lib/security';
+import { loginRateLimiter } from '@/lib/client-rate-limiters';
 
 // ===================================
 // STORE STATE INTERFACE

@@ -225,36 +225,13 @@ function analyzeTimingRuleBased(context: AgentContext): TimingResult {
 }
 
 /**
- * Vertex AI timing analysis (SERVER-SIDE ONLY)
+ * Vertex AI timing analysis — MoAgent Garden Chronos Timing Architect (SERVER-SIDE)
+ * Uses Gemini 2.5 Flash with Google Search grounding + anti-cheat buffers
  */
 async function analyzeWithVertexAI(context: AgentContext): Promise<TimingResult> {
-  const baseUrl = typeof window !== 'undefined' ? '' : (process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'));
-  const response = await fetch(`${baseUrl}/api/ai/vertex-generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      type: 'timing',
-      context,
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error('Vertex AI API call failed');
-  }
-
-  const data = await response.json();
-
-  const tradingClosesAt = new Date(data.result.tradingClosesAt);
-  const resolutionDate = new Date(data.result.resolutionDate);
-  const validation = validateTiming(tradingClosesAt, resolutionDate);
-
-  return {
-    ...data.result,
-    timezone: BD_TIMEZONE,
-    isValid: validation.isValid,
-    warnings: [...validation.warnings, ...(data.result.warnings || [])],
-    confidence: 0.85,
-  };
+  // Import the new MoAgent Garden agent (lazy to avoid client-side issues)
+  const { runChronosAsTimingResult } = await import('./vertex-timing-agent');
+  return runChronosAsTimingResult(context);
 }
 
 /**
