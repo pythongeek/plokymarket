@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS ai_agent_configs (
 ALTER TABLE ai_agent_configs ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Admins manage agent configs" ON ai_agent_configs
     FOR ALL USING (
-        EXISTS (SELECT 1 FROM public.admin_roles WHERE user_id = auth.uid())
+        is_admin(auth.uid())
     );
 
 -- 2. Daily Token Usage Logs
@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS ai_usage_logs (
 ALTER TABLE ai_usage_logs ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Admins view usage logs" ON ai_usage_logs
     FOR ALL USING (
-        EXISTS (SELECT 1 FROM public.admin_roles WHERE user_id = auth.uid())
+        is_admin(auth.uid())
     );
 
 -- 3. Atomic Token Usage Increment RPC
@@ -106,7 +106,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Admins view audit logs" ON audit_logs
     FOR SELECT USING (
-        EXISTS (SELECT 1 FROM public.admin_roles WHERE user_id = auth.uid())
+        is_admin(auth.uid())
     );
 
 -- 6. Index for fast lookups
