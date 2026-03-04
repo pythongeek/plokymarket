@@ -91,25 +91,14 @@ INSERT INTO ai_agent_configs (agent_key, agent_name, description, model_name, te
 ('audit',           'Audit Fiscal Integrity',    'Triple-entry reconciliation and anomaly detection',           'gemini-2.5-flash', 0.05, 'audit',              'active')
 ON CONFLICT (agent_key) DO NOTHING;
 
--- 5. Audit logs table (for fiscal watchdog)
-CREATE TABLE IF NOT EXISTS audit_logs (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    audit_type TEXT NOT NULL,
-    status TEXT NOT NULL,
-    reserve_ratio DECIMAL,
-    variance DECIMAL,
-    action TEXT,
-    details JSONB,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Admins view audit logs" ON audit_logs
-    FOR SELECT USING (
-        is_admin(auth.uid())
-    );
+-- 5. Add fiscal watchdog columns to existing audit_logs table
+-- (audit_logs already exists from migration 073_governance_and_compliance.sql)
+ALTER TABLE IF EXISTS audit_logs ADD COLUMN IF NOT EXISTS audit_type TEXT;
+ALTER TABLE IF EXISTS audit_logs ADD COLUMN IF NOT EXISTS status TEXT;
+ALTER TABLE IF EXISTS audit_logs ADD COLUMN IF NOT EXISTS reserve_ratio DECIMAL;
+ALTER TABLE IF EXISTS audit_logs ADD COLUMN IF NOT EXISTS variance DECIMAL;
+ALTER TABLE IF EXISTS audit_logs ADD COLUMN IF NOT EXISTS details JSONB;
 
 -- 6. Index for fast lookups
 CREATE INDEX IF NOT EXISTS idx_ai_usage_agent_date ON ai_usage_logs(agent_key, usage_date);
 CREATE INDEX IF NOT EXISTS idx_ai_configs_status ON ai_agent_configs(status);
-CREATE INDEX IF NOT EXISTS idx_audit_logs_type ON audit_logs(audit_type, created_at DESC);
