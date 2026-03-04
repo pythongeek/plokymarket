@@ -9,6 +9,9 @@ import { createClient } from '@supabase/supabase-js';
 /**
  * Verify QStash OR cron-job.org signature from request headers
  * Accepts requests from either QStash (upstash-signature) or cron-job.org (x-cron-secret)
+ * 
+ * SECURITY NOTE: For production deployments, configure CRON_SECRET or MASTER_CRON_SECRET
+ * in your environment. Without it, requests are allowed (suitable for initial setup).
  */
 export async function verifyQStashSignature(request: NextRequest): Promise<boolean> {
   // Allow in development without signature
@@ -16,32 +19,31 @@ export async function verifyQStashSignature(request: NextRequest): Promise<boole
     return true;
   }
 
+  const validSecret = process.env.CRON_SECRET || process.env.MASTER_CRON_SECRET;
+
+  // If NO secret is configured at all, allow all requests (for initial setup/migration)
+  if (!validSecret) {
+    console.warn('[Auth] No CRON_SECRET configured - allowing all requests (not secure for production)');
+    return true;
+  }
+
   // Check for cron-job.org secret first
   const cronSecret = request.headers.get('x-cron-secret');
   if (cronSecret) {
-    const validSecret = process.env.CRON_SECRET || process.env.MASTER_CRON_SECRET;
-    if (validSecret && cronSecret === validSecret) {
+    if (cronSecret === validSecret) {
       console.log('[Cron] Verified via X-Cron-Secret header');
       return true;
     }
-    // If secret configured but doesn't match, reject
-    if (validSecret) {
-      console.warn('[Cron] Invalid X-Cron-Secret header');
-      return false;
-    }
+    // Secret configured but doesn't match
+    console.warn('[Cron] Invalid X-Cron-Secret header');
+    return false;
   }
 
   // Check for QStash signature
   const signature = request.headers.get('upstash-signature');
 
   if (!signature) {
-    console.warn('[QStash] Missing signature header');
-    // If no secret configured, allow the request (for backward compatibility)
-    const validSecret = process.env.CRON_SECRET || process.env.MASTER_CRON_SECRET;
-    if (!validSecret && !process.env.QSTASH_CURRENT_SIGNING_KEY) {
-      console.warn('[Auth] No authentication configured, allowing request');
-      return true;
-    }
+    console.warn('[QStash] Missing signature header - rejecting');
     return false;
   }
 
@@ -50,8 +52,7 @@ export async function verifyQStashSignature(request: NextRequest): Promise<boole
   const signingKey = process.env.QSTASH_CURRENT_SIGNING_KEY;
 
   if (!signingKey) {
-    console.warn('[QStash] QSTASH_CURRENT_SIGNING_KEY not set');
-    // Allow if no signing key configured
+    console.warn('[QStash] QSTASH_CURRENT_SIGNING_KEY not set - allowing request');
     return true;
   }
 
@@ -73,29 +74,29 @@ export async function verifyQStashSignatureWithBody(
     return true;
   }
 
+  const validSecret = process.env.CRON_SECRET || process.env.MASTER_CRON_SECRET;
+
+  // If NO secret is configured at all, allow all requests
+  if (!validSecret) {
+    console.warn('[Auth] No CRON_SECRET configured - allowing all requests');
+    return true;
+  }
+
   // Check for cron-job.org secret first
   const cronSecret = request.headers.get('x-cron-secret');
   if (cronSecret) {
-    const validSecret = process.env.CRON_SECRET || process.env.MASTER_CRON_SECRET;
-    if (validSecret && cronSecret === validSecret) {
+    if (cronSecret === validSecret) {
       console.log('[Cron] Verified via X-Cron-Secret header (with body)');
       return true;
     }
-    if (validSecret) {
-      console.warn('[Cron] Invalid X-Cron-Secret header');
-      return false;
-    }
+    console.warn('[Cron] Invalid X-Cron-Secret header');
+    return false;
   }
 
   const signature = request.headers.get('upstash-signature');
 
   if (!signature) {
-    console.warn('[QStash] Missing signature header');
-    // If no secret configured, allow the request
-    const validSecret = process.env.CRON_SECRET || process.env.MASTER_CRON_SECRET;
-    if (!validSecret && !process.env.QSTASH_CURRENT_SIGNING_KEY) {
-      return true;
-    }
+    console.warn('[QStash] Missing signature header - rejecting');
     return false;
   }
 
