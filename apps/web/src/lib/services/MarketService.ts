@@ -141,16 +141,19 @@ export class MarketService {
       return { success: true, order_ids: [] };
     }
 
+    // Ensure outcome values are uppercase to avoid enum issues
+    const ensureUpperCase = (val: string): 'YES' | 'NO' => val.toUpperCase() as 'YES' | 'NO';
+
     const seedOrders = [
       {
         market_id: marketId,
         user_id: adminId,
         order_type: 'limit',
         side: 'buy',
-        outcome: 'YES',
+        outcome: ensureUpperCase('YES'),
         price: 0.48,
         quantity: halfLiquidity,
-        filled: 0,
+        filled_quantity: 0,
         status: 'open',
         created_at: new Date().toISOString(),
       },
@@ -159,10 +162,10 @@ export class MarketService {
         user_id: adminId,
         order_type: 'limit',
         side: 'buy',
-        outcome: 'NO',
+        outcome: ensureUpperCase('NO'),
         price: 0.48,
         quantity: halfLiquidity,
-        filled: 0,
+        filled_quantity: 0,
         status: 'open',
         created_at: new Date().toISOString(),
       },

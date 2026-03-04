@@ -317,6 +317,8 @@ export async function POST(request: NextRequest) {
     }
 
     // 8. Seed initial orderbook for the market
+    // Ensure outcome values are explicitly uppercase to avoid enum case issues
+    const ensureUpperCase = (val: string) => val.toUpperCase() as 'YES' | 'NO';
     try {
       const seedOrders = [
         {
@@ -324,7 +326,7 @@ export async function POST(request: NextRequest) {
           user_id: user.id,
           order_type: 'limit',
           side: 'buy',
-          outcome: 'YES',
+          outcome: ensureUpperCase('YES'),
           price: 0.48,
           quantity: Math.floor(data.initial_liquidity / 2 / 0.48),
           status: 'open',
@@ -335,7 +337,7 @@ export async function POST(request: NextRequest) {
           user_id: user.id,
           order_type: 'limit',
           side: 'buy',
-          outcome: 'NO',
+          outcome: ensureUpperCase('NO'),
           price: 0.48,
           quantity: Math.floor(data.initial_liquidity / 2 / 0.48),
           status: 'open',

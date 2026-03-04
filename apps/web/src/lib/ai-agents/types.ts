@@ -29,6 +29,20 @@ export interface AgentContext {
   existingEvents?: string[];
 }
 
+export interface ContentAgentCitation {
+  expert_name: string;
+  designation: string;
+  statement: string;
+  date: string;
+  source_url: string;
+}
+
+export interface ContentAgentResolutionSource {
+  primary_link: string;
+  backup_sources: string[];
+  criteria_bn: string;
+}
+
 export interface ContentAgentResult {
   title: string;
   description: string;
@@ -38,6 +52,13 @@ export interface ContentAgentResult {
   seoScore: number;
   confidence: number;
   sources?: string[];
+
+  /* MoAgent Garden enriched fields (optional for backward compat) */
+  title_bn?: string;
+  description_bn?: string;
+  citations?: ContentAgentCitation[];
+  resolution_source?: ContentAgentResolutionSource;
+  authenticity_score?: number;
 }
 
 export interface MarketLogicResult {

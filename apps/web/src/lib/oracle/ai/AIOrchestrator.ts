@@ -2,11 +2,13 @@
  * AI Oracle Orchestrator - Bangladesh Context
  * Coordinates specialized agents, multi-source verification, and feedback systems
  * Production-ready with defense-in-depth verification
+ *
+ * MoAgent Garden: OSINT Architect Pro integrated as Stage 1.5 (OSINT Enrichment)
  */
 
-import { 
-  AIResolutionPipeline, 
-  AIOracleConfig, 
+import {
+  AIResolutionPipeline,
+  AIOracleConfig,
   DEFAULT_AI_ORACLE_CONFIG,
   CONFIDENCE_THRESHOLDS,
   ConfidenceLevel,
@@ -19,6 +21,7 @@ import { RetrievalAgent } from './agents/RetrievalAgent';
 import { SynthesisAgent } from './agents/SynthesisAgent';
 import { DeliberationAgent } from './agents/DeliberationAgent';
 import { ExplanationAgent } from './agents/ExplanationAgent';
+import { runOSINTAgent, osintToEvidence } from './agents/VertexOSINTAgent';
 
 import { CircuitBreaker, getGlobalCircuitBreaker } from './resilience/CircuitBreaker';
 import { OracleCache, getGlobalCache, CACHE_KEYS } from './resilience/Cache';
@@ -34,34 +37,34 @@ import { getSourceTier } from './verification/SourceTiers';
 
 export class AIOrchestrator {
   private config: AIOracleConfig;
-  
+
   // Agents
   private retrievalAgent: RetrievalAgent;
   private synthesisAgent: SynthesisAgent;
   private deliberationAgent: DeliberationAgent;
   private explanationAgent: ExplanationAgent;
-  
+
   // Resilience components
   private circuitBreaker: CircuitBreaker;
   private cache: OracleCache;
-  
+
   // Feedback systems
   private feedbackLoop = getGlobalFeedbackLoop();
   private reviewQueue = getGlobalReviewQueue();
-  
+
   // Verification
   private verificationEngine = getGlobalVerificationEngine();
   private temporalValidator = getGlobalTemporalValidator();
 
   constructor(config: Partial<AIOracleConfig> = {}) {
     this.config = { ...DEFAULT_AI_ORACLE_CONFIG, ...config };
-    
+
     // Initialize agents
     this.retrievalAgent = new RetrievalAgent();
     this.synthesisAgent = new SynthesisAgent();
     this.deliberationAgent = new DeliberationAgent();
     this.explanationAgent = new ExplanationAgent();
-    
+
     // Initialize resilience components
     this.circuitBreaker = getGlobalCircuitBreaker();
     this.cache = getGlobalCache(
@@ -80,12 +83,12 @@ export class AIOrchestrator {
   ): Promise<AIOrchestrationResult> {
     const pipelineId = `pipeline-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const startTime = Date.now();
-    
+
     console.log(`[AIOrchestrator] Starting resolution pipeline ${pipelineId} for market ${marketId}`);
-    
+
     // Detect Bangladesh context
     const bangladeshContext = this.detectBangladeshContext(marketQuestion, context);
-    
+
     // Initialize pipeline
     const pipeline: AIResolutionPipeline = {
       pipelineId,
@@ -104,7 +107,7 @@ export class AIOrchestrator {
       },
       bangladeshContext
     };
-    
+
     try {
       // Stage 1: Information Retrieval
       const retrievalResult = await this.executeRetrieval(marketQuestion, context);
@@ -112,38 +115,61 @@ export class AIOrchestrator {
         throw new Error(`Retrieval failed: ${retrievalResult.error?.message}`);
       }
       pipeline.retrieval = retrievalResult.data;
-      
+
+      // Stage 1.5: OSINT Enrichment (MoAgent Garden — OSINT Architect Pro)
+      try {
+        console.log(`[AIOrchestrator] Running OSINT Architect Pro for enrichment`);
+        const osintResult = await runOSINTAgent(
+          marketQuestion,
+          pipeline.retrieval.corpus.sources
+        );
+
+        // Merge OSINT citations into evidence corpus
+        const osintEvidence = osintToEvidence(osintResult);
+        if (osintEvidence.length > 0) {
+          pipeline.retrieval.corpus.sources.push(...osintEvidence);
+          pipeline.retrieval.corpus.totalSources += osintEvidence.length;
+          console.log(`[AIOrchestrator] OSINT enriched with ${osintEvidence.length} grounded citations (score: ${osintResult.authenticity_score}/10)`);
+        }
+
+        // Store OSINT result in pipeline for downstream use
+        (pipeline as any).osint = osintResult;
+      } catch (osintErr) {
+        // OSINT is an enrichment step — pipeline continues without it
+        console.warn(`[AIOrchestrator] OSINT enrichment failed (non-blocking):`, osintErr instanceof Error ? osintErr.message : osintErr);
+      }
+
       // Stage 2: Multi-Source Cross-Verification
       console.log(`[AIOrchestrator] Running cross-verification for ${pipeline.retrieval.corpus.sources.length} sources`);
-      
+
       // Create event timeline for temporal validation
-      const eventTimeline = context?.eventDate 
+      const eventTimeline = context?.eventDate
         ? {
-            eventId: marketId,
-            expectedStartTime: context.eventDate,
-            expectedEndTime: context.eventEndDate || context.eventDate,
-            timezone: 'Asia/Dhaka',
-            isBreakingNews: ['cricket', 'football', 'weather'].includes(bangladeshContext.eventType),
-            expectedDurationMinutes: context.durationMinutes || 180
-          }
+          eventId: marketId,
+          expectedStartTime: context.eventDate,
+          expectedEndTime: context.eventEndDate || context.eventDate,
+          timezone: 'Asia/Dhaka',
+          isBreakingNews: ['cricket', 'football', 'weather'].includes(bangladeshContext.eventType),
+          expectedDurationMinutes: context.durationMinutes || 180
+        }
         : undefined;
-      
+
       const verificationResult = await this.verificationEngine.verify(
         pipeline.retrieval.corpus.sources,
         eventTimeline
       );
-      
+
       pipeline.verification = verificationResult;
-      
+
       // If verification fails critical checks, may need to escalate early
       if (verificationResult.blockers.length > 2 && !verificationResult.canAutoResolve) {
         console.warn(`[AIOrchestrator] Critical verification blockers detected: ${verificationResult.blockers.join(', ')}`);
       }
-      
+
       // Stage 3: Synthesis (on verified sources)
       const synthesisResult = await this.executeSynthesis(
-        marketQuestion, 
-        pipeline.retrieval.corpus, 
+        marketQuestion,
+        pipeline.retrieval.corpus,
         context
       );
       if (!synthesisResult.success || !synthesisResult.data) {
@@ -151,11 +177,11 @@ export class AIOrchestrator {
       }
       pipeline.synthesis = synthesisResult.data;
       pipeline.modelVersions.synthesis = synthesisResult.modelVersion || '2.0.0-bd';
-      
+
       // Stage 4: Deliberation
       const deliberationResult = await this.executeDeliberation(
-        marketQuestion, 
-        pipeline.synthesis, 
+        marketQuestion,
+        pipeline.synthesis,
         context
       );
       if (!deliberationResult.success || !deliberationResult.data) {
@@ -163,46 +189,46 @@ export class AIOrchestrator {
       }
       pipeline.deliberation = deliberationResult.data;
       pipeline.modelVersions.deliberation = deliberationResult.modelVersion || '2.0.0-bd';
-      
+
       // Combine deliberation with verification consensus
       const finalOutcome = verificationResult.consensusOutcome || deliberationResult.data.consensusOutcome;
       const finalConfidence = Math.min(
         verificationResult.confidenceScore,
         deliberationResult.data.consensusProbability
       );
-      
+
       pipeline.finalOutcome = finalOutcome;
       pipeline.finalConfidence = finalConfidence;
-      
+
       // Stage 5: Explanation
       const explanationResult = await this.executeExplanation(marketQuestion, pipeline, context);
       if (explanationResult.success && explanationResult.data) {
         pipeline.explanation = explanationResult.data;
         pipeline.modelVersions.explanation = explanationResult.modelVersion || '2.0.0-bd';
       }
-      
+
       // Determine confidence level and action
       const confidenceLevel = this.determineConfidenceLevel(pipeline.finalConfidence);
       pipeline.confidenceLevel = confidenceLevel.level;
       pipeline.recommendedAction = confidenceLevel.action;
-      
+
       // Complete pipeline
       pipeline.status = 'completed';
       pipeline.completedAt = new Date().toISOString();
       pipeline.totalExecutionTimeMs = Date.now() - startTime;
-      
+
       console.log(`[AIOrchestrator] Pipeline ${pipelineId} completed. Outcome: ${pipeline.finalOutcome}, Confidence: ${(pipeline.finalConfidence * 100).toFixed(1)}%, Verification: ${verificationResult.verificationStatus}`);
-      
+
       // Take action based on confidence level AND verification
       return this.handleResolutionAction(pipeline, confidenceLevel, verificationResult);
-      
+
     } catch (error) {
       console.error(`[AIOrchestrator] Pipeline ${pipelineId} failed:`, error);
-      
+
       pipeline.status = 'failed';
       pipeline.completedAt = new Date().toISOString();
       pipeline.totalExecutionTimeMs = Date.now() - startTime;
-      
+
       return {
         success: false,
         pipeline,
@@ -220,16 +246,16 @@ export class AIOrchestrator {
    */
   private detectBangladeshContext(question: string, context?: any): BangladeshContext {
     const lowerQuestion = question.toLowerCase();
-    
+
     // Bangladesh keywords
     const bdKeywords = [
       'bangladesh', 'dhaka', 'chittagong', 'sylhet', 'rajshahi', 'khulna',
       'বাংলাদেশ', 'ঢাকা', 'চট্টগ্রাম', 'সিলেট', 'রাজশাহী', 'খুলনা',
       'bdt', 'taka', 'টাকা', 'awami league', 'bnp', 'shakib', 'tamim'
     ];
-    
+
     const isBangladeshContext = bdKeywords.some(kw => lowerQuestion.includes(kw));
-    
+
     // Event type detection
     let eventType: BangladeshContext['eventType'] = 'general';
     if (lowerQuestion.match(/election|vote|নির্বাচন|ভোট/)) eventType = 'election';
@@ -239,13 +265,13 @@ export class AIOrchestrator {
     else if (lowerQuestion.match(/budget|gdp|economy/)) eventType = 'economic';
     else if (lowerQuestion.match(/weather|rain|cyclone|বৃষ্টি/)) eventType = 'weather';
     else if (lowerQuestion.match(/government|minister|prime minister/)) eventType = 'political';
-    
+
     // Language detection
     const hasBengali = /[\u0980-\u09FF]/.test(question);
     const hasEnglish = /[a-zA-Z]/.test(question);
-    const detectedLanguage: BangladeshContext['detectedLanguage'] = 
+    const detectedLanguage: BangladeshContext['detectedLanguage'] =
       hasBengali && hasEnglish ? 'mixed' : hasBengali ? 'bn' : 'en';
-    
+
     return {
       isBangladeshContext,
       detectedLanguage,
@@ -269,7 +295,7 @@ export class AIOrchestrator {
       question: marketQuestion,
       context: JSON.stringify(context)
     });
-    
+
     return this.cache.getOrCompute(
       cacheKey,
       async () => {
@@ -277,7 +303,7 @@ export class AIOrchestrator {
           'retrieval',
           async () => {
             const rateLimiter = getRateLimiter('GDELT');
-            return rateLimiter.execute('GDELT', () => 
+            return rateLimiter.execute('GDELT', () =>
               this.retrievalAgent.execute(marketQuestion, context)
             );
           },
@@ -309,7 +335,7 @@ export class AIOrchestrator {
       'synthesis',
       async () => {
         const rateLimiter = getRateLimiter('GEMINI');
-        return rateLimiter.execute('GEMINI', () => 
+        return rateLimiter.execute('GEMINI', () =>
           this.synthesisAgent.execute(marketQuestion, corpus, context)
         );
       },
@@ -356,7 +382,7 @@ export class AIOrchestrator {
       'explanation',
       async () => {
         const rateLimiter = getRateLimiter('GEMINI');
-        return rateLimiter.execute('GEMINI', () => 
+        return rateLimiter.execute('GEMINI', () =>
           this.explanationAgent.execute(marketQuestion, pipeline, context)
         );
       },
@@ -398,12 +424,12 @@ export class AIOrchestrator {
     // If verification failed, override confidence level
     if (verificationResult && !verificationResult.canAutoResolve) {
       console.log(`[AIOrchestrator] Verification blockers: ${verificationResult.blockers.join(', ')}`);
-      
+
       // If we have primary government sources, we might still auto-resolve
       const hasPrimaryGov = pipeline.retrieval?.corpus.sources.some(
         s => s.url.includes('.gov.bd') && s.credibilityScore > 0.95
       );
-      
+
       if (!hasPrimaryGov) {
         return {
           success: true,
@@ -412,7 +438,7 @@ export class AIOrchestrator {
         };
       }
     }
-    
+
     switch (confidenceLevel.level) {
       case 'automated':
         console.log(`[AIOrchestrator] Auto-resolving market ${pipeline.marketId}`);
@@ -421,7 +447,7 @@ export class AIOrchestrator {
           pipeline,
           actionTaken: 'auto_resolved'
         };
-        
+
       case 'human_review':
         console.log(`[AIOrchestrator] Queueing market ${pipeline.marketId} for human review`);
         const priority = pipeline.finalConfidence >= 0.9 ? 'medium' : 'high';
@@ -431,7 +457,7 @@ export class AIOrchestrator {
           pipeline,
           actionTaken: 'queued_for_review'
         };
-        
+
       case 'escalation':
         console.log(`[AIOrchestrator] Escalating market ${pipeline.marketId} to decentralized oracle`);
         return {
@@ -439,7 +465,7 @@ export class AIOrchestrator {
           pipeline,
           actionTaken: 'escalated'
         };
-        
+
       default:
         return {
           success: false,
@@ -468,7 +494,7 @@ export class AIOrchestrator {
     };
   } {
     const accuracyReport = this.verificationEngine['accuracyTracker'].generateReport();
-    
+
     return {
       circuitBreakers: this.circuitBreaker.getAllStates(),
       cacheStats: this.cache.getStats(),
@@ -492,7 +518,7 @@ export class AIOrchestrator {
   ): boolean {
     const item = this.reviewQueue.getItem(reviewId);
     if (!item) return false;
-    
+
     const success = this.reviewQueue.submitReview(
       reviewId,
       item.assignedTo!,
@@ -500,9 +526,9 @@ export class AIOrchestrator {
       finalOutcome,
       undefined
     );
-    
+
     if (!success) return false;
-    
+
     // Record feedback
     if (decision === 'accept') {
       this.feedbackLoop.recordFeedback({
@@ -532,7 +558,7 @@ export class AIOrchestrator {
         item.assignedTo || undefined
       );
     }
-    
+
     return true;
   }
 
@@ -547,7 +573,7 @@ export class AIOrchestrator {
     const cacheCleaned = this.cache.cleanup();
     const staleAssignmentsReleased = this.reviewQueue.releaseStaleAssignments();
     const overdueEscalated = this.reviewQueue.autoEscalateOverdue();
-    
+
     return {
       cacheCleaned,
       staleAssignmentsReleased,

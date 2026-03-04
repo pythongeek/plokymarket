@@ -170,29 +170,13 @@ function analyzeMarketRuleBased(context: AgentContext): MarketLogicResult {
 }
 
 /**
- * Vertex AI market analysis (SERVER-SIDE ONLY)
+ * Vertex AI market analysis — MoAgent Garden Quant Logic Architect (SERVER-SIDE)
+ * Uses Gemini 2.5 Flash with Google Search grounding + LMSR engine
  */
 async function analyzeWithVertexAI(context: AgentContext): Promise<MarketLogicResult> {
-  const baseUrl = typeof window !== 'undefined' ? '' : (process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'));
-  const response = await fetch(`${baseUrl}/api/ai/vertex-generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      type: 'market-logic',
-      context,
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error('Vertex AI API call failed');
-  }
-
-  const data = await response.json();
-  return {
-    ...data.result,
-    bParameter: calculateBParameter(data.result.liquidity, data.result.outcomes.length),
-    confidence: 0.85,
-  };
+  // Import the new MoAgent Garden agent (lazy to avoid client-side issues)
+  const { runQuantLogicAsMarketLogic } = await import('./vertex-quant-logic-agent');
+  return runQuantLogicAsMarketLogic(context);
 }
 
 /**

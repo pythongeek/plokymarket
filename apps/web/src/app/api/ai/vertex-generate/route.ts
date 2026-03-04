@@ -1,11 +1,12 @@
 /**
  * Vertex AI Generation API
  * Server-side endpoint for Vertex AI calls
- * Supports content, market-logic, timing, and risk generation
+ * Supports content, content-v2 (MoAgent Garden), market-logic, timing, and risk generation
  * 
  * Models (Industry Standard - Stable):
  * - gemini-1.5-flash-002 → Fast tasks: slug, classify, risk
  * - gemini-1.5-pro-002   → Complex: content, market logic
+ * - gemini-2.5-flash     → MoAgent Garden Content Agent (content-v2)
  * 
  * Region: asia-south1 (Mumbai) for low latency in Bangladesh
  */
@@ -280,6 +281,84 @@ export async function POST(req: NextRequest) {
     let prompt: string;
     let modelName: string;
 
+    // ─── content-v2: MoAgent Garden Content Agent (direct call) ──────────
+    if (type === 'content-v2') {
+      try {
+        const { runVertexContentAgent } = await import('@/lib/ai-agents/vertex-content-agent');
+        const agentResult = await runVertexContentAgent(context);
+
+        console.log(`[Vertex API][${requestId}] content-v2 Success via MoAgent Garden agent`);
+
+        return NextResponse.json({
+          success: true,
+          result: agentResult,
+          provider: 'vertex-moagent',
+          model: 'gemini-2.5-flash',
+        }, {
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+        });
+      } catch (agentErr: any) {
+        console.error(`[Vertex API][${requestId}] content-v2 error:`, agentErr.message);
+        return NextResponse.json(
+          { error: 'MoAgent Content Agent failed', message: agentErr.message },
+          { status: 500 }
+        );
+      }
+    }
+
+    // ─── osint: MoAgent Garden OSINT Architect Pro (direct call) ──────────
+    if (type === 'osint') {
+      try {
+        const { runOSINTAgent } = await import('@/lib/oracle/ai/agents/VertexOSINTAgent');
+        const osintResult = await runOSINTAgent(
+          context.marketQuestion || context.rawInput || context.title || '',
+          context.existingSources
+        );
+
+        console.log(`[Vertex API][${requestId}] osint Success via MoAgent Garden OSINT agent`);
+
+        return NextResponse.json({
+          success: true,
+          result: osintResult,
+          provider: 'vertex-moagent-osint',
+          model: 'gemini-2.5-flash',
+        }, {
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+        });
+      } catch (osintErr: any) {
+        console.error(`[Vertex API][${requestId}] osint error:`, osintErr.message);
+        return NextResponse.json(
+          { error: 'MoAgent OSINT Agent failed', message: osintErr.message },
+          { status: 500 }
+        );
+      }
+    }
+
+    // ─── quant-logic: MoAgent Garden Quant Logic Architect (direct call) ───
+    if (type === 'quant-logic') {
+      try {
+        const { runQuantLogicAgent } = await import('@/lib/ai-agents/vertex-quant-logic-agent');
+        const quantResult = await runQuantLogicAgent(context);
+
+        console.log(`[Vertex API][${requestId}] quant-logic Success via MoAgent Garden agent`);
+
+        return NextResponse.json({
+          success: true,
+          result: quantResult,
+          provider: 'vertex-moagent-quant',
+          model: 'gemini-2.5-flash',
+        }, {
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+        });
+      } catch (quantErr: any) {
+        console.error(`[Vertex API][${requestId}] quant-logic error:`, quantErr.message);
+        return NextResponse.json(
+          { error: 'MoAgent Quant Logic Agent failed', message: quantErr.message },
+          { status: 500 }
+        );
+      }
+    }
+
     switch (type) {
       case 'content':
         prompt = getContentPrompt(context);
@@ -303,7 +382,7 @@ export async function POST(req: NextRequest) {
         break;
       default:
         return NextResponse.json(
-          { error: 'Invalid type', received: type, validTypes: ['content', 'market-logic', 'timing', 'risk', 'market-proposal'] },
+          { error: 'Invalid type', received: type, validTypes: ['content', 'content-v2', 'osint', 'quant-logic', 'market-logic', 'timing', 'risk', 'market-proposal'] },
           { status: 400 }
         );
     }

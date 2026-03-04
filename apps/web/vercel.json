@@ -6,11 +6,5 @@
   "framework": "nextjs",
   "regions": [
     "sin1"
-  ],
-  "crons": [
-    {
-      "path": "/api/cron/master?secret=${MASTER_CRON_SECRET}",
-      "schedule": "0 0 * * *"
-    }
   ]
 }

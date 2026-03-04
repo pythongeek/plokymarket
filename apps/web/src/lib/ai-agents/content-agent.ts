@@ -191,31 +191,32 @@ function generateTagsRuleBased(
 }
 
 /**
- * Vertex AI implementation (SERVER-SIDE ONLY)
- * This should be called from API routes
+ * Vertex AI implementation — MoAgent Garden Content Agent (SERVER-SIDE)
+ * Uses Gemini 2.5 Flash with Google Search grounding
  */
 async function generateWithVertexAI(
   context: AgentContext
 ): Promise<ContentAgentResult> {
-  // Call the API route instead of direct Vertex AI
-  const baseUrl = typeof window !== 'undefined' ? '' : (process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'));
-  const response = await fetch(`${baseUrl}/api/ai/vertex-generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      type: 'content',
-      context,
-    }),
-  });
+  // Import the new MoAgent Garden agent (lazy to avoid client-side issues)
+  const { runVertexContentAgent } = await import('./vertex-content-agent');
+  const result = await runVertexContentAgent(context);
 
-  if (!response.ok) {
-    throw new Error('Vertex AI API call failed');
-  }
-
-  const data = await response.json();
   return {
-    ...data.result,
-    confidence: 0.85,
+    title: result.title,
+    description: result.description,
+    category: result.category,
+    subcategory: result.subcategory,
+    tags: result.tags,
+    seoScore: result.seoScore,
+    confidence: result.confidence,
+    sources: result.sources,
+
+    // MoAgent Garden enriched fields
+    title_bn: result.title_bn,
+    description_bn: result.description_bn,
+    citations: result.citations,
+    resolution_source: result.resolution_source,
+    authenticity_score: result.authenticity_score,
   };
 }
 

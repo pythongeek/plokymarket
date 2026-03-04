@@ -18,6 +18,7 @@ import {
     UserX,
     Ban,
     Clock,
+    BarChart3,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { userManagementService } from '@/lib/user-management/service';
@@ -33,6 +34,7 @@ import { UserStatusPanel } from './components/UserStatusPanel';
 import { UserInterventionView } from './components/UserInterventionView';
 import { UserSupportPanel } from './components/UserSupportPanel';
 import { UserAuditView } from './components/UserAuditView';
+import { UserPositionsView } from '@/components/admin/users/UserPositionsView';
 
 function UserDetailContent() {
     const { t } = useTranslation();
@@ -210,7 +212,7 @@ function UserDetailContent() {
 
             {/* Tabs */}
             <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList className="grid w-full grid-cols-6 bg-slate-900 border border-slate-800">
+                <TabsList className="grid w-full grid-cols-7 bg-slate-900 border border-slate-800">
                     <TabsTrigger value="overview" className="data-[state=active]:bg-slate-800 text-xs">
                         <User className="h-3.5 w-3.5 mr-1.5" />
                         ওভারভিউ
@@ -222,6 +224,10 @@ function UserDetailContent() {
                     <TabsTrigger value="trading" className="data-[state=active]:bg-slate-800 text-xs">
                         <TrendingUp className="h-3.5 w-3.5 mr-1.5" />
                         ট্রেডিং
+                    </TabsTrigger>
+                    <TabsTrigger value="positions" className="data-[state=active]:bg-slate-800 text-xs">
+                        <BarChart3 className="h-3.5 w-3.5 mr-1.5" />
+                        পজিশন
                     </TabsTrigger>
                     <TabsTrigger value="interventions" className="data-[state=active]:bg-slate-800 text-xs">
                         <AlertTriangle className="h-3.5 w-3.5 mr-1.5" />
@@ -247,6 +253,10 @@ function UserDetailContent() {
 
                 <TabsContent value="trading">
                     <UserOverviewView userId={userId} userData={userData} onUpdate={loadUserData} tradingOnly />
+                </TabsContent>
+
+                <TabsContent value="positions">
+                    <UserPositionsView userId={userId} />
                 </TabsContent>
 
                 <TabsContent value="interventions">
