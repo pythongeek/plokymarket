@@ -236,7 +236,7 @@ const ORACLE_LABELS: Record<string, string> = {
 
 //─── Utilities ───────────────────────────────────────────────────────────────
 
-function formatBDT(n: number): string {
+function formatBDT(n: number | undefined | null): string {
   if (!n || n === 0) return "৳0";
   if (n >= 10000000) return `৳${(n / 10000000).toFixed(2)} কোটি`;
   if (n >= 100000) return `৳${(n / 100000).toFixed(1)} লাখ`;
@@ -244,7 +244,8 @@ function formatBDT(n: number): string {
   return `৳${n.toLocaleString("bn-BD")}`;
 }
 
-function formatNumber(n: number): string {
+function formatNumber(n: number | undefined | null): string {
+  if (!n || n === 0) return "0";
   if (n >= 10000000) return `${(n / 10000000).toFixed(1)}কোটি`;
   if (n >= 100000) return `${(n / 100000).toFixed(1)}লাখ`;
   if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
@@ -1849,6 +1850,17 @@ export default function AdminMarketDashboard() {
       const formattedMarkets: Market[] = (data || []).map((m: any) => ({
         ...m,
         event_name: eventNames[m.event_id] || m.event_name,
+        // Ensure numeric fields have default values to prevent toString errors
+        traders: m.traders ?? m.unique_traders ?? 0,
+        liquidity: m.liquidity ?? 0,
+        total_volume: m.total_volume ?? m.volume ?? 0,
+        yes_price: m.yes_price ?? m.current_price_yes ?? 0.5,
+        no_price: m.no_price ?? m.current_price_no ?? 0.5,
+        trading_fee_percent: m.trading_fee_percent ?? m.fee_percent ?? 2.0,
+        risk_score: m.risk_score ?? 0,
+        confidence: m.confidence ?? 0,
+        min_trade_amount: m.min_trade_amount ?? 10,
+        max_trade_amount: m.max_trade_amount ?? 100000,
       }));
 
       setMarkets(formattedMarkets);

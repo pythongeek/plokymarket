@@ -186,13 +186,25 @@ export function SecureAdminLayout({
       let supportTickets = 0;
 
       // Check market_creation_drafts - use correct field name legal_review_status
+      // This query may fail if table doesn't exist or RLS blocks access - handle gracefully
       try {
         const { count, error } = await supabase
           .from('market_creation_drafts')
           .select('*', { count: 'exact', head: true })
           .eq('legal_review_status', 'pending');
-        if (!error) pendingMarkets = count || 0;
-      } catch { /* table may not exist */ }
+
+        if (error) {
+          // Log but don't fail - RLS might block unauthenticated requests
+          console.warn('market_creation_drafts query blocked by RLS:', error.message);
+          pendingMarkets = 0;
+        } else {
+          pendingMarkets = count || 0;
+        }
+      } catch (err: any) {
+        // Table may not exist or network error - graceful degradation
+        console.warn('market_creation_drafts table unavailable:', err?.message);
+        pendingMarkets = 0;
+      }
 
       // support_tickets table doesn't exist in production — skip query to avoid 404 noise
       // supportTickets remains 0
