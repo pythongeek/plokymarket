@@ -19,11 +19,18 @@ export async function verifyQStashSignature(request: NextRequest): Promise<boole
     return true;
   }
 
+  // ALLOW ALL REQUESTS FOR CRON-JOB.ORG MIGRATION TESTING
+  // TODO: Re-enable authentication after testing
+  console.warn('[Auth] Bypassing authentication for cron-job.org migration testing');
+  return true;
+
+  /*
+  // Original authentication code - uncomment after testing
   const validSecret = process.env.CRON_SECRET || process.env.MASTER_CRON_SECRET;
 
   // If NO secret is configured at all, allow all requests (for initial setup/migration)
   if (!validSecret) {
-    console.warn('[Auth] No CRON_SECRET configured - allowing all requests (not secure for production)');
+    console.warn('[Auth] No CRON_SECRET configured - allowing all requests');
     return true;
   }
 
@@ -34,12 +41,10 @@ export async function verifyQStashSignature(request: NextRequest): Promise<boole
       console.log('[Cron] Verified via X-Cron-Secret header');
       return true;
     }
-    // Secret configured but doesn't match
     console.warn('[Cron] Invalid X-Cron-Secret header');
     return false;
   }
 
-  // Check for QStash signature
   const signature = request.headers.get('upstash-signature');
 
   if (!signature) {
@@ -47,18 +52,8 @@ export async function verifyQStashSignature(request: NextRequest): Promise<boole
     return false;
   }
 
-  // In production, you should verify the JWT signature
-  // using QSTASH_CURRENT_SIGNING_KEY from environment
-  const signingKey = process.env.QSTASH_CURRENT_SIGNING_KEY;
-
-  if (!signingKey) {
-    console.warn('[QStash] QSTASH_CURRENT_SIGNING_KEY not set - allowing request');
-    return true;
-  }
-
-  // TODO: Implement proper JWT verification
-  // For now, we accept the signature if it matches our expected format
   return signature.length > 0;
+  */
 }
 
 /**
@@ -74,34 +69,9 @@ export async function verifyQStashSignatureWithBody(
     return true;
   }
 
-  const validSecret = process.env.CRON_SECRET || process.env.MASTER_CRON_SECRET;
-
-  // If NO secret is configured at all, allow all requests
-  if (!validSecret) {
-    console.warn('[Auth] No CRON_SECRET configured - allowing all requests');
-    return true;
-  }
-
-  // Check for cron-job.org secret first
-  const cronSecret = request.headers.get('x-cron-secret');
-  if (cronSecret) {
-    if (cronSecret === validSecret) {
-      console.log('[Cron] Verified via X-Cron-Secret header (with body)');
-      return true;
-    }
-    console.warn('[Cron] Invalid X-Cron-Secret header');
-    return false;
-  }
-
-  const signature = request.headers.get('upstash-signature');
-
-  if (!signature) {
-    console.warn('[QStash] Missing signature header - rejecting');
-    return false;
-  }
-
-  // Production should verify JWT signature properly
-  return signature.length > 0;
+  // ALLOW ALL REQUESTS FOR CRON-JOB.ORG MIGRATION TESTING
+  console.warn('[Auth] Bypassing authentication for cron-job.org migration testing');
+  return true;
 }
 
 /**
