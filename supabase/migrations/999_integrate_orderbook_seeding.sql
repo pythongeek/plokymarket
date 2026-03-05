@@ -221,10 +221,9 @@ BEGIN
         ORDER BY created_at ASC
         LIMIT 1;
         
-        -- If no admin user, use null user_id (will need RLS policy for this)
-        IF v_system_user_id IS NULL THEN
-            v_system_user_id := '00000000-0000-0000-0000-000000000000'::UUID;
-        END IF;
+        -- If no admin user, use null user_id for system-generated liquidity orders
+        -- This is now allowed since user_id is nullable in order_book
+        -- No action needed - v_system_user_id remains NULL
         
         -- Calculate liquidity per side
         v_liquidity_per_side := v_initial_liquidity / 4;  -- Split into 4 levels

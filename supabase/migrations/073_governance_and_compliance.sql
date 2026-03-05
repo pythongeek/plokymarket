@@ -22,16 +22,16 @@ CREATE TABLE IF NOT EXISTS public.audit_logs (
 -- Enable RLS for audit_logs
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 
--- Create policy only if it doesn't exist
+-- Create policy only if it doesn't exist (using EXECUTE for DDL in DO block)
 DO $$
 BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM pg_policies WHERE policyname = 'Admins can view all audit logs' 
         AND tablename = 'audit_logs'
     ) THEN
-        CREATE POLICY "Admins can view all audit logs"
+        EXECUTE 'CREATE POLICY "Admins can view all audit logs"
             ON public.audit_logs FOR SELECT
-            USING (EXISTS (SELECT 1 FROM user_profiles WHERE id = auth.uid() AND is_admin = TRUE));
+            USING (EXISTS (SELECT 1 FROM user_profiles WHERE id = auth.uid() AND is_admin = TRUE))';
     END IF;
 END $$;
 

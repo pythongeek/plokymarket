@@ -9,10 +9,14 @@
 BEGIN;
 
 -- =============================================
--- 0. FIRST: Drop ALL FK constraints on order_book
+-- 0. FIRST: Make user_id nullable for system orders
 -- =============================================
 
--- Drop old FK constraint pointing to markets (must drop before seeding)
+-- Make user_id nullable to allow system-generated liquidity orders
+ALTER TABLE order_book 
+    ALTER COLUMN user_id DROP NOT NULL;
+
+-- Drop old FK constraint pointing to markets
 ALTER TABLE order_book 
     DROP CONSTRAINT IF EXISTS order_book_market_id_fkey;
 
@@ -20,11 +24,11 @@ ALTER TABLE order_book
 ALTER TABLE order_book 
     DROP CONSTRAINT IF EXISTS order_book_event_id_fkey;
 
--- Drop user_id FK constraint temporarily
+-- Drop user_id FK constraint (now that column is nullable)
 ALTER TABLE order_book 
     DROP CONSTRAINT IF EXISTS order_book_user_id_fkey;
 
--- Now the market_id and user_id columns can accept any UUID (will add FKs after seeding)
+-- Now the market_id and user_id columns can accept NULL for system orders
 
 -- =============================================
 -- 1. CREATE SEED ORDERBOOK FUNCTION
@@ -45,48 +49,48 @@ BEGIN
     -- Calculate liquidity per side
     v_liquidity_per_side := p_initial_liquidity / 2;
     
-    -- Insert YES buy orders (bids) at various price levels
+    -- Insert YES buy orders (bids) at various price levels (system orders have NULL user_id)
     v_order_id := gen_random_uuid();
     INSERT INTO order_book (id, market_id, user_id, side, price, size, filled, status, order_type, time_in_force)
-    VALUES (v_order_id, p_event_id, '00000000-0000-0000-0000-000000000000'::UUID, 'BUY', v_yes_price - p_spread, v_liquidity_per_side, 0, 'OPEN', 'LIMIT', 'GTC')
+    VALUES (v_order_id, p_event_id, NULL, 'BUY', v_yes_price - p_spread, v_liquidity_per_side, 0, 'OPEN', 'LIMIT', 'GTC')
     ON CONFLICT DO NOTHING;
     
     v_order_id := gen_random_uuid();
     INSERT INTO order_book (id, market_id, user_id, side, price, size, filled, status, order_type, time_in_force)
-    VALUES (v_order_id, p_event_id, '00000000-0000-0000-0000-000000000000'::UUID, 'BUY', v_yes_price - p_spread/2, v_liquidity_per_side/2, 0, 'OPEN', 'LIMIT', 'GTC')
+    VALUES (v_order_id, p_event_id, NULL, 'BUY', v_yes_price - p_spread/2, v_liquidity_per_side/2, 0, 'OPEN', 'LIMIT', 'GTC')
     ON CONFLICT DO NOTHING;
     
     -- Insert YES sell orders (asks) at various price levels
     v_order_id := gen_random_uuid();
     INSERT INTO order_book (id, market_id, user_id, side, price, size, filled, status, order_type, time_in_force)
-    VALUES (v_order_id, p_event_id, '00000000-0000-0000-0000-000000000000'::UUID, 'SELL', v_yes_price + p_spread, v_liquidity_per_side, 0, 'OPEN', 'LIMIT', 'GTC')
+    VALUES (v_order_id, p_event_id, NULL, 'SELL', v_yes_price + p_spread, v_liquidity_per_side, 0, 'OPEN', 'LIMIT', 'GTC')
     ON CONFLICT DO NOTHING;
     
     v_order_id := gen_random_uuid();
     INSERT INTO order_book (id, market_id, user_id, side, price, size, filled, status, order_type, time_in_force)
-    VALUES (v_order_id, p_event_id, '00000000-0000-0000-0000-000000000000'::UUID, 'SELL', v_yes_price + p_spread/2, v_liquidity_per_side/2, 0, 'OPEN', 'LIMIT', 'GTC')
+    VALUES (v_order_id, p_event_id, NULL, 'SELL', v_yes_price + p_spread/2, v_liquidity_per_side/2, 0, 'OPEN', 'LIMIT', 'GTC')
     ON CONFLICT DO NOTHING;
     
     -- Insert NO buy orders (bids)
     v_order_id := gen_random_uuid();
     INSERT INTO order_book (id, market_id, user_id, side, price, size, filled, status, order_type, time_in_force)
-    VALUES (v_order_id, p_event_id, '00000000-0000-0000-0000-000000000000'::UUID, 'BUY', v_no_price - p_spread, v_liquidity_per_side, 0, 'OPEN', 'LIMIT', 'GTC')
+    VALUES (v_order_id, p_event_id, NULL, 'BUY', v_no_price - p_spread, v_liquidity_per_side, 0, 'OPEN', 'LIMIT', 'GTC')
     ON CONFLICT DO NOTHING;
     
     v_order_id := gen_random_uuid();
     INSERT INTO order_book (id, market_id, user_id, side, price, size, filled, status, order_type, time_in_force)
-    VALUES (v_order_id, p_event_id, '00000000-0000-0000-0000-000000000000'::UUID, 'BUY', v_no_price - p_spread/2, v_liquidity_per_side/2, 0, 'OPEN', 'LIMIT', 'GTC')
+    VALUES (v_order_id, p_event_id, NULL, 'BUY', v_no_price - p_spread/2, v_liquidity_per_side/2, 0, 'OPEN', 'LIMIT', 'GTC')
     ON CONFLICT DO NOTHING;
     
     -- Insert NO sell orders (asks)
     v_order_id := gen_random_uuid();
     INSERT INTO order_book (id, market_id, user_id, side, price, size, filled, status, order_type, time_in_force)
-    VALUES (v_order_id, p_event_id, '00000000-0000-0000-0000-000000000000'::UUID, 'SELL', v_no_price + p_spread, v_liquidity_per_side, 0, 'OPEN', 'LIMIT', 'GTC')
+    VALUES (v_order_id, p_event_id, NULL, 'SELL', v_no_price + p_spread, v_liquidity_per_side, 0, 'OPEN', 'LIMIT', 'GTC')
     ON CONFLICT DO NOTHING;
     
     v_order_id := gen_random_uuid();
     INSERT INTO order_book (id, market_id, user_id, side, price, size, filled, status, order_type, time_in_force)
-    VALUES (v_order_id, p_event_id, '00000000-0000-0000-0000-000000000000'::UUID, 'SELL', v_no_price + p_spread/2, v_liquidity_per_side/2, 0, 'OPEN', 'LIMIT', 'GTC')
+    VALUES (v_order_id, p_event_id, NULL, 'SELL', v_no_price + p_spread/2, v_liquidity_per_side/2, 0, 'OPEN', 'LIMIT', 'GTC')
     ON CONFLICT DO NOTHING;
     
     RAISE NOTICE 'Orderbook seeded for event % with liquidity %', p_event_id, p_initial_liquidity;
@@ -165,19 +169,19 @@ END $$;
 -- 5. READD FK CONSTRAINTS AFTER SEEDING
 -- =============================================
 
+-- Add market_id FK to events (required for trading)
 ALTER TABLE order_book 
     ADD CONSTRAINT order_book_event_id_fkey 
     FOREIGN KEY (market_id) REFERENCES events(id) 
     ON DELETE CASCADE;
 
--- Re-add user_id FK (using auth.users)
-ALTER TABLE order_book 
-    ADD CONSTRAINT order_book_user_id_fkey 
-    FOREIGN KEY (user_id) REFERENCES auth.users(id) 
-    ON DELETE CASCADE;
+-- Note: user_id FK is NOT re-added because:
+-- 1. user_id is now nullable for system-generated liquidity orders
+-- 2. User orders will always have a valid user_id from auth.users
+-- 3. The application logic ensures only valid user_ids are inserted for user orders
 
 -- =============================================
--- 5. VERIFY
+-- 6. VERIFY
 -- =============================================
 
 DO $$
