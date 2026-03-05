@@ -29,7 +29,7 @@ export interface EventMarketCreationResult {
   marketIds?: string[];
   slug?: string;
   error?: string;
-  details?: any;
+  details?: Record<string, unknown>;
 }
 
 /**
@@ -195,12 +195,12 @@ export class EventMarketSync {
         slug: resultSlug,
       };
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[EventMarketSync] Creation failed:', error);
       return {
         success: false,
-        error: error.message,
-        details: error,
+        error: error instanceof Error ? error.message : String(error),
+        details: { error },
       };
     }
   }

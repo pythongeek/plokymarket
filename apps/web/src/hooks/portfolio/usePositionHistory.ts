@@ -151,11 +151,11 @@ export function usePositionHistory(userId?: string, filters?: PositionFilters) {
         // Add fill events from trades
         const allRelatedTrades = [
           ...makerTrades?.filter((t: any) => t.market_id === pos.market_id && t.outcome === pos.outcome).map((t: any) => {
-            const isTakerBuyer = t.taker_side === 'BUY';
+            const isTakerBuyer = t.taker_side === 'buy';
             return { ...t, isBuyer: !isTakerBuyer }
           }) || [],
           ...takerTrades?.filter((t: any) => t.market_id === pos.market_id && t.outcome === pos.outcome).map((t: any) => {
-            const isTakerBuyer = t.taker_side === 'BUY';
+            const isTakerBuyer = t.taker_side === 'buy';
             return { ...t, isBuyer: isTakerBuyer }
           }) || []
         ];

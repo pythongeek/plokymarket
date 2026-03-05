@@ -99,26 +99,26 @@ export function StateReconciliation({
 
     try {
       const orderIds = orders.map(o => o.id);
-      
+
       // Animate progress
       const progressInterval = setInterval(() => {
         setProgress(p => Math.min(p + 10, 80));
       }, 50);
 
       const reconcileResults = await reconcileOrderStates(orderIds);
-      
+
       clearInterval(progressInterval);
       setProgress(100);
       setResults(reconcileResults);
 
       // Identify conflicts
       const conflictItems: ConflictItem[] = [];
-      
+
       for (const result of reconcileResults) {
         const localOrder = orders.find(o => o.id === result.orderId);
         if (!localOrder) continue;
 
-        const hasConflict = 
+        const hasConflict =
           localOrder.status !== result.currentStatus ||
           localOrder.filled_quantity !== result.filledQuantity;
 
@@ -172,8 +172,8 @@ export function StateReconciliation({
   }, [orders, isReconciling, autoReconcile, onReconciliationComplete, toast]);
 
   const getResolutionDescription = (status: string, changes: any[]): string => {
-    if (status === 'FILLED') return 'Order was fully filled';
-    if (status === 'CANCELLED') return 'Order was cancelled';
+    if (status === 'filled') return 'Order was fully filled';
+    if (status === 'cancelled') return 'Order was cancelled';
     if (status === 'CANCELLING') return 'Cancellation in progress';
     if (status === 'EXPIRED') return 'Order expired';
     if (changes.length > 0) return `${changes.length} state changes occurred`;
@@ -281,7 +281,7 @@ export function StateReconciliation({
                 <Alert className="bg-yellow-500/10 border-yellow-500/20">
                   <AlertTriangle className="h-4 w-4 text-yellow-600" />
                   <AlertDescription className="text-yellow-700">
-                    {conflicts.length} order(s) had state changes while you were offline. 
+                    {conflicts.length} order(s) had state changes while you were offline.
                     Server state has been applied.
                   </AlertDescription>
                 </Alert>
@@ -301,7 +301,7 @@ export function StateReconciliation({
                             Resolved
                           </Badge>
                         </div>
-                        
+
                         <div className="grid grid-cols-2 gap-4 text-sm">
                           <div className="space-y-1">
                             <span className="text-muted-foreground text-xs">Local State</span>
@@ -346,8 +346,8 @@ export function StateReconciliation({
             <Button variant="outline" onClick={() => setShowDetails(false)}>
               Close
             </Button>
-            <Button 
-              onClick={handleReconcile} 
+            <Button
+              onClick={handleReconcile}
               disabled={isReconciling || !isOnline}
             >
               {isReconciling ? (

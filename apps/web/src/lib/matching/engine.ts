@@ -32,14 +32,14 @@ const MATCHING_CONFIG = {
   TARGET_ENQUEUE_LATENCY_US: 10,
   TARGET_DEQUEUE_LATENCY_US: 10,
   TARGET_MATCH_LATENCY_US: 500,
-  
+
   // Pro-rata settings
   PRO_RATA_MIN_VOLUME: 1000000, // $1M
   LARGE_FILL_THRESHOLD: 100000, // $100k for email notifications
-  
+
   // Timestamp precision
   NS_PER_US: 1000,
-  
+
   // Performance
   MAX_BATCH_SIZE: 100,
 };
@@ -83,16 +83,16 @@ export class OrderQueue {
 
     const node = this.head;
     this.head = node.nextNodeId ? { ...node, nextNodeId: node.nextNodeId } as OrderNode : null;
-    
+
     if (this.head) {
       this.head.prevNodeId = null;
     } else {
       this.tail = null;
     }
-    
+
     this.size--;
     this.totalVolume -= node.remainingSize;
-    
+
     return node;
   }
 
@@ -123,7 +123,7 @@ export class OrderQueue {
 
     this.size--;
     this.totalVolume -= node.remainingSize;
-    
+
     return true;
   }
 
@@ -159,7 +159,7 @@ export function getNanoTimestamp(): number {
  */
 export async function fifoEnqueue(
   marketId: string,
-  side: 'BUY' | 'SELL',
+  side: 'buy' | 'sell',
   price: number,
   orderId: string,
   accountId: string,
@@ -180,7 +180,7 @@ export async function fifoEnqueue(
     });
 
     const latencyUs = Math.round((performance.now() - startTime) * 1000);
-    
+
     // Record latency metric
     await recordLatency('ENQUEUE', latencyUs, marketId);
 
@@ -277,7 +277,7 @@ export function calculateProRataFills(
 ): ProRataFill[] {
   const fills: ProRataFill[] = [];
   const totalVolume = queue.totalVolume;
-  
+
   if (totalVolume === 0) return fills;
 
   let remaining = incomingSize;
@@ -364,7 +364,7 @@ export async function calculateProRataFillsDB(
  */
 export async function matchOrderFIFO(
   marketId: string,
-  side: 'BUY' | 'SELL',
+  side: 'buy' | 'sell',
   price: number,
   size: number
 ): Promise<MatchResult[]> {
@@ -463,7 +463,7 @@ export function subscribeToFillNotifications(
   onNotification: (notification: FillNotification) => void
 ) {
   if (!supabase) {
-    return { unsubscribe: () => {} };
+    return { unsubscribe: () => { } };
   }
 
   const channel = supabase

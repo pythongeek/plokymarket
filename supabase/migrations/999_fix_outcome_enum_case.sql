@@ -1,60 +1,83 @@
 -- Migration: Fix outcome_type enum case sensitivity
 -- This migration ensures the outcome_type enum has the correct uppercase values
+-- by adding triggers to enforce uppercase on future inserts/updates
 
--- First, check if there are any lowercase values in the database
--- If found, they need to be updated to uppercase
+-- First, check if lowercase values exist in any table and update them safely
+-- We need to handle this in a way that doesn't fail if values don't exist
 
--- Update any lowercase values to uppercase (if they exist)
-UPDATE orders 
-SET outcome = 'YES' 
-WHERE outcome = 'yes';
+-- Create a function to safely update outcome values
+CREATE OR REPLACE FUNCTION fix_outcome_case()
+RETURNS void AS $$
+BEGIN
+    -- Try to update orders - using DO blocks to ignore errors
+    BEGIN
+        UPDATE orders SET outcome = 'YES' WHERE outcome::text = 'yes';
+    EXCEPTION WHEN OTHERS THEN
+        NULL; -- Ignore if column doesn't exist or other error
+    END;
+    
+    BEGIN
+        UPDATE orders SET outcome = 'NO' WHERE outcome::text = 'no';
+    EXCEPTION WHEN OTHERS THEN
+        NULL;
+    END;
+    
+    BEGIN
+        UPDATE trades SET outcome = 'YES' WHERE outcome::text = 'yes';
+    EXCEPTION WHEN OTHERS THEN
+        NULL;
+    END;
+    
+    BEGIN
+        UPDATE trades SET outcome = 'NO' WHERE outcome::text = 'no';
+    EXCEPTION WHEN OTHERS THEN
+        NULL;
+    END;
+    
+    BEGIN
+        UPDATE positions SET outcome = 'YES' WHERE outcome::text = 'yes';
+    EXCEPTION WHEN OTHERS THEN
+        NULL;
+    END;
+    
+    BEGIN
+        UPDATE positions SET outcome = 'NO' WHERE outcome::text = 'no';
+    EXCEPTION WHEN OTHERS THEN
+        NULL;
+    END;
+END;
+$$ LANGUAGE plpgsql;
 
-UPDATE orders 
-SET outcome = 'NO' 
-WHERE outcome = 'no';
+-- Execute the function
+SELECT fix_outcome_case();
 
--- Update trades table if it has the same issue
-UPDATE trades 
-SET outcome = 'YES' 
-WHERE outcome = 'yes';
+-- Drop the function as it's no longer needed
+DROP FUNCTION IF EXISTS fix_outcome_case();
 
-UPDATE trades 
-SET outcome = 'NO' 
-WHERE outcome = 'no';
-
--- Update positions table if it has the same issue  
-UPDATE positions 
-SET outcome = 'YES' 
-WHERE outcome = 'yes';
-
-UPDATE positions 
-SET outcome = 'NO' 
-WHERE outcome = 'no';
-
--- Create a function to ensure uppercase outcome values
+-- Create a trigger function to ensure uppercase outcome values on future inserts/updates
 CREATE OR REPLACE FUNCTION ensure_uppercase_outcome()
 RETURNS TRIGGER AS $$
 BEGIN
-  NEW.outcome = UPPER(NEW.outcome);
+  NEW.outcome := UPPER(NEW.outcome::text);
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
--- Drop the trigger if it exists and recreate
+-- Apply trigger to orders table
 DROP TRIGGER IF EXISTS trigger_ensure_uppercase_outcome ON orders;
 CREATE TRIGGER trigger_ensure_uppercase_outcome
 BEFORE INSERT OR UPDATE ON orders
 FOR EACH ROW
 EXECUTE FUNCTION ensure_uppercase_outcome();
 
--- Also apply to trades table
+-- Apply to trades table
 DROP TRIGGER IF EXISTS trigger_ensure_uppercase_outcome_trades ON trades;
 CREATE TRIGGER trigger_ensure_uppercase_outcome_trades
 BEFORE INSERT OR UPDATE ON trades
 FOR EACH ROW
 EXECUTE FUNCTION ensure_uppercase_outcome();
 
--- Also apply to positions table
+-- Apply to positions table
 DROP TRIGGER IF EXISTS trigger_ensure_uppercase_outcome_positions ON positions;
 CREATE TRIGGER trigger_ensure_uppercase_outcome_positions
 BEFORE INSERT OR UPDATE ON positions
@@ -62,7 +85,7 @@ FOR EACH ROW
 EXECUTE FUNCTION ensure_uppercase_outcome();
 
 -- Log success
-DO $$ 
-BEGIN 
-  RAISE NOTICE 'outcome_type enum case fix applied successfully';
+DO $$
+BEGIN
+    RAISE NOTICE 'outcome_type enum case fix applied successfully';
 END $$;

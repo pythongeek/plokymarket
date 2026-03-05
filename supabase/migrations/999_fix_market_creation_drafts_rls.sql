@@ -9,13 +9,14 @@ DROP POLICY IF EXISTS "Creators can view own drafts" ON market_creation_drafts;
 -- 1. Owners to view their own drafts
 -- 2. Admins to view all drafts
 -- 3. Anonymous/count queries for pending legal reviews (for dashboard badges)
+DROP POLICY IF EXISTS "Allow read access to market_creation_drafts" ON market_creation_drafts;
 CREATE POLICY "Allow read access to market_creation_drafts"
     ON market_creation_drafts
     FOR SELECT
     USING (
         -- Allow creators to view their own drafts
         auth.uid() = creator_id
-        OR 
+        OR
         -- Allow admins to view all drafts
         (EXISTS (SELECT 1 FROM user_profiles WHERE id = auth.uid() AND is_admin = TRUE))
         OR
@@ -24,28 +25,31 @@ CREATE POLICY "Allow read access to market_creation_drafts"
     );
 
 -- Also create a separate policy for INSERT with check
+DROP POLICY IF EXISTS "Allow insert for creators" ON market_creation_drafts;
 CREATE POLICY "Allow insert for creators"
     ON market_creation_drafts
     FOR INSERT
     WITH CHECK (auth.uid() = creator_id);
 
 -- Create policy for UPDATE
+DROP POLICY IF EXISTS "Allow update for creators and admins" ON market_creation_drafts;
 CREATE POLICY "Allow update for creators and admins"
     ON market_creation_drafts
     FOR UPDATE
     USING (
         auth.uid() = creator_id
-        OR 
+        OR
         (EXISTS (SELECT 1 FROM user_profiles WHERE id = auth.uid() AND is_admin = TRUE))
     );
 
 -- Create policy for DELETE
+DROP POLICY IF EXISTS "Allow delete for creators and admins" ON market_creation_drafts;
 CREATE POLICY "Allow delete for creators and admins"
     ON market_creation_drafts
     FOR DELETE
     USING (
         auth.uid() = creator_id
-        OR 
+        OR
         (EXISTS (SELECT 1 FROM user_profiles WHERE id = auth.uid() AND is_admin = TRUE))
     );
 

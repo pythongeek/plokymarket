@@ -1,10 +1,12 @@
 import { createServiceClient } from '@/lib/supabase/service';
 import type { CreateEventInput, CreateEventResult, Event, ResolutionMethod } from './types';
 
-const supabase = createServiceClient();
-
 export class EventService {
-  
+
+  private async getSupabase() {
+    return await createServiceClient();
+  }
+
   /**
    * Create event atomically with CLOB market
    * Uses production-ready matching engine
@@ -14,6 +16,7 @@ export class EventService {
     adminId: string
   ): Promise<CreateEventResult> {
     try {
+      const supabase = await this.getSupabase();
       // Validate admin
       const { data: admin, error: adminError } = await supabase
         .from('user_profiles')
@@ -83,6 +86,7 @@ export class EventService {
     limit?: number;
     offset?: number;
   } = {}): Promise<{ events: Event[]; total: number }> {
+    const supabase = await this.getSupabase();
     const { data, error } = await supabase.rpc('get_admin_events', {
       p_status: params.status || null,
       p_category: params.category || null,
@@ -107,6 +111,7 @@ export class EventService {
    * Used for real-time order book display
    */
   async getOrderBookDepth(marketId: string, depth: number = 10) {
+    const supabase = await this.getSupabase();
     const { data, error } = await supabase.rpc('get_order_book_depth', {
       p_market_id: marketId,
       p_depth: depth
@@ -124,6 +129,7 @@ export class EventService {
    * Get price history for charts
    */
   async getPriceHistory(marketId: string, outcome: string = 'YES', limit: number = 100) {
+    const supabase = await this.getSupabase();
     const { data, error } = await supabase
       .from('price_history')
       .select('*')
@@ -144,6 +150,7 @@ export class EventService {
    * Get OHLC data for candlestick charts
    */
   async getPriceOHLC(marketId: string, outcome: string = 'YES') {
+    const supabase = await this.getSupabase();
     const { data, error } = await supabase
       .from('price_ohlc_1h')
       .select('*')
@@ -170,6 +177,7 @@ export class EventService {
     notes?: string
   ): Promise<{ success: boolean; error?: string }> {
     try {
+      const supabase = await this.getSupabase();
       // Update event status
       const { error } = await supabase
         .from('events')
@@ -187,7 +195,7 @@ export class EventService {
       }
 
       // Update resolution_systems
-      await supabase
+      await (await this.getSupabase())
         .from('resolution_systems')
         .update({
           status: 'resolved',

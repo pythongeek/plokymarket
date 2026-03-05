@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/service';
 import { verifyQStashSignature } from '@/lib/qstash/verify';
 
 export async function POST(request: NextRequest) {
@@ -15,13 +15,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
     }
 
-    const supabase = await createClient();
+    // Use service role client to bypass RLS for cron job operations
+    const supabase = createServiceClient();
 
     // Get yesterday's date range
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
     yesterday.setHours(0, 0, 0, 0);
-    
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -41,11 +42,11 @@ export async function POST(request: NextRequest) {
     const yesCount = executions?.filter(e => e.outcome === 'yes').length || 0;
     const noCount = executions?.filter(e => e.outcome === 'no').length || 0;
     const escalatedCount = executions?.filter(e => e.outcome === 'escalated').length || 0;
-    
+
     const avgConfidence = totalExecutions > 0
       ? executions?.reduce((sum, e) => sum + (e.confidence || 0), 0) / totalExecutions
       : 0;
-    
+
     const avgExecutionTime = totalExecutions > 0
       ? executions?.reduce((sum, e) => sum + (e.execution_time || 0), 0) / totalExecutions
       : 0;

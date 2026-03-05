@@ -56,16 +56,16 @@ const containerVariants = {
     opacity: 1,
     transition: { staggerChildren: 0.05 }
   }
-};
+} as const;
 
-const itemVariants: Variants = {
+const itemVariants = {
   hidden: { opacity: 0, x: -20 },
   visible: {
     opacity: 1,
     x: 0,
     transition: { type: "spring", stiffness: 100 }
   }
-};
+} as const;
 
 export function PositionHistory({ userId }: PositionHistoryProps) {
   const [filters, setFilters] = useState<PositionFilters>({});

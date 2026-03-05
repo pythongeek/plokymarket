@@ -113,13 +113,13 @@ function getSuggestedAction(status: string, changes: any[]): string {
   const hasFill = changes.some((c: any) => c.filled_before > 0);
   const hasCancel = changes.some((c: any) => c.type === 'CANCEL');
 
-  if (status === 'FILLED') {
+  if (status === 'filled') {
     return hasCancel
       ? 'Order was filled during cancellation attempt - fill takes precedence'
       : 'Order fully filled';
   }
 
-  if (status === 'CANCELLED') {
+  if (status === 'cancelled') {
     return hasFill
       ? 'Order partially filled then cancelled'
       : 'Order successfully cancelled';

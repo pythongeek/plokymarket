@@ -18,6 +18,7 @@
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import type { Market } from '@/types/index';
 
 // ── Admin client factory ─────────────────────────────────────────────────────
 function getAdminClient(): SupabaseClient {
@@ -61,9 +62,9 @@ export class MarketService {
    */
   async createMarketWithLiquidity(
     eventId: string,
-    marketData: any,
+    marketData: Partial<Market>,
     initialLiquidity: number
-  ): Promise<any> {
+  ): Promise<Market | null> {
     const supabase = getAdminClient();
 
     // 1. Prepare data with Safe Mapping for event_date

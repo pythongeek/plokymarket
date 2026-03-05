@@ -2,8 +2,7 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import type { Database } from '@/types/database.types';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+// Environment variables should be accessed inside functions for Edge runtime compatibility
 
 // Bengali text encoding fix for Supabase responses
 const encodeBengaliText = (obj: any): any => {
@@ -35,8 +34,10 @@ const encodeBengaliText = (obj: any): any => {
  * This client handles cookies properly for SSR environments
  */
 export async function createClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
   const cookieStore = await cookies();
-  
+
   if (!supabaseUrl || !supabaseAnonKey) {
     console.error('Supabase credentials not configured');
     throw new Error('Supabase credentials not configured');
@@ -74,9 +75,10 @@ export async function createClient() {
  * Only use this in server-side code and never expose to client
  */
 export async function createServiceClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const cookieStore = await cookies();
-  
+
   if (!supabaseUrl || !serviceRoleKey) {
     console.error('Service role key not configured');
     throw new Error('Service role credentials not configured');

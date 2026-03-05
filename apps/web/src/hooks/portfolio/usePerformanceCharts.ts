@@ -120,11 +120,11 @@ export function usePerformanceCharts(userId?: string, timeframe: '1M' | '3M' | '
       // Combine all trades and infer buy/sell side
       const allTrades = [
         ...(makerTrades || []).map((t: any) => {
-          const isTakerBuyer = t.taker_side === 'BUY';
+          const isTakerBuyer = t.taker_side === 'buy';
           return { ...t, userSide: isTakerBuyer ? 'sell' : 'buy' }
         }),
         ...(takerTrades || []).map((t: any) => {
-          const isTakerBuyer = t.taker_side === 'BUY';
+          const isTakerBuyer = t.taker_side === 'buy';
           return { ...t, userSide: isTakerBuyer ? 'buy' : 'sell' }
         })
       ].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());

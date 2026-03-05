@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
         // 3. Place Order ($10 BUY)
         const result = await OrderBookService.executeOrder(supabase, TEST_MARKET_ID, {
             userId: TEST_USER_ID,
-            side: 'BUY',
+            side: 'buy',
             price: 1,
             size: 10
         });

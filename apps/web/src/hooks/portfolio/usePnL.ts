@@ -158,11 +158,11 @@ export function usePnL(userId?: string, timeHorizon: TimeHorizon = 'allTime') {
 
       const allTrades = [
         ...(makerTrades || []).map((t: any) => {
-          const isTakerBuyer = t.taker_side === 'BUY';
+          const isTakerBuyer = t.taker_side === 'buy';
           return { ...t, isBuyer: isTakerBuyer ? false : true }
         }),
         ...(takerTrades || []).map((t: any) => {
-          const isTakerBuyer = t.taker_side === 'BUY';
+          const isTakerBuyer = t.taker_side === 'buy';
           return { ...t, isBuyer: isTakerBuyer ? true : false }
         })
       ];

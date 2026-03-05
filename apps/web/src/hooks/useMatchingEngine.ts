@@ -16,7 +16,7 @@ import {
   fifoEnqueue,
   matchOrderFIFO,
   notifyFill,
-  calculateProRataFills,
+  calculateProRataFillsDB,
   OrderQueue,
   getNanoTimestamp,
   MATCHING_CONFIG,
@@ -54,27 +54,27 @@ interface UseMatchingEngineReturn {
   orderBook: OrderBookState;
   refreshOrderBook: () => Promise<void>;
   isLoading: boolean;
-  
+
   // Fill notifications
   recentFills: FillNotification[];
   unreadFillCount: number;
   markFillsAsRead: () => void;
-  
+
   // Performance
   metrics: MatchingMetrics;
   refreshMetrics: () => Promise<void>;
-  
+
   // Operations
   enqueue: (
     marketId: string,
-    side: 'BUY' | 'SELL',
+    side: 'buy' | 'sell',
     price: number,
     size: number
   ) => Promise<EnqueueResult | null>;
-  
+
   match: (
     marketId: string,
-    side: 'BUY' | 'SELL',
+    side: 'buy' | 'sell',
     price: number,
     size: number
   ) => Promise<MatchResult[]>;
@@ -96,7 +96,7 @@ export function useMatchingEngine(
     bestAsk: 0,
     lastUpdate: 0,
   });
-  
+
   const [recentFills, setRecentFills] = useState<FillNotification[]>([]);
   const [unreadFillCount, setUnreadFillCount] = useState(0);
   const [metrics, setMetrics] = useState<MatchingMetrics>({
@@ -106,7 +106,7 @@ export function useMatchingEngine(
     operationCount: 0,
   });
   const [isLoading, setIsLoading] = useState(false);
-  
+
   const subscriptionRef = useRef<{ unsubscribe: () => void } | null>(null);
   const fillsRef = useRef<FillNotification[]>([]);
 
@@ -116,21 +116,21 @@ export function useMatchingEngine(
 
   const refreshOrderBook = useCallback(async () => {
     setIsLoading(true);
-    
+
     try {
       const depth = await getOrderBookDepth(marketId);
-      
+
       const bids = depth
-        .filter(d => d.side === 'BUY')
+        .filter(d => d.side === 'buy')
         .sort((a, b) => b.price - a.price);
-      
+
       const asks = depth
-        .filter(d => d.side === 'SELL')
+        .filter(d => d.side === 'sell')
         .sort((a, b) => a.price - b.price);
-      
+
       const bestBid = bids[0]?.price || 0;
       const bestAsk = asks[0]?.price || 0;
-      
+
       setOrderBook({
         bids,
         asks,
@@ -174,7 +174,7 @@ export function useMatchingEngine(
   const refreshMetrics = useCallback(async () => {
     try {
       const performance = await getMatchingPerformance();
-      
+
       if (performance.length > 0) {
         const latest = performance[0];
         setMetrics({
@@ -195,20 +195,20 @@ export function useMatchingEngine(
 
   const enqueue = useCallback(async (
     marketId: string,
-    side: 'BUY' | 'SELL',
+    side: 'buy' | 'sell',
     price: number,
     size: number
   ): Promise<EnqueueResult | null> => {
     // Note: In production, orderId and accountId would come from auth
     const orderId = `order-${getNanoTimestamp()}`;
     const accountId = userId;
-    
+
     return fifoEnqueue(marketId, side, price, orderId, accountId, size);
   }, [userId]);
 
   const match = useCallback(async (
     marketId: string,
-    side: 'BUY' | 'SELL',
+    side: 'buy' | 'sell',
     price: number,
     size: number
   ): Promise<MatchResult[]> => {
@@ -260,9 +260,9 @@ export function useProRataMatching() {
     priceLevelId: string
   ) => {
     setIsCalculating(true);
-    
+
     try {
-      const fills = await calculateProRataFills(incomingSize, priceLevelId);
+      const fills = await calculateProRataFillsDB(incomingSize, priceLevelId);
       setResult(fills);
       return fills;
     } finally {
@@ -314,12 +314,12 @@ export function useLatencyMonitor() {
   const record = useCallback((latencyUs: number) => {
     setLatencies(prev => {
       const newLatencies = [...prev, latencyUs].slice(-100); // Keep last 100
-      
+
       // Calculate stats
       const sorted = [...newLatencies].sort((a, b) => a - b);
       const p50Index = Math.floor(sorted.length * 0.5);
       const p99Index = Math.floor(sorted.length * 0.99);
-      
+
       setStats({
         p50: sorted[p50Index] || 0,
         p99: sorted[p99Index] || 0,
@@ -327,7 +327,7 @@ export function useLatencyMonitor() {
         min: sorted[0] || 0,
         max: sorted[sorted.length - 1] || 0,
       });
-      
+
       return newLatencies;
     });
   }, []);

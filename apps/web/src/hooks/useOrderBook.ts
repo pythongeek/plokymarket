@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { MarketDataLevel, OrderBookState } from '@/lib/clob/types';
 import { createClient } from '@supabase/supabase-js';
 import { decode } from '@msgpack/msgpack';
@@ -20,11 +20,14 @@ async function decompress(base64: string): Promise<Uint8Array> {
     return new Uint8Array(arrayBuffer);
 }
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export function useOrderBook(marketId: string, depthValue: number = 100, granularity: number = 1) {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+
+    // Memoize the client instance unless we want it re-created every render
+    const supabase = React.useMemo(() => createClient(supabaseUrl, supabaseAnonKey), [supabaseUrl, supabaseAnonKey]);
+
     const [bids, setBids] = useState<MarketDataLevel[]>([]);
     const [asks, setAsks] = useState<MarketDataLevel[]>([]);
     const [loading, setLoading] = useState(true);

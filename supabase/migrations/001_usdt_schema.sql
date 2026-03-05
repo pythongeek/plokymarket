@@ -206,11 +206,8 @@ CREATE TABLE IF NOT EXISTS public.notifications (
 CREATE INDEX IF NOT EXISTS idx_wallet_transactions_user_created 
   ON public.wallet_transactions(user_id, created_at DESC);
 
-CREATE INDEX IF NOT EXISTS idx_wallet_transactions_type_status 
-  ON public.wallet_transactions(type, status);
-
-CREATE INDEX IF NOT EXISTS idx_wallet_transactions_reference 
-  ON public.wallet_transactions(reference_id) WHERE reference_id IS NOT NULL;
+-- idx_wallet_transactions_type_status dropped to resolve legacy push conflicts
+-- idx_wallet_transactions_reference dropped to resolve legacy push conflicts
 
 CREATE INDEX IF NOT EXISTS idx_deposits_status_created 
   ON public.deposit_requests(status, created_at);

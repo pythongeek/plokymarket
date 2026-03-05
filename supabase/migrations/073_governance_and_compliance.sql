@@ -22,9 +22,18 @@ CREATE TABLE IF NOT EXISTS public.audit_logs (
 -- Enable RLS for audit_logs
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Admins can view all audit logs"
-    ON public.audit_logs FOR SELECT
-    USING (EXISTS (SELECT 1 FROM user_profiles WHERE id = auth.uid() AND is_admin = TRUE));
+-- Create policy only if it doesn't exist
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies WHERE policyname = 'Admins can view all audit logs' 
+        AND tablename = 'audit_logs'
+    ) THEN
+        CREATE POLICY "Admins can view all audit logs"
+            ON public.audit_logs FOR SELECT
+            USING (EXISTS (SELECT 1 FROM user_profiles WHERE id = auth.uid() AND is_admin = TRUE));
+    END IF;
+END $$;
 
 -- 2. DORMANT ACCOUNT MANAGEMENT
 -- Add last_login_at to user_profiles if not exists

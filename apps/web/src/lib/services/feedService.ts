@@ -67,6 +67,45 @@ export class FeedService {
 
         if (error) throw new Error(`Unfollow failed: ${error.message}`);
     }
+
+    // ৬. ইউজারের ফিড প্রেফারেন্স লোড করা
+    async getFeedPreferences(userId: string): Promise<Record<string, unknown>> {
+        const supabase = await createClient();
+        const { data, error } = await supabase
+            .from('user_feed_preferences')
+            .select('preferences')
+            .eq('user_id', userId)
+            .maybeSingle();
+
+        if (error && error.code !== 'PGRST116') {
+            console.error('[FeedService] getFeedPreferences error:', error);
+            throw new Error(`Failed to fetch feed preferences: ${error.message}`);
+        }
+
+        // Return empty object as defaults if record not found
+        return (data?.preferences as Record<string, unknown>) || {};
+    }
+
+    // ৭. ইউজারের ফিড প্রেফারেন্স আপডেট করা (Upsert)
+    async updateFeedPreferences(userId: string, prefs: Record<string, unknown>): Promise<void> {
+        const supabase = await createClient();
+
+        // Use upsert to handle both creation and updates automatically
+        const { error } = await supabase
+            .from('user_feed_preferences')
+            .upsert({
+                user_id: userId,
+                preferences: prefs,
+                updated_at: new Date().toISOString()
+            }, {
+                onConflict: 'user_id'
+            });
+
+        if (error) {
+            console.error('[FeedService] updateFeedPreferences error:', error);
+            throw new Error(`Failed to update feed preferences: ${error.message}`);
+        }
+    }
 }
 
 export const feedService = new FeedService();

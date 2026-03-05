@@ -18,7 +18,7 @@ export interface Transaction {
     status: string;
     description: string;
     created_at: string;
-    metadata?: any;
+    metadata?: Record<string, unknown>;
 }
 
 export class WalletService {

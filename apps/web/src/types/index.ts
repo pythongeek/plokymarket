@@ -399,7 +399,7 @@ export interface OrderNode {
   orderId: string;
   accountId: string;
   marketId: string;
-  side: 'BUY' | 'SELL';
+  side: 'buy' | 'sell';
   price: number;
   size: number;
   remainingSize: number;
@@ -419,7 +419,7 @@ export interface OrderNode {
 export interface PriceLevel {
   id: string;
   marketId: string;
-  side: 'BUY' | 'SELL';
+  side: 'buy' | 'sell';
   price: number;
   headNodeId?: string;
   tailNodeId?: string;
@@ -501,7 +501,7 @@ export interface MatchingPerformance {
 
 export interface OrderBookDepth {
   marketId: string;
-  side: 'BUY' | 'SELL';
+  side: 'buy' | 'sell';
   price: number;
   totalVolume: number;
   orderCount: number;

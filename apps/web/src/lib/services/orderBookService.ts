@@ -1,17 +1,18 @@
 import { Redis } from '@upstash/redis';
 import { createClient } from '@/lib/supabase/server';
+import type { Order } from '@/types/index';
 
 // Lazy initialization of Redis client to avoid env var warnings at build time
 let redisClient: Redis | null = null;
 const getRedis = (): Redis | null => {
-  if (!redisClient) {
-    const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
-    const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
-    if (url && token) {
-      redisClient = new Redis({ url, token });
+    if (!redisClient) {
+        const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+        const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+        if (url && token) {
+            redisClient = new Redis({ url, token });
+        }
     }
-  }
-  return redisClient;
+    return redisClient;
 };
 
 const CACHE_TTL = 1; // 1 second for near real-time
@@ -119,7 +120,7 @@ export class OrderBookService {
       - Returns sorted array of { price, size, total }
     */
     private aggregateOrders(
-        orders: any[],
+        orders: Order[],
         sort: 'asc' | 'desc'
     ): OrderBookLevel[] {
         const aggregated = new Map<number, number>();

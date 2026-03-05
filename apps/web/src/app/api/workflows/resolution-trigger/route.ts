@@ -1,17 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { verifyQStashSignature } from '@/lib/upstash/workflows';
 import { executeVerificationWorkflow } from '@/lib/workflows/UpstashOrchestrator';
 import { eventService } from '@/lib/services/EventService';
 
-export const runtime = 'edge';
 export const maxDuration = 60;
 
-const getSupabase = () => createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { persistSession: false } }
-);
+import { createServiceClient } from '@/lib/supabase/server';
 
 export async function POST(request: NextRequest) {
     const startTime = Date.now();
@@ -31,7 +25,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Missing req fields' }, { status: 400 });
         }
 
-        const supabase = getSupabase();
+        const supabase = await createServiceClient();
 
         // 1. Fetch event and market
         const { data: event, error: eventError } = await supabase
@@ -132,7 +126,7 @@ export async function POST(request: NextRequest) {
 
         // Attempt to log to DLQ
         try {
-            const supabase = getSupabase();
+            const supabase = await createServiceClient();
             await supabase.from('workflow_dlq').insert({
                 workflow_type: 'resolution-trigger',
                 error: error.message,

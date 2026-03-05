@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/service';
 import { NextResponse } from 'next/server';
 import { verifyQStashSignature } from '@/lib/upstash/workflows';
 import { getExchangeRate } from '@/lib/realtime/binance-p2p';
@@ -19,7 +20,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const supabase = await createClient();
+    // Use service role client to bypass RLS for cron job operations
+    const supabase = createServiceClient();
 
     // Fetch fresh rate from Binance P2P (or fallbacks)
     const liveAPI = await getExchangeRate();
