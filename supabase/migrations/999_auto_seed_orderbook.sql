@@ -20,7 +20,11 @@ ALTER TABLE order_book
 ALTER TABLE order_book 
     DROP CONSTRAINT IF EXISTS order_book_event_id_fkey;
 
--- Now the market_id column can accept any UUID (will add FK after seeding)
+-- Drop user_id FK constraint temporarily
+ALTER TABLE order_book 
+    DROP CONSTRAINT IF EXISTS order_book_user_id_fkey;
+
+-- Now the market_id and user_id columns can accept any UUID (will add FKs after seeding)
 
 -- =============================================
 -- 1. CREATE SEED ORDERBOOK FUNCTION
@@ -158,12 +162,18 @@ BEGIN
 END $$;
 
 -- =============================================
--- 5. READD FK CONSTRAINT AFTER SEEDING
+-- 5. READD FK CONSTRAINTS AFTER SEEDING
 -- =============================================
 
 ALTER TABLE order_book 
     ADD CONSTRAINT order_book_event_id_fkey 
     FOREIGN KEY (market_id) REFERENCES events(id) 
+    ON DELETE CASCADE;
+
+-- Re-add user_id FK (using auth.users)
+ALTER TABLE order_book 
+    ADD CONSTRAINT order_book_user_id_fkey 
+    FOREIGN KEY (user_id) REFERENCES auth.users(id) 
     ON DELETE CASCADE;
 
 -- =============================================
