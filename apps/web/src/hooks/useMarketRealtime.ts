@@ -85,8 +85,34 @@ export function useMarketRealtime(config: MarketRealtimeConfig) {
             },
         });
 
-        // Market updates
+        // Market updates (subscribe to both events and markets for compatibility)
         if (features.includes('market')) {
+            // Subscribe to events table (primary)
+            channel.on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'events',
+                    filter: `id=eq.${marketId}`,
+                },
+                (payload: any) => {
+                    console.log(`[useMarketRealtime] Event update:`, payload);
+
+                    if (payload.eventType === 'UPDATE') {
+                        const updatedEvent = payload.new as Market;
+                        store.updateMarketFromRealtime(updatedEvent);
+                        onMarketUpdate?.(updatedEvent);
+
+                        // Check for resolution
+                        if (updatedEvent.status === 'resolved' && updatedEvent.outcome) {
+                            onMarketResolved?.(updatedEvent.outcome);
+                        }
+                    }
+                }
+            );
+
+            // Also subscribe to markets for backward compatibility
             channel.on(
                 'postgres_changes',
                 {
@@ -97,29 +123,18 @@ export function useMarketRealtime(config: MarketRealtimeConfig) {
                 },
                 (payload: any) => {
                     console.log(`[useMarketRealtime] Market update:`, payload);
-
-                    if (payload.eventType === 'UPDATE') {
-                        const updatedMarket = payload.new as Market;
-                        store.updateMarketFromRealtime(updatedMarket);
-                        onMarketUpdate?.(updatedMarket);
-
-                        // Check for resolution
-                        if (updatedMarket.status === 'resolved' && updatedMarket.outcome) {
-                            onMarketResolved?.(updatedMarket.outcome);
-                        }
-                    }
                 }
             );
         }
 
-        // Order book updates (via orders table)
+        // Order book updates (subscribe to order_book table)
         if (features.includes('orderbook')) {
             channel.on(
                 'postgres_changes',
                 {
                     event: ['INSERT', 'UPDATE', 'DELETE'],
                     schema: 'public',
-                    table: 'orders',
+                    table: 'order_book',
                     filter: `market_id=eq.${marketId}`,
                 },
                 (payload: any) => {
