@@ -190,7 +190,7 @@ DECLARE
     events_with_orders INTEGER;
 BEGIN
     SELECT COUNT(*) INTO active_events FROM events WHERE status = 'active';
-    SELECT COUNT(DISTINCT market_id) INTO events_with_orders FROM order_book ob
+    SELECT COUNT(DISTINCT ob.market_id) INTO events_with_orders FROM order_book ob
     JOIN events e ON e.id = ob.market_id
     WHERE e.status = 'active';
     
