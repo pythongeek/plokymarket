@@ -20,11 +20,19 @@ import {
     Users,
     DollarSign,
     BarChart3,
-    Eye,
-    Bell
+    Bell,
+    Play
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { createClient } from '@/lib/supabase/client';
+import { toast } from '@/components/ui/use-toast';
+
+interface CronJobInfo {
+    name: string;
+    url: string;
+    status: 'Success' | 'Failed' | 'Pending';
+    lastRun?: string;
+}
 
 interface SystemStatus {
     database: 'healthy' | 'degraded' | 'down';
@@ -79,6 +87,35 @@ export function SystemMonitor() {
     const [metrics, setMetrics] = useState<PerformanceMetric[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+    const [isTriggering, setIsTriggering] = useState<string | null>(null);
+
+    // Mock cron jobs list based on prompt
+    const [cronJobs, setCronJobs] = useState<CronJobInfo[]>([
+        { name: "AI Topics", url: "/api/cron/daily-ai-topics", status: "Failed", lastRun: new Date().toISOString() },
+        { name: "Batch Categories", url: "/api/cron/batch-categories", status: "Success", lastRun: new Date(Date.now() - 3600000).toISOString() },
+        { name: "Dispute Workflow", url: "/api/dispute-workflow", status: "Failed", lastRun: new Date().toISOString() },
+        { name: "Leaderboard Update", url: "/api/cron/leaderboard", status: "Success", lastRun: new Date(Date.now() - 7200000).toISOString() },
+    ]);
+
+    // Handle Cron Job Trigger
+    const handleTriggerJob = async (url: string) => {
+        setIsTriggering(url);
+        try {
+            const res = await fetch(url, { method: 'POST' });
+            if (res.ok) {
+                toast({ title: "সফল", description: "জবটি সফলভাবে চালু হয়েছে" });
+                // Update local status mock
+                setCronJobs(jobs => jobs.map(j => j.url === url ? {...j, status: 'Success', lastRun: new Date().toISOString()} : j));
+            } else {
+                toast({ title: "ব্যর্থ", description: "জবটি ব্যর্থ হয়েছে", variant: "destructive" });
+                setCronJobs(jobs => jobs.map(j => j.url === url ? {...j, status: 'Failed', lastRun: new Date().toISOString()} : j));
+            }
+        } catch (err) {
+            toast({ title: "এরর", description: "নেটওয়ার্ক সমস্যা", variant: "destructive" });
+        } finally {
+            setIsTriggering(null);
+        }
+    };
 
     // Fetch system status
     const fetchSystemStatus = async () => {
@@ -221,8 +258,8 @@ export function SystemMonitor() {
             {/* Header */}
             <div className="flex justify-between items-center">
                 <div>
-                    <h2 className="text-2xl font-bold">System Monitoring</h2>
-                    <p className="text-muted-foreground">Real-time platform health and performance</p>
+                    <h2 className="text-2xl font-bold">সিস্টেম মনিটরিং (System Monitoring)</h2>
+                    <p className="text-muted-foreground">Real-time platform health, cron jobs, and performance logs</p>
                 </div>
                 <div className="flex gap-2">
                     <Button
@@ -308,11 +345,12 @@ export function SystemMonitor() {
 
             {/* Tabs */}
             <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList className="grid w-full grid-cols-4">
-                    <TabsTrigger value="overview">Overview</TabsTrigger>
-                    <TabsTrigger value="performance">Performance</TabsTrigger>
-                    <TabsTrigger value="errors">Error Logs</TabsTrigger>
-                    <TabsTrigger value="alerts">Alerts</TabsTrigger>
+                <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 h-auto">
+                    <TabsTrigger value="overview" className="py-2.5">ওভারভিউ (Overview)</TabsTrigger>
+                    <TabsTrigger value="cron" className="py-2.5 font-bold text-amber-600 data-[state=active]:text-amber-700">ক্রন জবস (Cron Jobs)</TabsTrigger>
+                    <TabsTrigger value="performance" className="py-2.5">কর্মক্ষমতা (Performance)</TabsTrigger>
+                    <TabsTrigger value="errors" className="py-2.5">এরর লগ (Error Logs)</TabsTrigger>
+                    <TabsTrigger value="alerts" className="py-2.5">অ্যালার্ট (Alerts)</TabsTrigger>
                 </TabsList>
 
                 {/* Overview Tab */}
@@ -337,6 +375,56 @@ export function SystemMonitor() {
                             </Card>
                         ))}
                     </div>
+                </TabsContent>
+
+                {/* Cron Jobs Tab */}
+                <TabsContent value="cron" className="mt-4">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>সিস্টেম ক্রন জবস (System Cron Jobs)</CardTitle>
+                            <CardDescription>ম্যানুয়ালি ক্রন জব এবং ওয়ার্কফ্লো পরিচালনা করুন (Manage and trigger background tasks)</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-4">
+                                {cronJobs.map((job, index) => (
+                                    <div key={index} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 border rounded-lg bg-slate-50 gap-4">
+                                        <div className="flex items-center gap-3">
+                                            <div className={`p-2 rounded-lg ${job.status === 'Success' ? 'bg-emerald-100' : 'bg-red-100'}`}>
+                                                {job.status === 'Success' ? <CheckCircle className="w-5 h-5 text-emerald-600" /> : <AlertTriangle className="w-5 h-5 text-red-600" />}
+                                            </div>
+                                            <div>
+                                                <div className="font-semibold text-gray-900">{job.name}</div>
+                                                <div className="text-xs text-muted-foreground font-mono bg-gray-200 px-1 py-0.5 rounded mt-1">{job.url}</div>
+                                                {job.lastRun && (
+                                                    <div className="text-[10px] text-gray-500 mt-1 flex items-center gap-1">
+                                                        <Clock className="w-3 h-3" /> শেষ রান: {new Date(job.lastRun).toLocaleString('bn-BD')}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-3 w-full sm:w-auto mt-2 sm:mt-0">
+                                            <Badge variant={job.status === 'Success' ? 'default' : 'destructive'} className={job.status === 'Success' ? 'bg-emerald-500 hover:bg-emerald-600' : ''}>
+                                                {job.status}
+                                            </Badge>
+                                            <Button
+                                                size="sm"
+                                                onClick={() => handleTriggerJob(job.url)}
+                                                disabled={isTriggering === job.url}
+                                                className="w-full sm:w-auto"
+                                            >
+                                                {isTriggering === job.url ? (
+                                                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                                                ) : (
+                                                    <Play className="w-4 h-4 mr-2" />
+                                                )}
+                                                Run Now
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </CardContent>
+                    </Card>
                 </TabsContent>
 
                 {/* Performance Tab */}

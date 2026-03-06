@@ -11,11 +11,11 @@ import { createClient } from '@/lib/supabase/server';
  */
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient();
-    const marketId = params.id;
+    const { id: marketId } = await params;
 
     const { data, error } = await supabase
       .from('outcomes')
@@ -91,7 +91,7 @@ export async function GET(
  */
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient();
@@ -112,7 +112,7 @@ export async function POST(
       return NextResponse.json({ error: 'Admin only' }, { status: 403 });
     }
 
-    const marketId = params.id;
+    const { id: marketId } = await params;
     const body = await req.json();
     const outcomes = Array.isArray(body.outcomes) ? body.outcomes : [body];
 

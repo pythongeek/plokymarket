@@ -323,17 +323,28 @@ export const useStore = create<StoreState>()(
 
       logout: async () => {
         try {
+          // Clear state first to prevent race conditions
+          set({
+            currentUser: null,
+            isAuthenticated: false,
+            wallet: null,
+            positions: [],
+            transactions: [],
+          });
+
+          // Then attempt to sign out from Supabase
           await signOut();
         } catch (error) {
           console.error('Logout error:', error);
+          // Ensure state is cleared even if signOut fails
+          set({
+            currentUser: null,
+            isAuthenticated: false,
+            wallet: null,
+            positions: [],
+            transactions: [],
+          });
         }
-        set({
-          currentUser: null,
-          isAuthenticated: false,
-          wallet: null,
-          positions: [],
-          transactions: [],
-        });
       },
 
       initializeAuth: () => {
@@ -341,16 +352,34 @@ export const useStore = create<StoreState>()(
 
         // Manual check on startup to catch expired/invalid sessions immediately
         supabase.auth.getUser().then(({ data: { user }, error }: { data: { user: any }; error: any }) => {
-          if (error && (error.message.includes('refresh_token') || error.message.includes('not found'))) {
+          if (error) {
             console.error('Initial session check failed:', error.message);
+            // Clear auth state immediately on error
+            get().logout();
+            return;
+          }
+          // If no user and no error, session is invalid
+          if (!user) {
+            console.warn('No valid session found during initialization');
             get().logout();
           }
+        }).catch((err: any) => {
+          console.error('Auth initialization error:', err);
+          get().logout();
         });
 
-        // Set up the listener
+        // Set up the listener with better error handling
         supabase.auth.onAuthStateChange(async (event: string, session: any) => {
+          console.log('Auth state changed:', event, session ? 'session exists' : 'no session');
+
           if (event === 'TOKEN_REFRESHED') {
             console.log('Session token refreshed successfully');
+          }
+
+          if (event === 'TOKEN_REFRESH_FAILED') {
+            console.error('Token refresh failed - clearing auth state');
+            get().logout();
+            return;
           }
 
           if (session?.user) {
@@ -406,6 +435,15 @@ export const useStore = create<StoreState>()(
             }
           } else if (event === 'SIGNED_OUT' || event === 'USER_UPDATED') {
             // Ensure state is cleared on sign out or if user is lost
+            set({
+              currentUser: null,
+              isAuthenticated: false,
+              wallet: null,
+              positions: [],
+              transactions: [],
+            });
+          } else if (!session) {
+            // No session - clear state
             set({
               currentUser: null,
               isAuthenticated: false,

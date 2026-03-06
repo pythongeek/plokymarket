@@ -9,17 +9,17 @@ import { createClient } from '@/lib/supabase/server';
  */
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const marketId = params.id;
+    const { id: marketId } = await params;
     const body = await req.json().catch(() => ({}));
 
     // Use the toggle function
@@ -38,7 +38,7 @@ export async function POST(
   } catch (error) {
     console.error('[Follow] Unexpected error:', error);
     return NextResponse.json(
-      { error: 'Internal server error' }, 
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }
@@ -57,17 +57,17 @@ export async function POST(
  */
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) {
       return NextResponse.json({ following: false });
     }
 
-    const marketId = params.id;
+    const { id: marketId } = await params;
 
     const { data, error } = await supabase
       .from('market_followers')
@@ -109,17 +109,17 @@ export async function GET(
  */
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const marketId = params.id;
+    const { id: marketId } = await params;
     const body = await req.json().catch(() => ({}));
 
     const updates: Record<string, any> = {};
@@ -151,7 +151,7 @@ export async function PATCH(
   } catch (error) {
     console.error('[Follow Update] Unexpected error:', error);
     return NextResponse.json(
-      { error: 'Internal server error' }, 
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }

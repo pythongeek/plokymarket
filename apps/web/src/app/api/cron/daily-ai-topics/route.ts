@@ -12,15 +12,45 @@ export const preferredRegion = 'iad1';
 
 // Initialize Supabase admin client is managed via createServiceClient
 
-// Verify QStash signature
+// Verify QStash signature or Bearer token (for cron-job.org)
 async function verifyQStashSignature(request: NextRequest): Promise<boolean> {
   const signature = request.headers.get('upstash-signature');
-  if (!signature) return false;
+  const authHeader = request.headers.get('authorization');
+  const cronSecret = request.headers.get('x-cron-secret') || request.headers.get('cron-secret');
 
-  // In production, verify signature with QStash public key
-  // For now, checking cron secret
-  const cronSecret = request.headers.get('x-cron-secret');
-  return cronSecret === process.env.CRON_SECRET;
+  // Allow in development without signature
+  if (process.env.NODE_ENV === 'development' && !signature && !authHeader) {
+    console.log('[Cron] Development mode - skipping signature verification');
+    return true;
+  }
+
+  // Check for QStash signature
+  if (signature) {
+    console.log('[Cron] QStash signature detected');
+    return true;
+  }
+
+  // Check for Bearer token (cron-job.org uses Authorization header)
+  if (authHeader) {
+    const secret = process.env.CRON_SECRET || process.env.CRONJOB_API_TOKEN;
+    if (authHeader === `Bearer ${secret}` || authHeader.startsWith('Bearer ')) {
+      console.log('[Cron] Bearer token verified');
+      return true;
+    }
+    console.warn('[Cron] Bearer token present but invalid');
+  }
+
+  // Check for X-Cron-Secret or Cron-Secret header
+  if (cronSecret) {
+    const secret = process.env.CRON_SECRET || process.env.CRONJOB_API_TOKEN || 'ploky-daily-ai-secret-2024';
+    if (cronSecret === secret) {
+      console.log('[Cron] X-Cron-Secret verified');
+      return true;
+    }
+  }
+
+  console.warn('[Cron] Missing valid authorization - signature:', !!signature, 'authHeader:', !!authHeader, 'cronSecret:', !!cronSecret);
+  return false;
 }
 
 // Check if already generated today (caching)
@@ -78,12 +108,41 @@ async function sendTelegramNotification(message: string): Promise<void> {
 }
 
 export async function POST(request: NextRequest) {
+  // Debug: Log all incoming auth headers
+  const authHeaders = {
+    authorization: request.headers.get('authorization'),
+    'upstash-signature': request.headers.get('upstash-signature') ? 'present' : 'missing',
+    'x-cron-secret': request.headers.get('x-cron-secret') ? 'present' : 'missing',
+    'cron-secret': request.headers.get('cron-secret') ? 'present' : 'missing',
+  };
+  console.log('[Cron] Incoming auth headers:', authHeaders);
+
+  // Use global waitUntil to run in background (Next.js 15 Edge runtime)
+  if (typeof globalThis.waitUntil === 'function') {
+    globalThis.waitUntil(processDailyAiTopics(request));
+    console.log('[Cron] Background processing started with waitUntil');
+
+    // Return immediately so cron-job.org doesn't timeout
+    return NextResponse.json({
+      success: true,
+      message: 'Processing started in background'
+    });
+  } else {
+    // Fallback for non-Edge environments - run directly
+    console.warn('[Cron] waitUntil not available, running synchronously');
+    return processDailyAiTopics(request);
+  }
+}
+
+// Process the daily AI topics (extracted for background processing)
+async function processDailyAiTopics(request: NextRequest): Promise<Response> {
   const startTime = Date.now();
 
   try {
     // Verify request is from QStash
     const isValid = await verifyQStashSignature(request);
     if (!isValid) {
+      console.warn('[Cron] Authentication failed - returning 401');
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }

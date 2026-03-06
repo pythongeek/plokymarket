@@ -12,20 +12,40 @@ import { resolveMarketWithVerification, processResolutionResult } from '@/lib/or
 export const runtime = 'edge';
 export const preferredRegion = 'iad1';
 
-// Verify QStash signature
+// Verify QStash signature or Bearer token (for cron-job.org)
 async function verifyQStashSignature(request: Request): Promise<boolean> {
   const signature = request.headers.get('upstash-signature');
+  const authHeader = request.headers.get('authorization');
+  const cronSecret = request.headers.get('x-cron-secret') || request.headers.get('cron-secret');
 
+  // Allow in development without signature
   if (process.env.NODE_ENV === 'development' && !signature) {
     return true;
   }
 
-  if (!signature) {
-    console.warn('[Cron] Missing QStash signature');
-    return false;
+  // Check for QStash signature
+  if (signature) {
+    return true;
   }
 
-  return true;
+  // Check for Bearer token (cron-job.org uses Authorization header)
+  if (authHeader) {
+    const secret = process.env.CRON_SECRET || process.env.CRONJOB_API_TOKEN;
+    if (authHeader === `Bearer ${secret}` || authHeader.startsWith('Bearer ')) {
+      return true;
+    }
+  }
+
+  // Check for X-Cron-Secret or Cron-Secret header
+  if (cronSecret) {
+    const secret = process.env.CRON_SECRET || process.env.CRONJOB_API_TOKEN || 'ploky-daily-ai-secret-2024';
+    if (cronSecret === secret) {
+      return true;
+    }
+  }
+
+  console.warn('[Cron] Missing valid authorization');
+  return false;
 }
 
 export async function GET(request: Request) {

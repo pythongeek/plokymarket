@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { createClient } from '@/lib/supabase/client';
+import { isAbortError } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/components/ui/use-toast';
@@ -24,9 +25,12 @@ import {
   DollarSign,
   Wallet,
   CreditCard,
+  CreditCard,
   ArrowLeftRight,
   History,
+  Menu,
 } from 'lucide-react';
+import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
 
 // Secure paths - consolidated under /sys-cmd-7x9k2
@@ -35,7 +39,6 @@ const SECURE_PATHS = {
   users: '/sys-cmd-7x9k2/users',
   markets: '/sys-cmd-7x9k2/markets',
   events: '/sys-cmd-7x9k2/events',
-  resolution: '/sys-cmd-7x9k2/resolution',
   resolutions: '/sys-cmd-7x9k2/resolutions',
   analytics: '/sys-cmd-7x9k2/analytics',
   kyc: '/sys-cmd-7x9k2/kyc',
@@ -48,7 +51,6 @@ const SECURE_PATHS = {
   workflows: '/sys-cmd-7x9k2/workflows',
   // Money Operator Paths
   moneyOperator: '/sys-cmd-7x9k2/usdt',
-  moneyOperatorUsers: '/sys-cmd-7x9k2/usdt/users',
   moneyOperatorTransactions: '/sys-cmd-7x9k2/usdt/transactions',
   moneyOperatorSettings: '/sys-cmd-7x9k2/usdt/settings',
 };
@@ -165,8 +167,8 @@ export function SecureAdminLayout({
       }
 
     } catch (err: any) {
-      // Robust AbortError handling: if aborted, and we have initial data, just ignore the error
-      if (err?.name === 'AbortError' || err?.message?.includes('aborted')) {
+      // Use centralized utility for AbortError handling
+      if (isAbortError(err)) {
         console.log('[AdminAuth] Auth check aborted, likely due to navigation');
         return;
       }
@@ -279,15 +281,8 @@ export function SecureAdminLayout({
       requiresSuper: false,
     },
     {
-      path: SECURE_PATHS.resolution,
-      label: 'রেজোলিউশন',
-      labelEn: 'Resolution',
-      icon: Gavel,
-      requiresSuper: true,
-    },
-    {
       path: SECURE_PATHS.resolutions,
-      label: 'রেজোলিউশন সিস্টেম',
+      label: 'মার্কেট রেজোলিউশন সিস্টেম',
       labelEn: 'Resolution System',
       icon: Gavel,
       requiresSuper: true,
@@ -343,9 +338,9 @@ export function SecureAdminLayout({
     },
     {
       path: SECURE_PATHS.workflows,
-      label: 'ওয়ার্কফ্লো',
-      labelEn: 'Workflows',
-      icon: Workflow,
+      label: 'সিস্টেম ক্রন জবস',
+      labelEn: 'System Cron Jobs',
+      icon: Activity,
       requiresSuper: true,
     },
     // Money Operator Section
@@ -364,13 +359,7 @@ export function SecureAdminLayout({
       icon: DollarSign,
       requiresSuper: false,
     },
-    {
-      path: SECURE_PATHS.moneyOperatorUsers,
-      label: 'ইউজার ম্যানেজমেন্ট',
-      labelEn: 'User Management',
-      icon: Users,
-      requiresSuper: false,
-    },
+
     {
       path: SECURE_PATHS.moneyOperatorTransactions,
       label: 'ট্রানজেকশন লগ',
@@ -428,15 +417,35 @@ export function SecureAdminLayout({
     <div className="min-h-screen bg-white">
       {/* Top Bar */}
       <header className="border-b border-gray-200 bg-white/95 backdrop-blur sticky top-0 z-50">
-        <div className="flex h-16 items-center justify-between px-6">
-          <div className="flex items-center gap-4">
+        <div className="flex h-16 items-center justify-between px-4 md:px-6">
+          <div className="flex items-center gap-2 md:gap-4">
+            <Sheet>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon" className="md:hidden">
+                  <Menu className="w-5 h-5 text-gray-700" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="w-64 p-0 bg-gray-50 flex flex-col pt-12">
+                <SheetTitle className="sr-only">এডমিন নেভিগেশন</SheetTitle>
+                <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+                  <NavItemsList
+                    navItems={navItems}
+                    pathname={pathname}
+                    router={router}
+                    admin={admin}
+                    mounted={mounted}
+                  />
+                </div>
+              </SheetContent>
+            </Sheet>
+
             <div className="flex items-center gap-2">
               <Shield className="w-6 h-6 text-primary" />
-              <span className="text-lg font-bold text-gray-900 tracking-tight">
+              <span className="text-lg font-bold text-gray-900 tracking-tight hidden sm:block">
                 SYS-CMD
               </span>
               <Badge variant="outline" className={cn(
-                "text-xs font-semibold",
+                "text-[10px] md:text-xs font-semibold px-1.5 md:px-2.5",
                 admin.is_super_admin
                   ? "border-amber-400 text-amber-700 bg-amber-50"
                   : "border-primary bg-primary/10"
@@ -467,7 +476,7 @@ export function SecureAdminLayout({
               )}
             </div>
 
-            <div className="text-sm text-gray-700 font-medium">
+            <div className="text-sm text-gray-700 font-medium hidden md:block">
               {admin.email}
             </div>
 
@@ -475,10 +484,10 @@ export function SecureAdminLayout({
               variant="ghost"
               size="sm"
               onClick={handleLogout}
-              className="text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+              className="text-gray-600 hover:text-gray-900 hover:bg-gray-100 px-2 md:px-3"
             >
-              <LogOut className="w-4 h-4 mr-2" />
-              Exit
+              <LogOut className="w-4 h-4 md:mr-2" />
+              <span className="hidden md:inline">Exit</span>
             </Button>
           </div>
         </div>
@@ -486,62 +495,15 @@ export function SecureAdminLayout({
 
       <div className="flex">
         {/* Sidebar */}
-        <aside className="w-64 min-h-[calc(100vh-4rem)] border-r border-gray-200 bg-gray-50 p-4">
-          <nav className="space-y-1">
-            {navItems.map((item, index) => {
-              if (item.requiresSuper && !admin.is_super_admin) return null;
-
-              // Section header (like Money Operator)
-              if ((item as any).isSection) {
-                return (
-                  <div key={item.path + index} className="mt-4 mb-2 px-3">
-                    <div className="flex items-center gap-2">
-                      <item.icon className="w-4 h-4 text-primary" />
-                      <span className="text-xs font-bold text-primary uppercase tracking-wider">
-                        {item.label}
-                      </span>
-                    </div>
-                    <div className="h-px bg-gradient-to-r from-primary/50 to-transparent mt-2" />
-                  </div>
-                );
-              }
-
-              const isActive = pathname.startsWith(item.path);
-              const Icon = item.icon;
-
-              return (
-                <button
-                  key={item.path}
-                  onClick={() => router.push(item.path)}
-                  className={cn(
-                    'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
-                    isActive
-                      ? 'bg-primary/20 text-gray-900 border border-primary/30 shadow-sm shadow-primary/10'
-                      : 'text-gray-700 hover:bg-gray-200 hover:text-gray-900'
-                  )}
-                >
-                  <Icon className={cn("w-5 h-5", isActive ? "text-primary" : "text-gray-500")} />
-                  <div className="flex flex-col items-start">
-                    <span className="font-semibold">{item.label}</span>
-                    <span className={cn("text-[10px]", isActive ? "text-gray-700" : "text-gray-500")}>{item.labelEn}</span>
-                  </div>
-                </button>
-              );
-            })}
-          </nav>
-
-          {/* Security Notice */}
-          <div className="mt-8 p-4 rounded-lg bg-blue-50 border border-blue-200">
-            <div className="flex items-start gap-2">
-              <Shield className="w-4 h-4 text-blue-600 mt-0.5" />
-              <div className="text-xs">
-                <p className="font-semibold text-gray-900 mb-1">🔒 নিরাপদ সেশন</p>
-                <p className="text-gray-700">All actions are logged and monitored.</p>
-                <p className="mt-1 text-gray-600">
-                  Session: {mounted ? new Date().toLocaleTimeString() : '...'}
-                </p>
-              </div>
-            </div>
+        <aside className="hidden md:flex flex-col w-64 h-[calc(100vh-4rem)] border-r border-gray-200 bg-gray-50 overflow-y-auto custom-scrollbar">
+          <div className="p-4 flex-1">
+            <NavItemsList
+              navItems={navItems}
+              pathname={pathname}
+              router={router}
+              admin={admin}
+              mounted={mounted}
+            />
           </div>
         </aside>
 
@@ -559,3 +521,68 @@ export function SecureAdminLayout({
     </div>
   );
 }
+
+// Reusable Navigation List Component
+function NavItemsList({ navItems, pathname, router, admin, mounted }: any) {
+  return (
+    <>
+      <nav className="space-y-1">
+        {navItems.map((item: any, index: number) => {
+          if (item.requiresSuper && !admin.is_super_admin) return null;
+
+          // Section header (like Money Operator)
+          if (item.isSection) {
+            return (
+              <div key={item.path + index} className="mt-4 mb-2 px-3">
+                <div className="flex items-center gap-2">
+                  <item.icon className="w-4 h-4 text-primary" />
+                  <span className="text-xs font-bold text-primary uppercase tracking-wider">
+                    {item.label}
+                  </span>
+                </div>
+                <div className="h-px bg-gradient-to-r from-primary/50 to-transparent mt-2" />
+              </div>
+            );
+          }
+
+          const isActive = pathname === item.path || (item.path !== SECURE_PATHS.dashboard && pathname.startsWith(item.path));
+          const Icon = item.icon;
+
+          return (
+            <button
+              key={item.path}
+              onClick={() => router.push(item.path)}
+              className={cn(
+                'w-full flex items-center justify-start text-left gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
+                isActive
+                  ? 'bg-primary/20 text-gray-900 border border-primary/30 shadow-sm shadow-primary/10'
+                  : 'text-gray-700 hover:bg-gray-200 hover:text-gray-900'
+              )}
+            >
+              <Icon className={cn("w-5 h-5 shrink-0", isActive ? "text-primary" : "text-gray-500")} />
+              <div className="flex flex-col items-start justify-center truncate overflow-hidden text-left w-full">
+                <span className="font-semibold truncate w-full text-left text-ellipsis">{item.label}</span>
+                <span className={cn("text-[10px] truncate w-full text-left", isActive ? "text-gray-700" : "text-gray-500")}>{item.labelEn}</span>
+              </div>
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* Security Notice */}
+      <div className="mt-8 p-4 rounded-lg bg-blue-50 border border-blue-200">
+        <div className="flex items-start gap-2">
+          <Shield className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
+          <div className="text-xs">
+            <p className="font-semibold text-gray-900 mb-1">🔒 নিরাপদ সেশন</p>
+            <p className="text-gray-700 line-clamp-2">All actions are logged and authenticated.</p>
+            <p className="mt-1 text-gray-600">
+              Session: {mounted ? new Date().toLocaleTimeString('bn-BD') : '...'}
+            </p>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+

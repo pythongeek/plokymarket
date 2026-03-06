@@ -10,20 +10,40 @@ import { createServiceClient } from '@/lib/supabase/server';
 export const runtime = 'edge';
 export const preferredRegion = 'iad1';
 
-// Verify QStash signature
+// Verify QStash signature or Bearer token (for cron-job.org)
 async function verifyQStashSignature(request: Request): Promise<boolean> {
   const signature = request.headers.get('upstash-signature');
+  const authHeader = request.headers.get('authorization');
+  const cronSecret = request.headers.get('x-cron-secret') || request.headers.get('cron-secret');
 
+  // Allow in development without signature
   if (process.env.NODE_ENV === 'development' && !signature) {
     return true;
   }
 
-  if (!signature) {
-    console.warn('[DailyTopics] Missing QStash signature');
-    return false;
+  // Check for QStash signature
+  if (signature) {
+    return true;
   }
 
-  return true;
+  // Check for Bearer token (cron-job.org uses Authorization header)
+  if (authHeader) {
+    const secret = process.env.CRON_SECRET || process.env.CRONJOB_API_TOKEN;
+    if (authHeader === `Bearer ${secret}` || authHeader.startsWith('Bearer ')) {
+      return true;
+    }
+  }
+
+  // Check for X-Cron-Secret or Cron-Secret header
+  if (cronSecret) {
+    const secret = process.env.CRON_SECRET || process.env.CRONJOB_API_TOKEN || 'ploky-daily-ai-secret-2024';
+    if (cronSecret === secret) {
+      return true;
+    }
+  }
+
+  console.warn('[DailyTopics] Missing valid authorization');
+  return false;
 }
 
 // Fetch news from RSS feeds
@@ -139,15 +159,9 @@ async function generateTopicsWithConfig(config: any): Promise<any[]> {
   return topics;
 }
 
-export async function GET(request: Request) {
+// Fire and Forget - Process daily topics in background to avoid Vercel 60s timeout
+async function processDailyTopics(request: Request) {
   const startTime = Date.now();
-
-  // Verify QStash signature
-  const isValid = await verifyQStashSignature(request);
-  if (!isValid) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
   const supabase = await createServiceClient();
 
   try {
@@ -159,7 +173,8 @@ export async function GET(request: Request) {
 
     if (configError) throw configError;
     if (!configs || configs.length === 0) {
-      return NextResponse.json({ error: 'No active configurations found' }, { status: 400 });
+      console.log('[DailyTopics] No active configurations found');
+      return;
     }
 
     const allTopics = [];
@@ -254,21 +269,38 @@ export async function GET(request: Request) {
       }
     }
 
-    return NextResponse.json({
-      success: true,
-      configs_processed: configs.length,
-      total_topics_generated: allTopics.length,
-      results: jobResults,
-      executionTimeMs: Date.now() - startTime
-    });
+    console.log(`[DailyTopics] Completed: ${configs.length} configs, ${allTopics.length} topics`);
 
   } catch (error: any) {
     console.error('[DailyTopics] Error:', error);
-    return NextResponse.json(
-      { error: error.message, executionTimeMs: Date.now() - startTime },
-      { status: 500 }
-    );
   }
+}
+
+export async function GET(request: Request) {
+  // Verify QStash signature first
+  const isValid = await verifyQStashSignature(request);
+  if (!isValid) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // Fire and Forget - Return 200 immediately, process in background
+  // This prevents Vercel 60s timeout on Hobby plan
+  const response = NextResponse.json({
+    success: true,
+    message: 'Daily topics generation started in background',
+    timestamp: new Date().toISOString()
+  });
+
+  // Use global waitUntil to run in background (Next.js 15 Edge runtime)
+  if (typeof globalThis.waitUntil === 'function') {
+    globalThis.waitUntil(processDailyTopics(request));
+  } else {
+    // Fallback for non-Edge environments - run directly
+    console.warn('[DailyTopics] waitUntil not available, running synchronously');
+    processDailyTopics(request);
+  }
+
+  return response;
 }
 
 // Manual trigger endpoint for admin

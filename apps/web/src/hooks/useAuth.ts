@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { isAbortError } from '@/lib/utils';
 
 export function useAuth() {
   const [user, setUser] = useState<any>(null);
@@ -26,6 +27,11 @@ export function useAuth() {
 
         setUser(currentUser);
       } catch (err) {
+        // Gracefully handle AbortError - request was cancelled, not an actual error
+        if (isAbortError(err)) {
+          console.log('[useAuth] Auth check aborted for navigation');
+          return;
+        }
         console.error('Auth error in useAuth:', err);
         setError(err instanceof Error ? err.message : 'Authentication failed');
       } finally {

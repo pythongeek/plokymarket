@@ -74,7 +74,8 @@ export function MarketPageClient({ initialMarket }: MarketPageClientProps) {
     // Use event from marketStore if available for real-time pause updates
     const event = marketId ? events.get(marketId) : undefined;
     // Look up by market ID first, then by event_id (homepage links use event IDs)
-    const storeMarket = (event as unknown as Market) || (marketId
+    // Add null checks to prevent "Cannot read properties of undefined" errors
+    const storeMarket = (event as unknown as Market) || (marketId && markets
         ? markets.find((m) => m.id === marketId) || markets.find((m) => (m as any).event_id === marketId)
         : undefined);
 
@@ -181,9 +182,7 @@ export function MarketPageClient({ initialMarket }: MarketPageClientProps) {
                         </Badge>
                     )}
                     <MarketActions
-                        marketId={market.id}
-                        marketTitle={market.question}
-                        initialFollowerCount={0}
+                        market={market}
                     />
                 </div>
 
@@ -233,9 +232,7 @@ export function MarketPageClient({ initialMarket }: MarketPageClientProps) {
             />
 
             <MarketStatsBanner
-                marketId={market.id}
-                initialVolume={market.total_volume || 0}
-                initialLiquidity={market.initial_liquidity || 0}
+                market={market}
             />
 
             <Separator />

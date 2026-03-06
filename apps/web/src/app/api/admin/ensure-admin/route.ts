@@ -16,12 +16,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden', message: 'Not authorized admin email' }, { status: 403 });
     }
 
-    // Service client ব্যবহার করে ডাটা চেক করা (নিরাপদ উপায়)
-    const { data: existing, error: existingErr } = await service
+    // Service client ব্যবহার করে ডাটা চেক করা (নিরাপদ উপায়)
+    const { data: existing, error: existingErr } = await (service
       .from('user_profiles')
       .select('id, is_admin, is_super_admin, full_name, email, can_create_events')
       .eq('id', user.id)
-      .maybeSingle();
+      .maybeSingle() as any);
 
     if (existingErr) {
       console.error('Error fetching admin profile:', existingErr);
@@ -30,10 +30,10 @@ export async function POST(request: NextRequest) {
     if (existing) {
       // যদি প্রোফাইল থাকে কিন্তু এডমিন ফ্ল্যাগ না থাকে, তবে আপডেট করে দিন (Auto-fix)
       if (!existing.is_admin || !existing.is_super_admin) {
-        await service
+        await (service
           .from('user_profiles')
           .update({ is_admin: true, is_super_admin: true, can_create_events: true })
-          .eq('id', user.id);
+          .eq('id', user.id) as any);
 
         existing.is_admin = true;
         existing.is_super_admin = true;
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     }
 
     // প্রোফাইল না থাকলে নতুন এডমিন প্রোফাইল তৈরি করা
-    const { data: created, error: createErr } = await service
+    const { data: created, error: createErr } = await (service
       .from('user_profiles')
       .insert({
         id: user.id,
@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
         can_create_events: true
       })
       .select()
-      .maybeSingle();
+      .maybeSingle() as any);
 
     if (createErr) {
       console.error('Service insert error:', createErr);

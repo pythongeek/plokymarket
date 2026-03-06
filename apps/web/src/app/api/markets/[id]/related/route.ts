@@ -10,11 +10,11 @@ export const revalidate = 120; // ISR: revalidate every 2 minutes
  */
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient();
-    const marketId = params.id;
+    const { id: marketId } = await params;
 
     // Get current market's category
     const { data: market, error: marketError } = await supabase
@@ -53,8 +53,8 @@ export async function GET(
         .order('total_volume', { ascending: false })
         .limit(4 - (data?.length || 0));
 
-      return NextResponse.json({ 
-        data: [...(data || []), ...(additionalMarkets || [])] 
+      return NextResponse.json({
+        data: [...(data || []), ...(additionalMarkets || [])]
       });
     }
 

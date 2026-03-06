@@ -18,12 +18,12 @@ export const revalidate = 60; // Cache for 60 seconds
  */
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient();
-    const marketId = params.id;
-    
+    const { id: marketId } = await params;
+
     const { searchParams } = new URL(req.url);
     const hours = parseInt(searchParams.get('hours') || '24');
     const outcome = searchParams.get('outcome') || 'YES';
@@ -74,7 +74,7 @@ export async function GET(
   } catch (error) {
     console.error('[Price History] Error:', error);
     return NextResponse.json(
-      { error: 'Internal server error' }, 
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }

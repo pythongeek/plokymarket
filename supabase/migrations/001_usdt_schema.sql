@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS public.deposit_requests (
   exchange_rate DECIMAL(10,4) NOT NULL,
     
   -- MFS information
-  mfs_provider mfs_provider NOT NULL,
+  payment_method VARCHAR(50) DEFAULT 'usdt_p2p' NOT NULL,
   txn_id VARCHAR(100) NOT NULL,
   sender_number VARCHAR(20) NOT NULL,
   sender_name VARCHAR(100),
@@ -140,7 +140,7 @@ CREATE TABLE IF NOT EXISTS public.withdrawal_requests (
   exchange_rate DECIMAL(10,4) NOT NULL,
     
   -- Recipient information
-  mfs_provider mfs_provider NOT NULL,
+  payment_method VARCHAR(50) DEFAULT 'usdt_p2p' NOT NULL,
   recipient_number VARCHAR(20) NOT NULL,
   recipient_name VARCHAR(100),
     
@@ -215,8 +215,7 @@ CREATE INDEX IF NOT EXISTS idx_deposits_status_created
 CREATE INDEX IF NOT EXISTS idx_deposits_user 
   ON public.deposit_requests(user_id, created_at DESC);
 
-CREATE INDEX IF NOT EXISTS idx_deposits_txn_provider 
-  ON public.deposit_requests(txn_id, mfs_provider);
+CREATE INDEX IF NOT EXISTS idx_deposits_txn_provider ON public.deposit_requests(txn_id, payment_method);
 
 CREATE INDEX IF NOT EXISTS idx_withdrawals_status_created 
   ON public.withdrawal_requests(status, created_at);

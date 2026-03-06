@@ -16,11 +16,11 @@ export const revalidate = 30; // ISR: revalidate every 30 seconds
  */
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient();
-    const marketId = params.id;
+    const { id: marketId } = await params;
 
     // Use the optimized RPC for market stats
     const { data: stats, error: statsError } = await supabase.rpc('get_market_stats_summary', {

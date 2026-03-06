@@ -8,17 +8,17 @@ import { createClient } from '@/lib/supabase/server';
  */
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const marketId = params.id;
+    const { id: marketId } = await params;
 
     // Check if bookmark exists using the toggle function
     const { data, error } = await supabase.rpc('toggle_bookmark', {
@@ -34,7 +34,7 @@ export async function POST(
   } catch (error) {
     console.error('[Bookmark] Unexpected error:', error);
     return NextResponse.json(
-      { error: 'Internal server error' }, 
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }
@@ -47,17 +47,17 @@ export async function POST(
  */
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) {
       return NextResponse.json({ bookmarked: false });
     }
 
-    const marketId = params.id;
+    const { id: marketId } = await params;
 
     const { data, error } = await supabase
       .from('user_bookmarks')

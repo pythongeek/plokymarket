@@ -28,7 +28,13 @@ export function useUser() {
         const supabase = createClient();
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
-        if (sessionError) throw sessionError;
+        if (sessionError) {
+          console.warn('Session error in useUser:', sessionError.message);
+          // Don't throw, just set user to null
+          setUser(null);
+          setLoading(false);
+          return;
+        }
 
         if (session?.user) {
           // Fetch profile (simple query — no joins to non-existent tables)
@@ -51,26 +57,14 @@ export function useUser() {
             current_level_name: profile?.current_level_name || 'Novice'
           });
         } else {
-          // Demo user for development
-          setUser({
-            id: 'demo-user',
-            email: 'trader@example.com',
-            name: 'Demo Trader',
-            avatar_url: undefined,
-            created_at: new Date().toISOString(),
-            kycLevel: 1 // Demo as verified
-          });
+          // No session - set user to null instead of demo user
+          // This prevents the "invalid refresh token" error from being masked
+          setUser(null);
         }
       } catch (err) {
+        console.error('Error fetching user in useUser:', err);
         setError(err instanceof Error ? err.message : 'Failed to fetch user');
-        // Fallback to demo user
-        setUser({
-          id: 'demo-user',
-          email: 'trader@example.com',
-          name: 'Demo Trader',
-          avatar_url: undefined,
-          created_at: new Date().toISOString()
-        });
+        setUser(null);
       } finally {
         setLoading(false);
       }

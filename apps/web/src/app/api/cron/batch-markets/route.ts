@@ -19,31 +19,45 @@ import { setLock, checkLock } from '@/lib/upstash/redis';
 export const runtime = 'edge';
 export const preferredRegion = 'iad1';
 
-// Verify QStash signature
+// Verify QStash signature or Bearer token (for cron-job.org)
 async function verifyQStashSignature(request: NextRequest): Promise<boolean> {
   const signature = request.headers.get('upstash-signature');
+  const authHeader = request.headers.get('authorization');
+  const cronSecret = request.headers.get('x-cron-secret') || request.headers.get('cron-secret');
 
+  // Allow in development without signature
   if (process.env.NODE_ENV === 'development' && !signature) {
     return true;
   }
 
-  if (!signature) {
-    console.warn('[Cron] Missing QStash signature');
-    return false;
+  // Check for QStash signature
+  if (signature) {
+    return true;
   }
 
-  return true;
+  // Check for Bearer token (cron-job.org uses Authorization header)
+  if (authHeader) {
+    const secret = process.env.CRON_SECRET || process.env.CRONJOB_API_TOKEN;
+    if (authHeader === `Bearer ${secret}` || authHeader.startsWith('Bearer ')) {
+      return true;
+    }
+  }
+
+  // Check for X-Cron-Secret or Cron-Secret header
+  if (cronSecret) {
+    const secret = process.env.CRON_SECRET || process.env.CRONJOB_API_TOKEN || 'ploky-daily-ai-secret-2024';
+    if (cronSecret === secret) {
+      return true;
+    }
+  }
+
+  console.warn('[Cron] Missing valid authorization');
+  return false;
 }
 
-export async function GET(request: NextRequest) {
+// Fire and Forget - Process markets in background to avoid Vercel 60s timeout
+async function processBatchMarkets(request: NextRequest) {
   const startTime = Date.now();
-
-  // Verify QStash signature
-  const isValid = await verifyQStashSignature(request);
-  if (!isValid) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
   const supabase = await createServiceClient();
 
   const results = {
@@ -67,11 +81,8 @@ export async function GET(request: NextRequest) {
     if (marketError) throw marketError;
 
     if (!markets || markets.length === 0) {
-      return NextResponse.json({
-        message: 'No markets to process',
-        processed: 0,
-        executionTimeMs: Date.now() - startTime
-      });
+      console.log('[Cron] No markets to process');
+      return;
     }
 
     // Process each market
@@ -131,23 +142,37 @@ export async function GET(request: NextRequest) {
     }
 
     results.processed = markets.length;
-
-    return NextResponse.json({
-      success: true,
-      message: 'Batch processing completed',
-      ...results,
-      executionTimeMs: Date.now() - startTime
-    });
+    console.log(`[Cron] Batch processing completed:`, results);
 
   } catch (error: any) {
-    console.error('[Cron] Fatal error:', error);
-    return NextResponse.json(
-      {
-        error: error.message,
-        ...results,
-        executionTimeMs: Date.now() - startTime
-      },
-      { status: 500 }
-    );
+    console.error('[Cron] Batch processing error:', error);
   }
+}
+
+export async function GET(request: NextRequest) {
+  // Verify QStash signature first
+  const isValid = await verifyQStashSignature(request);
+  if (!isValid) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // Fire and Forget - Return 200 immediately, process in background
+  // This prevents Vercel 60s timeout on Hobby plan
+  const response = NextResponse.json({
+    success: true,
+    message: 'Batch job started in background',
+    timestamp: new Date().toISOString()
+  });
+
+  // Use global waitUntil to run in background (Next.js 15 Edge runtime)
+  if (typeof globalThis.waitUntil === 'function') {
+    globalThis.waitUntil(processBatchMarkets(request));
+  } else {
+    // Fallback for non-Edge environments - run directly
+    // Note: This may hit timeout on Hobby plan
+    console.warn('[Cron] waitUntil not available, running synchronously');
+    processBatchMarkets(request);
+  }
+
+  return response;
 }

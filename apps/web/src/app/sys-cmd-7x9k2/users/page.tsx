@@ -48,7 +48,9 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
+import { UsdtUsersTab } from './UsdtUsersTab';
 
 const STATUS_FILTERS = [
     { value: 'all', label: 'সকল স্ট্যাটাস', labelEn: 'All Statuses' },
@@ -333,20 +335,65 @@ export default function UserManagementPage() {
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-white">ব্যবহারকারী ব্যবস্থাপনা</h1>
+                    <h1 className="text-2xl font-bold text-white">ব্যবহারকারী ব্যবস্থাপনা (User Management)</h1>
                     <p className="text-sm text-slate-400 mt-1">
                         User Lifecycle Management — KYC, Trading, Risk & Interventions
                     </p>
                 </div>
                 <div className="flex gap-2">
-                    <Button variant="outline" onClick={loadUsers} disabled={loading} className="border-slate-800 text-slate-400">
-                        <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+                    <Button variant="outline" onClick={loadUsers} disabled={loading} className="border-slate-800 text-slate-400 w-full md:w-auto">
+                        <RefreshCw className={cn("h-4 w-4 mr-2", loading && "animate-spin")} />
+                        রিফ্রেশ
                     </Button>
                 </div>
             </div>
 
+            {/* MarketStatsBanner */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-900/50 p-4 rounded-xl border border-slate-800 mb-6">
+                <div className="flex items-center gap-4">
+                    <div className="p-3 bg-blue-500/10 rounded-lg">
+                        <Activity className="w-6 h-6 text-blue-400" />
+                    </div>
+                    <div>
+                        <p className="text-sm text-slate-400">মোট ভলিউম (Total Volume)</p>
+                        <p className="text-xl font-bold text-white">$245,000</p>
+                    </div>
+                </div>
+                <div className="flex items-center gap-4">
+                    <div className="p-3 bg-emerald-500/10 rounded-lg">
+                        <Users className="w-6 h-6 text-emerald-400" />
+                    </div>
+                    <div>
+                        <p className="text-sm text-slate-400">সক্রিয় ব্যবহারকারী (Active Users)</p>
+                        <p className="text-xl font-bold text-white">{aggregateStats.activeUsers.toLocaleString('bn-BD')}</p>
+                    </div>
+                </div>
+                <div className="flex items-center gap-4">
+                    <div className="p-3 bg-red-500/10 rounded-lg">
+                        <AlertCircle className="w-6 h-6 text-red-400" />
+                    </div>
+                    <div>
+                        <p className="text-sm text-slate-400">ব্যর্থ জব (Failed Jobs)</p>
+                        <p className="text-xl font-bold text-white">2 <span className="text-xs text-red-400 ml-2">Review Required</span></p>
+                    </div>
+                </div>
+            </div>
+
+            <Tabs defaultValue="general" className="w-full">
+                <div className="mb-4">
+                    <TabsList className="grid w-full grid-cols-1 md:grid-cols-2 lg:w-[400px] h-auto bg-slate-900 border border-slate-800 gap-1 p-1">
+                        <TabsTrigger value="general" className="py-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-slate-400">
+                            সাধারণ ইউজার (General)
+                        </TabsTrigger>
+                        <TabsTrigger value="usdt" className="py-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-slate-400">
+                            USDT ইউজার (Money Op)
+                        </TabsTrigger>
+                    </TabsList>
+                </div>
+
+                <TabsContent value="general" className="space-y-6 mt-0">
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                 {[
@@ -498,6 +545,12 @@ export default function UserManagementPage() {
                     )}
                 </CardContent>
             </Card>
+                </TabsContent>
+
+                <TabsContent value="usdt" className="mt-0">
+                    <UsdtUsersTab />
+                </TabsContent>
+            </Tabs>
         </div>
     );
 }
