@@ -24,7 +24,8 @@ export async function POST(request: NextRequest) {
   const startTime = Date.now();
   
   try {
-    const payload = await request.json();
+    const text = await request.text();
+    const payload = text ? JSON.parse(text) : { step: 'initiate', data: {} };
     const { step, data } = payload;
     
     const supabase = getSupabase();
@@ -195,20 +196,9 @@ export async function POST(request: NextRequest) {
   }
 }
 
-/**
- * GET: Workflow status
- */
-export async function GET(request: NextRequest) {
-  return NextResponse.json({
-    status: 'active',
-    service: 'dispute-resolution-workflow',
-    steps: ['initiate', 'wait-for-voting', 'collect-votes', 'final-ruling'],
-    votingPeriod: '3 days',
-    timestamp: new Date().toISOString()
-  });
-}
 
-// Helper functions
+
+export const GET = POST;
 function calculateVoteConsensus(expertVotes: any[], communityVotes: any[]) {
   if (!expertVotes && !communityVotes) {
     return { consensus: 'insufficient_data', confidence: 0 };

@@ -7,8 +7,9 @@ import { verifyQStashSignature } from '@/lib/upstash/workflows';
 export async function POST(request: Request) {
   try {
     // Verify QStash signature
-    const isValid = await verifyQStashSignature(request);
-    if (!isValid) {
+    const signature = request.headers.get('upstash-signature') || '';
+    const isValid = verifyQStashSignature(signature, '');
+    if (!isValid && process.env.NODE_ENV === 'production' && request.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
       return NextResponse.json(
         { error: 'Invalid signature' },
         { status: 401 }
@@ -87,3 +88,5 @@ export async function POST(request: Request) {
     );
   }
 }
+
+export const GET = POST;

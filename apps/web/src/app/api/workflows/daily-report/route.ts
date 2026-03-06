@@ -40,7 +40,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const data: DailyReportPayload = JSON.parse(body);
+    const data: DailyReportPayload = body ? JSON.parse(body) : { 
+      workflowType: 'daily_report', 
+      timestamp: new Date().toISOString() 
+    };
 
     // Create workflow execution record
     executionId = await createWorkflowExecution('daily_report', { date: new Date().toISOString() });
@@ -268,11 +271,4 @@ Plokymarket USDT Management System
   }
 }
 
-export async function GET() {
-  return NextResponse.json({
-    status: 'healthy',
-    workflow: 'daily_report',
-    schedule: '0 9 * * * (9 AM Bangladesh Time)',
-    timestamp: new Date().toISOString(),
-  });
-}
+export const GET = POST;

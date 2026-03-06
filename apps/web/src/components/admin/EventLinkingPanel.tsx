@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
+import { isAbortError } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -69,7 +70,11 @@ export function EventLinkingPanel({ onSelectEvent }: EventLinkingPanelProps) {
             const unlinked = (fallbackData || []).filter((e: any) => !linkedEventIds.has(e.id));
             setEvents(unlinked);
         } catch (error: any) {
-            console.error("Error fetching unlinked events:", error);
+            // Handle AbortError gracefully - request was cancelled during navigation
+            if (isAbortError(error)) {
+                return;
+            }
+            console.error("[EventLinkingPanel] Error fetching unlinked events:", error);
         } finally {
             setLoading(false);
         }

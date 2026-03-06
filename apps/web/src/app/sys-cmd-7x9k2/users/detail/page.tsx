@@ -19,6 +19,7 @@ import {
     Ban,
     Clock,
     BarChart3,
+    Wallet,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { userManagementService } from '@/lib/user-management/service';
@@ -35,6 +36,7 @@ import { UserInterventionView } from './components/UserInterventionView';
 import { UserSupportPanel } from './components/UserSupportPanel';
 import { UserAuditView } from './components/UserAuditView';
 import { UserPositionsView } from '@/components/admin/users/UserPositionsView';
+import { UserWalletView } from './components/UserWalletView';
 
 function UserDetailContent() {
     const { t } = useTranslation();
@@ -212,10 +214,14 @@ function UserDetailContent() {
 
             {/* Tabs */}
             <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList className="grid w-full grid-cols-7 bg-slate-900 border border-slate-800">
+                <TabsList className="grid w-full grid-cols-8 bg-slate-900 border border-slate-800">
                     <TabsTrigger value="overview" className="data-[state=active]:bg-slate-800 text-xs">
                         <User className="h-3.5 w-3.5 mr-1.5" />
                         ওভারভিউ
+                    </TabsTrigger>
+                    <TabsTrigger value="wallet" className="data-[state=active]:bg-slate-800 text-xs">
+                        <Wallet className="h-3.5 w-3.5 mr-1.5" />
+                        ওয়ালেট
                     </TabsTrigger>
                     <TabsTrigger value="status" className="data-[state=active]:bg-slate-800 text-xs">
                         <Settings className="h-3.5 w-3.5 mr-1.5" />
@@ -245,6 +251,10 @@ function UserDetailContent() {
 
                 <TabsContent value="overview">
                     <UserOverviewView userId={userId} userData={userData} onUpdate={loadUserData} />
+                </TabsContent>
+
+                <TabsContent value="wallet">
+                    <UserWalletView userId={userId} profile={profile} />
                 </TabsContent>
 
                 <TabsContent value="status">

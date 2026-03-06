@@ -335,3 +335,5 @@ Time: ${new Date().toISOString()}
     );
   }
 }
+
+export const GET = POST;

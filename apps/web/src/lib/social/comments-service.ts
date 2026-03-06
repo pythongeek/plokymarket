@@ -256,11 +256,11 @@ export class CommentsService {
       .single();
 
     // Check if user is comment banned
-    const { data: modStatus } = await supabase
+    const { data: modStatus } = await (supabase
       .from('user_moderation_status')
       .select('is_comment_banned, comment_ban_until')
       .eq('user_id', userId)
-      .single();
+      .single() as any);
 
     if (modStatus?.is_comment_banned) {
       const banUntil = modStatus.comment_ban_until ? new Date(modStatus.comment_ban_until) : null;
@@ -278,11 +278,11 @@ export class CommentsService {
     // Calculate depth level
     let depthLevel = 0;
     if (parentId) {
-      const { data: parent } = await supabase
+      const { data: parent } = await (supabase
         .from('market_comments')
         .select('depth_level')
         .eq('id', parentId)
-        .single();
+        .single() as any);
       if (parent) {
         depthLevel = parent.depth_level + 1;
       }
@@ -306,7 +306,7 @@ export class CommentsService {
         sentiment_score: moderationResult.sentiment_score,
         is_flagged: this.moderationService.shouldAutoFlag(moderationResult),
         score: this.calculateInitialScore(reputation)
-      })
+      } as any)
       .select('*, user_profiles(full_name)')
       .single() as any);
 
@@ -320,7 +320,7 @@ export class CommentsService {
           attachments.map(att => ({
             comment_id: comment.id,
             ...att
-          }))
+          })) as any
         );
     }
 
@@ -335,7 +335,7 @@ export class CommentsService {
           spam_score: moderationResult.spam_score,
           flagged_categories: moderationResult.flagged_categories,
           ai_confidence: 0.85
-        });
+        } as any);
     }
 
     // Record rate limit
@@ -411,11 +411,11 @@ export class CommentsService {
     // Get user votes if logged in
     let userVotes: Map<string, VoteType> = new Map();
     if (currentUserId && rawComments?.length) {
-      const { data: votes } = await supabase
+      const { data: votes } = await (supabase
         .from('comment_votes')
         .select('comment_id, vote_type')
         .eq('user_id', currentUserId)
-        .in('comment_id', rawComments.map(c => c.id));
+        .in('comment_id', rawComments.map(c => c.id)) as any);
 
       votes?.forEach(v => userVotes.set(v.comment_id, v.vote_type));
     }
@@ -427,7 +427,7 @@ export class CommentsService {
       .select('*')
       .in('user_id', userIds);
 
-    const reputationMap = new Map(reputations?.map(r => [r.user_id, r]) || []);
+    const reputationMap = new Map<string, any>(reputations?.map((r: any) => [r.user_id, r]) || []);
 
     // Get user badges for expert indicators
     const { data: userBadges } = await supabase
@@ -571,7 +571,7 @@ export class CommentsService {
           user_id: userId,
           vote_type: voteType,
           user_reputation_at_vote: reputation?.reputation_score || 0
-        });
+        } as any);
     }
 
     // Update comment score
@@ -617,7 +617,7 @@ export class CommentsService {
         user_id: userId,
         reason: reason as any,
         details
-      });
+      } as any);
 
     // Check if comment should be auto-hidden (>3 flags)
     const { count: flagCount } = await supabase
@@ -783,7 +783,7 @@ export class CommentsService {
       data: { commentId, marketId }
     }));
 
-    await supabase.from('notifications').insert(notifications);
+    await supabase.from('notifications').insert(notifications as any);
   }
 }
 

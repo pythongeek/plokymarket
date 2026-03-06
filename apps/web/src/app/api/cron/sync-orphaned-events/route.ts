@@ -16,8 +16,10 @@ export async function GET(request: NextRequest) {
         // 1. Verify Vercel Cron Authentication
         // https://vercel.com/docs/cron-jobs/manage-cron-jobs#securing-cron-jobs
         const authHeader = request.headers.get('authorization');
+        const cronSecret = request.headers.get('x-cron-secret') || request.headers.get('cron-secret');
         if (process.env.NODE_ENV === 'production') {
-            if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+            const secret = process.env.CRON_SECRET || process.env.MASTER_CRON_SECRET;
+            if (authHeader !== `Bearer ${secret}` && cronSecret !== secret) {
                 return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
             }
         }

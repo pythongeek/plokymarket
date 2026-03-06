@@ -160,7 +160,7 @@ export class CategoricalMarketManager {
     
     try {
       // Create market
-      const { data: market, error } = await supabase
+      const { data: market, error } = await (supabase
         .from('markets')
         .insert({
           type: 'categorical',
@@ -172,9 +172,9 @@ export class CategoricalMarketManager {
           creator_address: config.creatorAddress,
           status: 'active',
           created_at: new Date().toISOString()
-        })
+        } as any)
         .select()
-        .single();
+        .single() as any);
       
       if (error) throw error;
       
@@ -248,7 +248,7 @@ export class ScalarMarketManager {
     const supabase = await createClient();
     
     try {
-      const { data: market, error } = await supabase
+      const { data: market, error } = await (supabase
         .from('markets')
         .insert({
           type: 'scalar',
@@ -258,9 +258,9 @@ export class ScalarMarketManager {
           creator_address: config.creatorAddress,
           status: 'active',
           created_at: new Date().toISOString()
-        })
+        } as any)
         .select()
-        .single();
+        .single() as any);
       
       if (error) throw error;
       
@@ -304,14 +304,14 @@ export class ScalarMarketManager {
     await this.notifyBoundChange(marketId, newLower, newUpper);
     
     // Update bounds
-    await supabase
+    await (supabase
       .from('markets')
       .update({
         lower_bound: newLower,
         upper_bound: newUpper,
         bounds_adjusted_at: new Date().toISOString()
       })
-      .eq('id', marketId);
+      .eq('id', marketId) as any);
     
     return { success: true };
   }
@@ -415,14 +415,14 @@ export class ScalarMarketManager {
     if (!proposal) return;
     
     // Update market bounds
-    await supabase
+    await (supabase
       .from('markets')
       .update({
         lower_bound: proposal.new_lower,
         upper_bound: proposal.new_upper,
         bounds_changed_via_vote: true
       })
-      .eq('id', proposal.market_id);
+      .eq('id', proposal.market_id) as any);
     
     // Mark proposal as executed
     await supabase

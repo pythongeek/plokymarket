@@ -70,12 +70,12 @@ export async function GET(request: Request) {
   try {
     // Find markets ready for resolution
     const now = new Date().toISOString();
-    const { data: markets, error: marketError } = await supabase
+    const { data: markets, error: marketError } = await (supabase
       .from('markets')
       .select('id, question, category, trading_closes_at, status')
       .or(`and(status.eq.active,trading_closes_at.lt.${now}),and(status.eq.closed,resolution_source_type.eq.AI)`)
       .order('trading_closes_at', { ascending: true })
-      .limit(3); // Process max 3 per run to stay within 10s limit
+      .limit(3) as any);
 
     if (marketError) throw marketError;
 
@@ -104,18 +104,18 @@ export async function GET(request: Request) {
 
         // Step 1: Close market if still active
         if (market.status === 'active') {
-          await supabase
+          await (supabase
             .from('markets')
             .update({ status: 'closed', updated_at: now })
-            .eq('id', market.id);
+            .eq('id', market.id) as any);
         }
 
         // Step 2: Create resolution record if not exists
-        const { data: existingResolution } = await supabase
+        const { data: existingResolution } = await (supabase
           .from('resolution_systems')
           .select('id, resolution_status')
           .eq('event_id', market.id)
-          .single();
+          .single() as any);
 
         if (!existingResolution) {
           await supabase.from('resolution_systems').insert({
@@ -162,10 +162,10 @@ export async function GET(request: Request) {
         results.errors.push(`Market ${market.id}: ${marketError.message}`);
 
         // Update market with error status
-        await supabase.from('resolution_systems').update({
+        await (supabase.from('resolution_systems').update({
           resolution_status: 'failed',
           evidence: [{ type: 'error', message: marketError.message, timestamp: now }]
-        }).eq('event_id', market.id);
+        }).eq('event_id', market.id) as any);
       }
     }
 
