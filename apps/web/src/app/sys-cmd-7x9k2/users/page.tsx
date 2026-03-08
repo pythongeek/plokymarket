@@ -240,6 +240,14 @@ function UserRow({ user, onViewProfile, onQuickAction, selectedUsers, onToggleSe
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={(e) => {
                             e.stopPropagation();
+                            window.open(`/sys-cmd-7x9k2/users/detail?id=${user.user_id}&tab=wallet`, '_blank');
+                        }} className="text-emerald-400 hover:text-emerald-300">
+                            <Wallet className="h-4 w-4 mr-2" />
+                            ওয়ালেট ম্যানেজ
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator className="bg-slate-800" />
+                        <DropdownMenuItem onClick={(e) => {
+                            e.stopPropagation();
                             onQuickAction(user.user_id, user.account_status === 'suspended' ? 'activate' : 'suspend');
                         }} className="text-red-400 hover:text-red-300">
                             {user.account_status === 'suspended' ? (

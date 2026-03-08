@@ -12,7 +12,7 @@ As requested by the DB Migration Plan (Step 11).
 #>
 
 $MigrationDir = "$PSScriptRoot\..\supabase\migrations"
-$ArchiveDir = "$MigrationDir\archive_legacy"
+$ArchiveDir = "$MigrationDir\archive"
 
 if (-not (Test-Path $ArchiveDir)) {
     New-Item -ItemType Directory -Path $ArchiveDir | Out-Null
