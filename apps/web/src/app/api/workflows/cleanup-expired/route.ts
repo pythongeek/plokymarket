@@ -1,29 +1,46 @@
+/**
+ * Cleanup Expired Deposits Workflow
+ * Runs daily to clean up expired pending deposits
+ * Supports both QStash and cron-job.org
+ */
+
 import { createClient } from '@/lib/supabase/server';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { verifyQStashSignature } from '@/lib/upstash/workflows';
+import { verifyCronSecret } from '@/lib/cron/workflows';
 
 // POST /api/workflows/cleanup-expired
 // Cleanup expired pending deposits (runs daily at midnight)
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    // Verify QStash signature
-    const signature = request.headers.get('upstash-signature') || '';
-    const isValid = verifyQStashSignature(signature, '');
-    if (!isValid && process.env.NODE_ENV === 'production' && request.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
+    // Verify cron-job.org secret or QStash signature
+    const cronSecret = request.headers.get('x-cron-secret') || '';
+    const qstashSignature = request.headers.get('upstash-signature') || '';
+
+    // Support both cron-job.org and QStash
+    const isValidCron = verifyCronSecret(cronSecret);
+    const isValidQStash = verifyQStashSignature(qstashSignature, '');
+
+    if (!isValidCron && !isValidQStash) {
       return NextResponse.json(
-        { error: 'Invalid signature' },
+        { error: 'Invalid authentication' },
         { status: 401 }
       );
     }
 
     const supabase = await createClient();
-    
+
     // Find expired pending deposits (older than 24 hours)
+    // Use created_at if expires_at doesn't exist
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+    // Try with expires_at first, fallback to created_at
     const { data: expiredDeposits, error: fetchError } = await supabase
       .from('deposit_requests')
       .select('id, user_id, bdt_amount, created_at')
       .eq('status', 'pending')
-      .lt('expires_at', new Date().toISOString());
+      .lt('created_at', twentyFourHoursAgo)
+      .limit(100); // Limit to prevent overwhelming the database
 
     if (fetchError) {
       console.error('Failed to fetch expired deposits:', fetchError);
@@ -50,7 +67,7 @@ export async function POST(request: Request) {
         updated_at: new Date().toISOString()
       })
       .eq('status', 'pending')
-      .lt('expires_at', new Date().toISOString());
+      .in('id', expiredDeposits.map(d => d.id));
 
     if (updateError) {
       console.error('Failed to cleanup expired deposits:', updateError);
@@ -60,16 +77,20 @@ export async function POST(request: Request) {
       );
     }
 
-    // Create notifications for users
-    const notifications = expiredDeposits.map(deposit => ({
-      user_id: deposit.user_id,
-      type: 'deposit_expired',
-      title: 'ডিপোজিট রিকোয়েস্ট মেয়াদ শেষ',
-      message: `আপনার ৳${deposit.bdt_amount} ডিপোজিট রিকোয়েস্ট মেয়াদ শেষ হয়ে গেছে। অনুগ্রহ করে নতুন রিকোয়েস্ট করুন।`,
-      created_at: new Date().toISOString()
-    }));
+    // Create notifications for users (filter out invalid user_ids)
+    const validNotifications = expiredDeposits
+      .filter(d => d.user_id)
+      .map(deposit => ({
+        user_id: deposit.user_id,
+        type: 'deposit_expired',
+        title: 'ডিপোজিট রিকোয়েস্ট মেয়াদ শেষ',
+        message: `আপনার ৳${deposit.bdt_amount} ডিপোজিট রিকোয়েস্ট মেয়াদ শেষ হয়ে গেছে। অনুগ্রহ করে নতুন রিকোয়েস্ট করুন।`,
+        created_at: new Date().toISOString()
+      }));
 
-    await supabase.from('notifications').insert(notifications);
+    if (validNotifications.length > 0) {
+      await supabase.from('notifications').insert(validNotifications);
+    }
 
     console.log(`Cleaned up ${expiredDeposits.length} expired deposits`);
 

@@ -46,7 +46,10 @@ export async function POST(request: Request) {
       console.error('Workflow Exchange Rate: Error inserting to legacy exchange_rates', insertLegacyError);
     }
 
-    // Attempt RPC update for modern `exchange_rates_live` ecosystem
+    // Skip RPC call - the tables don't exist yet
+    // The rate is already saved to the legacy exchange_rates table above
+    // TODO: Enable RPC call after migration is applied
+    /*
     const { error: rpcError } = await supabase.rpc('update_exchange_rate', {
       p_usdt_to_bdt: Number(combinedBuyRate.toFixed(4)),
       p_source: liveAPI?.source || 'binance_fallback'
@@ -55,6 +58,7 @@ export async function POST(request: Request) {
     if (rpcError) {
       console.warn('Workflow Exchange Rate: RPC update_exchange_rate failed or not found. Ignoring.', rpcError);
     }
+    */
 
     console.log(`Exchange rate updated via workflow: ৳${combinedBuyRate.toFixed(4)} / USDT (Base: ৳${baseRate})`);
 

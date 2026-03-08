@@ -1,7 +1,11 @@
 /**
  * Daily Report Workflow
- * Runs every day at 9 AM Bangladesh time
+ * Runs every day at 1:30 AM Bangladesh time (via cron-job.org)
  * Generates and sends daily statistics to admins
+ * 
+ * Authentication: Supports both QStash and cron-job.org
+ * - QStash: Uses 'upstash-signature' header
+ * - cron-job.org: Uses 'x-cron-secret' header
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -13,6 +17,7 @@ import {
   logWorkflowStep,
   formatBanglaDate
 } from '@/lib/upstash/workflows';
+import { verifyCronSecret } from '@/lib/cron/workflows';
 
 export const runtime = 'edge';
 export const preferredRegion = 'iad1';
@@ -29,20 +34,25 @@ export async function POST(request: NextRequest) {
   let executionId: string | null = null;
 
   try {
-    // Verify QStash signature
-    const signature = request.headers.get('upstash-signature') || '';
+    // Verify cron-job.org secret or QStash signature
+    const cronSecret = request.headers.get('x-cron-secret') || '';
+    const qstashSignature = request.headers.get('upstash-signature') || '';
     const body = await request.text();
 
-    if (!verifyQStashSignature(signature, body)) {
+    // Support both cron-job.org and QStash
+    const isValidCron = verifyCronSecret(cronSecret);
+    const isValidQStash = verifyQStashSignature(qstashSignature, body);
+
+    if (!isValidCron && !isValidQStash) {
       return NextResponse.json(
-        { error: 'Invalid signature' },
+        { error: 'Invalid authentication' },
         { status: 401 }
       );
     }
 
-    const data: DailyReportPayload = body ? JSON.parse(body) : { 
-      workflowType: 'daily_report', 
-      timestamp: new Date().toISOString() 
+    const data: DailyReportPayload = body ? JSON.parse(body) : {
+      workflowType: 'daily_report',
+      timestamp: new Date().toISOString()
     };
 
     // Create workflow execution record

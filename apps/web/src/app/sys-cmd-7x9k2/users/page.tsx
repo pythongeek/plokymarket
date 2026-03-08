@@ -26,6 +26,10 @@ import {
     Eye,
     Ban,
     Zap,
+    Wallet,
+    Plus,
+    Minus,
+    Check,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { userManagementService, type UserSearchResult } from '@/lib/user-management/service';
@@ -49,6 +53,15 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import { UsdtUsersTab } from './UsdtUsersTab';
 
@@ -100,10 +113,12 @@ function RiskScoreIndicator({ score }: { score?: number }) {
 // USER ROW COMPONENT
 // ============================================
 
-function UserRow({ user, onViewProfile, onQuickAction }: {
+function UserRow({ user, onViewProfile, onQuickAction, selectedUsers, onToggleSelect }: {
     user: UserSearchResult;
     onViewProfile: (id: string) => void;
     onQuickAction: (userId: string, action: string) => void;
+    selectedUsers: string[];
+    onToggleSelect: (userId: string) => void;
 }) {
     const getStatusBadge = (status: string) => {
         const styles: Record<string, { class: string; icon: typeof CheckCircle; label: string }> = {
@@ -146,6 +161,14 @@ function UserRow({ user, onViewProfile, onQuickAction }: {
             className="border-b border-slate-800 hover:bg-slate-800/30 cursor-pointer transition-colors"
             onClick={() => onViewProfile(user.user_id)}
         >
+            <td className="py-3 px-4">
+                <Checkbox
+                    checked={selectedUsers.includes(user.user_id)}
+                    onCheckedChange={() => onToggleSelect(user.user_id)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="border-slate-600"
+                />
+            </td>
             <td className="py-3 px-4">
                 <div className="flex items-center gap-3">
                     <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary/30 to-purple-500/30 flex items-center justify-center text-sm font-bold text-white">
@@ -255,6 +278,14 @@ export default function UserManagementPage() {
     const [quickActionLoading, setQuickActionLoading] = useState<string | null>(null);
     const limit = 20;
 
+    // Bulk selection state
+    const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+    const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
+    const [bulkAction, setBulkAction] = useState<'credit' | 'debit'>('credit');
+    const [bulkAmount, setBulkAmount] = useState('');
+    const [bulkReason, setBulkReason] = useState('');
+    const [bulkSubmitting, setBulkSubmitting] = useState(false);
+
     // Aggregate stats
     const [aggregateStats, setAggregateStats] = useState({
         totalUsers: 0,
@@ -330,6 +361,43 @@ export default function UserManagementPage() {
         }
     };
 
+    const handleBulkAction = async () => {
+        if (!bulkAmount || parseFloat(bulkAmount) <= 0 || selectedUsers.length === 0) return;
+
+        setBulkSubmitting(true);
+        try {
+            const response = await fetch('/api/admin/users/wallet/bulk', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    action: bulkAction,
+                    userIds: selectedUsers,
+                    amount: parseFloat(bulkAmount),
+                    reason: bulkReason || `Bulk ${bulkAction} by admin`
+                })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                alert(`সফলভাবে ${result.processed} ইউজারের ${bulkAction} করা হয়েছে।`);
+                setBulkDialogOpen(false);
+                setSelectedUsers([]);
+                setBulkAmount('');
+                setBulkReason('');
+                loadUsers();
+            } else {
+                alert(`ত্রুটি: ${result.error}`);
+            }
+        } catch (error: any) {
+            alert(`ত্রুটি: ${error.message}`);
+        } finally {
+            setBulkSubmitting(false);
+        }
+    };
+
     const totalPages = Math.ceil(total / limit);
 
     return (
@@ -349,6 +417,47 @@ export default function UserManagementPage() {
                     </Button>
                 </div>
             </div>
+
+            {/* Bulk Action Bar */}
+            {selectedUsers.length > 0 && (
+                <div className="flex items-center justify-between bg-slate-900 border border-slate-700 rounded-lg p-4">
+                    <div className="flex items-center gap-3">
+                        <Checkbox
+                            checked={true}
+                            onCheckedChange={() => setSelectedUsers([])}
+                            className="border-slate-600"
+                        />
+                        <span className="text-white font-medium">
+                            {selectedUsers.length} ইউজার নির্বাচিত
+                        </span>
+                    </div>
+                    <div className="flex gap-2">
+                        <Button
+                            variant="outline"
+                            onClick={() => { setBulkAction('credit'); setBulkDialogOpen(true); }}
+                            className="border-emerald-600 text-emerald-400 hover:bg-emerald-600/20"
+                        >
+                            <Plus className="h-4 w-4 mr-2" />
+                            বাল্ক ক্রেডিট
+                        </Button>
+                        <Button
+                            variant="outline"
+                            onClick={() => { setBulkAction('debit'); setBulkDialogOpen(true); }}
+                            className="border-red-600 text-red-400 hover:bg-red-600/20"
+                        >
+                            <Minus className="h-4 w-4 mr-2" />
+                            বাল্ক ডেবিট
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            onClick={() => setSelectedUsers([])}
+                            className="text-slate-400 hover:text-white"
+                        >
+                            বাতিল
+                        </Button>
+                    </div>
+                </div>
+            )}
 
             {/* MarketStatsBanner */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-900/50 p-4 rounded-xl border border-slate-800 mb-6">
@@ -394,163 +503,252 @@ export default function UserManagementPage() {
                 </div>
 
                 <TabsContent value="general" className="space-y-6 mt-0">
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                {[
-                    { label: 'মোট ব্যবহারকারী', labelEn: 'Total Users', value: aggregateStats.totalUsers, icon: Users, color: 'text-blue-400', bg: 'bg-blue-500/10' },
-                    { label: 'সক্রিয়', labelEn: 'Active', value: aggregateStats.activeUsers, icon: UserCheck, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
-                    { label: 'KYC মুলতুবি', labelEn: 'Pending KYC', value: aggregateStats.pendingKyc, icon: Clock, color: 'text-amber-400', bg: 'bg-amber-500/10' },
-                    { label: 'স্থগিত', labelEn: 'Suspended', value: aggregateStats.suspendedUsers, icon: UserX, color: 'text-red-400', bg: 'bg-red-500/10' },
-                    { label: 'উচ্চ ঝুঁকি', labelEn: 'High Risk', value: aggregateStats.highRiskUsers, icon: AlertTriangle, color: 'text-orange-400', bg: 'bg-orange-500/10' },
-                ].map((stat, index) => (
-                    <motion.div
-                        key={stat.labelEn}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: index * 0.08 }}
-                    >
-                        <Card className="bg-slate-900 border-slate-800">
-                            <CardContent className="p-4">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <p className="text-[11px] text-slate-500">{stat.label}</p>
-                                        <p className="text-xl font-bold text-white mt-0.5">{stat.value}</p>
-                                    </div>
-                                    <div className={cn("p-2 rounded-lg", stat.bg)}>
-                                        <stat.icon className={cn("w-4 h-4", stat.color)} />
+                    {/* Stats Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                        {[
+                            { label: 'মোট ব্যবহারকারী', labelEn: 'Total Users', value: aggregateStats.totalUsers, icon: Users, color: 'text-blue-400', bg: 'bg-blue-500/10' },
+                            { label: 'সক্রিয়', labelEn: 'Active', value: aggregateStats.activeUsers, icon: UserCheck, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+                            { label: 'KYC মুলতুবি', labelEn: 'Pending KYC', value: aggregateStats.pendingKyc, icon: Clock, color: 'text-amber-400', bg: 'bg-amber-500/10' },
+                            { label: 'স্থগিত', labelEn: 'Suspended', value: aggregateStats.suspendedUsers, icon: UserX, color: 'text-red-400', bg: 'bg-red-500/10' },
+                            { label: 'উচ্চ ঝুঁকি', labelEn: 'High Risk', value: aggregateStats.highRiskUsers, icon: AlertTriangle, color: 'text-orange-400', bg: 'bg-orange-500/10' },
+                        ].map((stat, index) => (
+                            <motion.div
+                                key={stat.labelEn}
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: index * 0.08 }}
+                            >
+                                <Card className="bg-slate-900 border-slate-800">
+                                    <CardContent className="p-4">
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <p className="text-[11px] text-slate-500">{stat.label}</p>
+                                                <p className="text-xl font-bold text-white mt-0.5">{stat.value}</p>
+                                            </div>
+                                            <div className={cn("p-2 rounded-lg", stat.bg)}>
+                                                <stat.icon className={cn("w-4 h-4", stat.color)} />
+                                            </div>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            </motion.div>
+                        ))}
+                    </div>
+
+                    {/* Filters */}
+                    <Card className="bg-slate-900 border-slate-800">
+                        <CardContent className="p-4">
+                            <div className="flex flex-col md:flex-row gap-3">
+                                <div className="relative flex-1">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+                                    <Input
+                                        placeholder="ইমেইল, নাম, অথবা ইউজার ID দিয়ে খুঁজুন..."
+                                        value={searchQuery}
+                                        onChange={(e) => { setSearchQuery(e.target.value); setPage(0); }}
+                                        className="pl-10 bg-slate-950 border-slate-800 text-white placeholder:text-slate-600"
+                                    />
+                                </div>
+                                <div className="flex gap-2">
+                                    <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(0); }}>
+                                        <SelectTrigger className="w-[180px] bg-slate-950 border-slate-800 text-white">
+                                            <Filter className="h-4 w-4 mr-2" />
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent className="bg-slate-900 border-slate-800">
+                                            {STATUS_FILTERS.map(f => (
+                                                <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <Select value={kycFilter} onValueChange={(v) => { setKycFilter(v); setPage(0); }}>
+                                        <SelectTrigger className="w-[180px] bg-slate-950 border-slate-800 text-white">
+                                            <Shield className="h-4 w-4 mr-2" />
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent className="bg-slate-900 border-slate-800">
+                                            {KYC_FILTERS.map(f => (
+                                                <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Users Table */}
+                    <Card className="bg-slate-900 border-slate-800">
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-medium text-slate-400">
+                                মোট {total.toLocaleString('bn-BD')} জন ব্যবহারকারীর মধ্যে {users.length} জন দেখানো হচ্ছে
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            {loading ? (
+                                <div className="flex items-center justify-center py-16">
+                                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                                </div>
+                            ) : users.length === 0 ? (
+                                <div className="text-center py-16 text-slate-500">
+                                    <Users className="h-16 w-16 mx-auto mb-4 opacity-20" />
+                                    <p className="text-lg">কোনো ব্যবহারকারী পাওয়া যায়নি</p>
+                                    <p className="text-sm mt-1">No users found</p>
+                                </div>
+                            ) : (
+                                <div className="overflow-x-auto">
+                                    <table className="w-full">
+                                        <thead>
+                                            <tr className="border-b border-slate-800">
+                                                <th className="text-left py-3 px-4 font-medium text-xs text-slate-500 uppercase tracking-wider w-10">
+                                                    <Checkbox
+                                                        checked={selectedUsers.length === users.length && users.length > 0}
+                                                        onCheckedChange={(checked) => {
+                                                            if (checked) {
+                                                                setSelectedUsers(users.map(u => u.user_id));
+                                                            } else {
+                                                                setSelectedUsers([]);
+                                                            }
+                                                        }}
+                                                        className="border-slate-600"
+                                                    />
+                                                </th>
+                                                <th className="text-left py-3 px-4 font-medium text-xs text-slate-500 uppercase tracking-wider">ব্যবহারকারী</th>
+                                                <th className="text-left py-3 px-4 font-medium text-xs text-slate-500 uppercase tracking-wider">স্ট্যাটাস</th>
+                                                <th className="text-left py-3 px-4 font-medium text-xs text-slate-500 uppercase tracking-wider">KYC</th>
+                                                <th className="text-left py-3 px-4 font-medium text-xs text-slate-500 uppercase tracking-wider">টিয়ার</th>
+                                                <th className="text-left py-3 px-4 font-medium text-xs text-slate-500 uppercase tracking-wider">ঝুঁকি</th>
+                                                <th className="text-left py-3 px-4 font-medium text-xs text-slate-500 uppercase tracking-wider">যোগদান</th>
+                                                <th className="text-right py-3 px-4 font-medium text-xs text-slate-500 uppercase tracking-wider">অ্যাকশন</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {users.map((user) => (
+                                                <UserRow
+                                                    key={user.user_id}
+                                                    user={user}
+                                                    onViewProfile={handleViewProfile}
+                                                    onQuickAction={handleQuickAction}
+                                                    selectedUsers={selectedUsers}
+                                                    onToggleSelect={(id) => {
+                                                        setSelectedUsers(prev =>
+                                                            prev.includes(id)
+                                                                ? prev.filter(uid => uid !== id)
+                                                                : [...prev, id]
+                                                        );
+                                                    }}
+                                                />
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+
+                            {/* Pagination */}
+                            {totalPages > 1 && (
+                                <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-800">
+                                    <p className="text-sm text-slate-500">
+                                        পৃষ্ঠা {(page + 1).toLocaleString('bn-BD')} / {totalPages.toLocaleString('bn-BD')}
+                                    </p>
+                                    <div className="flex gap-2">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setPage(p => Math.max(0, p - 1))}
+                                            disabled={page === 0 || loading}
+                                            className="border-slate-800 text-slate-400"
+                                        >
+                                            <ChevronLeft className="h-4 w-4 mr-1" />
+                                            আগের
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setPage(p => p + 1)}
+                                            disabled={(page + 1) * limit >= total || loading}
+                                            className="border-slate-800 text-slate-400"
+                                        >
+                                            পরের
+                                            <ChevronRight className="h-4 w-4 ml-1" />
+                                        </Button>
                                     </div>
                                 </div>
-                            </CardContent>
-                        </Card>
-                    </motion.div>
-                ))}
-            </div>
-
-            {/* Filters */}
-            <Card className="bg-slate-900 border-slate-800">
-                <CardContent className="p-4">
-                    <div className="flex flex-col md:flex-row gap-3">
-                        <div className="relative flex-1">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
-                            <Input
-                                placeholder="ইমেইল, নাম, অথবা ইউজার ID দিয়ে খুঁজুন..."
-                                value={searchQuery}
-                                onChange={(e) => { setSearchQuery(e.target.value); setPage(0); }}
-                                className="pl-10 bg-slate-950 border-slate-800 text-white placeholder:text-slate-600"
-                            />
-                        </div>
-                        <div className="flex gap-2">
-                            <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(0); }}>
-                                <SelectTrigger className="w-[180px] bg-slate-950 border-slate-800 text-white">
-                                    <Filter className="h-4 w-4 mr-2" />
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent className="bg-slate-900 border-slate-800">
-                                    {STATUS_FILTERS.map(f => (
-                                        <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                            <Select value={kycFilter} onValueChange={(v) => { setKycFilter(v); setPage(0); }}>
-                                <SelectTrigger className="w-[180px] bg-slate-950 border-slate-800 text-white">
-                                    <Shield className="h-4 w-4 mr-2" />
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent className="bg-slate-900 border-slate-800">
-                                    {KYC_FILTERS.map(f => (
-                                        <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
-
-            {/* Users Table */}
-            <Card className="bg-slate-900 border-slate-800">
-                <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-slate-400">
-                        মোট {total.toLocaleString('bn-BD')} জন ব্যবহারকারীর মধ্যে {users.length} জন দেখানো হচ্ছে
-                    </CardTitle>
-                </CardHeader>
-                <CardContent>
-                    {loading ? (
-                        <div className="flex items-center justify-center py-16">
-                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                        </div>
-                    ) : users.length === 0 ? (
-                        <div className="text-center py-16 text-slate-500">
-                            <Users className="h-16 w-16 mx-auto mb-4 opacity-20" />
-                            <p className="text-lg">কোনো ব্যবহারকারী পাওয়া যায়নি</p>
-                            <p className="text-sm mt-1">No users found</p>
-                        </div>
-                    ) : (
-                        <div className="overflow-x-auto">
-                            <table className="w-full">
-                                <thead>
-                                    <tr className="border-b border-slate-800">
-                                        <th className="text-left py-3 px-4 font-medium text-xs text-slate-500 uppercase tracking-wider">ব্যবহারকারী</th>
-                                        <th className="text-left py-3 px-4 font-medium text-xs text-slate-500 uppercase tracking-wider">স্ট্যাটাস</th>
-                                        <th className="text-left py-3 px-4 font-medium text-xs text-slate-500 uppercase tracking-wider">KYC</th>
-                                        <th className="text-left py-3 px-4 font-medium text-xs text-slate-500 uppercase tracking-wider">টিয়ার</th>
-                                        <th className="text-left py-3 px-4 font-medium text-xs text-slate-500 uppercase tracking-wider">ঝুঁকি</th>
-                                        <th className="text-left py-3 px-4 font-medium text-xs text-slate-500 uppercase tracking-wider">যোগদান</th>
-                                        <th className="text-right py-3 px-4 font-medium text-xs text-slate-500 uppercase tracking-wider">অ্যাকশন</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {users.map((user) => (
-                                        <UserRow
-                                            key={user.user_id}
-                                            user={user}
-                                            onViewProfile={handleViewProfile}
-                                            onQuickAction={handleQuickAction}
-                                        />
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
-
-                    {/* Pagination */}
-                    {totalPages > 1 && (
-                        <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-800">
-                            <p className="text-sm text-slate-500">
-                                পৃষ্ঠা {(page + 1).toLocaleString('bn-BD')} / {totalPages.toLocaleString('bn-BD')}
-                            </p>
-                            <div className="flex gap-2">
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setPage(p => Math.max(0, p - 1))}
-                                    disabled={page === 0 || loading}
-                                    className="border-slate-800 text-slate-400"
-                                >
-                                    <ChevronLeft className="h-4 w-4 mr-1" />
-                                    আগের
-                                </Button>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setPage(p => p + 1)}
-                                    disabled={(page + 1) * limit >= total || loading}
-                                    className="border-slate-800 text-slate-400"
-                                >
-                                    পরের
-                                    <ChevronRight className="h-4 w-4 ml-1" />
-                                </Button>
-                            </div>
-                        </div>
-                    )}
-                </CardContent>
-            </Card>
+                            )}
+                        </CardContent>
+                    </Card>
                 </TabsContent>
 
                 <TabsContent value="usdt" className="mt-0">
                     <UsdtUsersTab />
                 </TabsContent>
             </Tabs>
+
+            {/* Bulk Credit/Debit Dialog */}
+            <Dialog open={bulkDialogOpen} onOpenChange={setBulkDialogOpen}>
+                <DialogContent className="bg-slate-900 border-slate-800 text-white">
+                    <DialogHeader>
+                        <DialogTitle>
+                            {bulkAction === 'credit' ? 'বাল্ক ক্রেডিট (Bulk Credit)' : 'বাল্ক ডেবিট (Bulk Debit)'}
+                        </DialogTitle>
+                        <DialogDescription className="text-slate-400">
+                            {selectedUsers.length} ইউজারের ওয়ালেটে {bulkAction === 'credit' ? 'ক্রেডিট' : 'ডেবিট'} করবেন।
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <label className="text-sm text-slate-400">পরিমাণ (BDT) *</label>
+                            <Input
+                                type="number"
+                                value={bulkAmount}
+                                onChange={(e) => setBulkAmount(e.target.value)}
+                                placeholder="0.00"
+                                min="0"
+                                step="0.01"
+                                className="bg-slate-800 border-slate-700 text-white"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-sm text-slate-400">কারণ (ঐচ্ছিক)</label>
+                            <Input
+                                value={bulkReason}
+                                onChange={(e) => setBulkReason(e.target.value)}
+                                placeholder="e.g., বোনাস, রিফান্ড"
+                                className="bg-slate-800 border-slate-700 text-white"
+                            />
+                        </div>
+                        <div className={bulkAction === 'credit' ? 'bg-emerald-500/20 p-3 rounded-lg' : 'bg-red-500/20 p-3 rounded-lg'}>
+                            <p className={bulkAction === 'credit' ? 'text-sm text-emerald-400' : 'text-sm text-red-400'}>
+                                ⚠️ এই অ্যাকশন {selectedUsers.length} ইউজারকে প্রভাবিত করবে।
+                                {bulkAction === 'credit' ? ' তহবিল যোগ করা হবে।' : ' তহবিল কাটা হবে।'}
+                            </p>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            onClick={() => setBulkDialogOpen(false)}
+                            className="border-slate-700 text-slate-300"
+                        >
+                            বাতিল
+                        </Button>
+                        <Button
+                            onClick={handleBulkAction}
+                            disabled={!bulkAmount || parseFloat(bulkAmount) <= 0 || bulkSubmitting}
+                            className={bulkAction === 'credit' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700'}
+                        >
+                            {bulkSubmitting ? (
+                                <>
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                    প্রসেসিং...
+                                </>
+                            ) : (
+                                <>
+                                    {bulkAction === 'credit' ? 'ক্রেডিট করুন' : 'ডেবিট করুন'}
+                                </>
+                            )}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

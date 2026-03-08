@@ -36,15 +36,38 @@ export async function POST(request: NextRequest) {
         const prices = data.data.map((d: any) => parseFloat(d.adv.price));
         const avgRate = prices.reduce((a: number, b: number) => a + b, 0) / prices.length;
 
-        // Store in database
-        const { error: insertError } = await supabase
-            .from('exchange_rates_live')
-            .insert({
-                usdt_to_bdt: avgRate,
-                bdt_to_usdt: 1 / avgRate,
-                source: 'binance_p2p',
-                fetched_at: new Date().toISOString()
-            });
+        // Store in database (try new table first, fallback to legacy)
+        let insertError = null;
+
+        try {
+            const { error: newInsertError } = await (supabase as any)
+                .from('exchange_rates_live')
+                .insert({
+                    usdt_to_bdt: avgRate,
+                    bdt_to_usdt: 1 / avgRate,
+                    source: 'binance_p2p',
+                    fetched_at: new Date().toISOString()
+                });
+
+            if (newInsertError?.code !== 'PGRST116') { // Ignore "not found" errors
+                insertError = newInsertError;
+            }
+        } catch (newTableError) {
+            // Fallback to legacy exchange_rates table
+            try {
+                const { error: legacyError } = await (supabase as any)
+                    .from('exchange_rates')
+                    .insert({
+                        usdt_to_bdt: avgRate,
+                        bdt_to_usdt: 1 / avgRate,
+                        effective_from: new Date().toISOString(),
+                        source: 'binance_p2p'
+                    });
+                insertError = legacyError;
+            } catch (legacyError: any) {
+                insertError = legacyError;
+            }
+        }
 
         if (insertError) {
             console.error('[Exchange Rate Refresh] Insert error:', insertError);

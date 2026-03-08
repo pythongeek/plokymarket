@@ -9,15 +9,32 @@ export async function GET() {
     try {
         const supabase = await createClient();
 
-        const { data, error } = await supabase
+        // Try new exchange_rates_live table first
+        const { data: liveData, error: liveError } = await supabase
             .from('exchange_rates_live')
             .select('*')
+            .eq('is_active', true)
             .order('fetched_at', { ascending: false })
             .limit(1)
             .single();
 
-        if (error) {
-            console.error('[Exchange Rate] Database error:', error);
+        if (!liveError && liveData) {
+            return NextResponse.json({
+                success: true,
+                rate: liveData
+            });
+        }
+
+        // Fallback to legacy exchange_rates table
+        const { data: legacyData, error: legacyError } = await supabase
+            .from('exchange_rates')
+            .select('*')
+            .order('effective_from', { ascending: false })
+            .limit(1)
+            .single();
+
+        if (legacyError || !legacyData) {
+            console.error('[Exchange Rate] Database error:', legacyError);
             // Return default rate if no data
             return NextResponse.json({
                 success: true,
@@ -30,9 +47,15 @@ export async function GET() {
             });
         }
 
+        // Transform legacy data to match expected format
         return NextResponse.json({
             success: true,
-            rate: data
+            rate: {
+                usdt_to_bdt: legacyData.usdt_to_bdt,
+                bdt_to_usdt: legacyData.bdt_to_usdt,
+                source: legacyData.source || 'binance',
+                fetched_at: legacyData.effective_from || legacyData.created_at
+            }
         });
     } catch (error: any) {
         console.error('[Exchange Rate] Error:', error);

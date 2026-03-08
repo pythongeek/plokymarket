@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
             .eq('id', userId)
             .single();
 
-        if (adminError || !adminUser?.is_admin) {
+        if (adminError || (!adminUser?.is_admin && !adminUser?.is_super_admin)) {
             return NextResponse.json(
                 { success: false, error: 'Admin access required' },
                 { status: 403 }
@@ -120,38 +120,70 @@ export async function GET(request: NextRequest) {
         // Verify admin
         const { data: adminUser } = await supabase
             .from('users')
-            .select('is_admin')
+            .select('is_admin, is_super_admin')
             .eq('id', adminId)
             .single();
 
-        if (!adminUser?.is_admin) {
+        if (!adminUser?.is_admin && !adminUser?.is_super_admin) {
             return NextResponse.json(
                 { success: false, error: 'Admin access required' },
                 { status: 403 }
             );
         }
 
-        const { data, error } = await supabase.rpc('admin_get_user_wallet', {
+        // Try RPC first, fallback to direct query if RPC doesn't exist
+        let walletData: any = null;
+        let transactions: any[] = [];
+
+        const { data: rpcResult, error: rpcError } = await supabase.rpc('admin_get_user_wallet', {
             p_admin_id: adminId,
             p_user_id: userId
         });
 
-        if (error) {
-            return NextResponse.json(
-                { success: false, error: error.message },
-                { status: 400 }
-            );
+        if (rpcError) {
+            // Fallback: Get wallet and transactions directly
+            const { data: wallet, error: walletError } = await supabase
+                .from('wallets')
+                .select('*')
+                .eq('user_id', userId)
+                .single();
+
+            if (walletError) {
+                return NextResponse.json(
+                    { success: false, error: 'Wallet not found' },
+                    { status: 404 }
+                );
+            }
+
+            walletData = wallet;
+
+            // Get recent transactions
+            const { data: txData } = await supabase
+                .from('transactions')
+                .select('id, transaction_type, amount, status, description, created_at')
+                .eq('user_id', userId)
+                .order('created_at', { ascending: false })
+                .limit(50);
+
+            transactions = txData || [];
+        } else {
+            // RPC returned data
+            walletData = rpcResult;
+            transactions = rpcResult?.transactions || [];
         }
 
         return NextResponse.json({
             success: true,
-            data
+            data: {
+                ...walletData,
+                transactions
+            }
         });
 
     } catch (error: any) {
         console.error('Get wallet error:', error);
         return NextResponse.json(
-            { success: false, error: error.message },
+            { success: false, error: error.message || 'Internal server error' },
             { status: 500 }
         );
     }

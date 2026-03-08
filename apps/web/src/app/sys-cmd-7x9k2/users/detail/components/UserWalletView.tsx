@@ -11,6 +11,7 @@ import {
     Loader2,
     CheckCircle,
     AlertCircle,
+    Lock,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -81,8 +82,12 @@ export function UserWalletView({ userId, profile }: UserWalletViewProps) {
             const result = await response.json();
 
             if (result.success && result.data) {
-                setWalletData(result.data.wallet);
+                // API returns data directly, not wrapped in wallet property
+                // The RPC function returns: { id, user_id, balance, locked_balance, available_balance, currency, created_at, updated_at, transactions }
+                setWalletData(result.data);
                 setTransactions(result.data.transactions || []);
+            } else {
+                console.error('Failed to load wallet:', result.error);
             }
         } catch (error) {
             console.error('Error loading wallet:', error);

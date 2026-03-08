@@ -31,21 +31,71 @@ export async function GET() {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // Get config
-        const { data: config, error: configError } = await (supabase as any)
-            .from('exchange_rate_config')
-            .select('*')
-            .eq('id', 1)
-            .single();
+        // Get config (try new table first, fallback to defaults)
+        let config = null;
+        try {
+            const { data: newConfig } = await (supabase as any)
+                .from('exchange_rate_config')
+                .select('*')
+                .eq('id', 1)
+                .single();
 
-        // Get current live rate
-        const { data: liveRate } = await (supabase as any)
-            .from('exchange_rates_live')
-            .select('*')
-            .eq('is_active', true)
-            .order('fetched_at', { ascending: false })
-            .limit(1)
-            .single();
+            if (newConfig) {
+                config = newConfig;
+            }
+        } catch (e) {
+            // Table doesn't exist, use defaults
+            console.log('Using default exchange rate config');
+        }
+
+        // If no config, use defaults
+        if (!config) {
+            config = {
+                default_usdt_to_bdt: 119,
+                min_usdt_to_bdt: 95,
+                max_usdt_to_bdt: 130,
+                auto_update_enabled: false,
+                update_interval_minutes: 5,
+            };
+        }
+
+        // Get current live rate (try new table first, fallback to legacy)
+        let liveRate = null;
+        try {
+            const { data: newLiveRate } = await (supabase as any)
+                .from('exchange_rates_live')
+                .select('*')
+                .eq('is_active', true)
+                .order('fetched_at', { ascending: false })
+                .limit(1)
+                .single();
+
+            if (newLiveRate) {
+                liveRate = newLiveRate;
+            }
+        } catch (e) {
+            // Fallback to legacy exchange_rates table
+            try {
+                const { data: legacyRate } = await (supabase as any)
+                    .from('exchange_rates')
+                    .select('*')
+                    .order('effective_from', { ascending: false })
+                    .limit(1)
+                    .single();
+
+                if (legacyRate) {
+                    liveRate = {
+                        usdt_to_bdt: legacyRate.usdt_to_bdt,
+                        bdt_to_usdt: legacyRate.bdt_to_usdt,
+                        source: legacyRate.source || 'binance',
+                        fetched_at: legacyRate.effective_from || legacyRate.created_at,
+                        is_active: true
+                    };
+                }
+            } catch (legacyError) {
+                console.warn('Could not fetch legacy rate:', legacyError);
+            }
+        }
 
         // Get last 20 rate history entries
         const { data: history } = await (supabase as any)
@@ -95,7 +145,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Min rate must be less than max rate' }, { status: 400 });
         }
 
-        // Update config
+        // Update config (try new table first, but might not exist)
         const updatePayload: Record<string, any> = {};
         if (default_usdt_to_bdt !== undefined) updatePayload.default_usdt_to_bdt = default_usdt_to_bdt;
         if (min_usdt_to_bdt !== undefined) updatePayload.min_usdt_to_bdt = min_usdt_to_bdt;
@@ -105,17 +155,22 @@ export async function POST(request: NextRequest) {
         updatePayload.last_updated = new Date().toISOString();
         updatePayload.updated_by = user.id;
 
-        const { error: updateError } = await (supabase as any)
-            .from('exchange_rate_config')
-            .update(updatePayload)
-            .eq('id', 1);
+        try {
+            const { error: updateError } = await (supabase as any)
+                .from('exchange_rate_config')
+                .update(updatePayload)
+                .eq('id', 1);
 
-        if (updateError) {
-            console.error('[Admin Exchange Rate Config] Update error:', updateError);
-            return NextResponse.json({ error: 'Failed to update config' }, { status: 500 });
+            if (updateError && !updateError.message?.includes('does not exist')) {
+                console.error('[Admin Exchange Rate Config] Update error:', updateError);
+                return NextResponse.json({ error: 'Failed to update config' }, { status: 500 });
+            }
+        } catch (tableError: any) {
+            // Table doesn't exist - just log and continue
+            console.log('[Admin Exchange Rate Config] Table not found, using in-memory config');
         }
 
-        // If admin provided a manual rate, update the live rate immediately
+        // If admin provided a manual rate, update the rate immediately
         if (manual_rate && typeof manual_rate === 'number' && manual_rate > 0) {
             const min = min_usdt_to_bdt || 95;
             const max = max_usdt_to_bdt || 130;
@@ -126,32 +181,56 @@ export async function POST(request: NextRequest) {
                 }, { status: 400 });
             }
 
-            // Deactivate old rates
-            await (supabase as any)
-                .from('exchange_rates_live')
-                .update({ is_active: false })
-                .eq('is_active', true);
+            // Try new exchange_rates_live table first
+            try {
+                // Deactivate old rates
+                await (supabase as any)
+                    .from('exchange_rates_live')
+                    .update({ is_active: false })
+                    .eq('is_active', true);
 
-            // Insert new manual rate
-            await (supabase as any)
-                .from('exchange_rates_live')
-                .insert({
-                    usdt_to_bdt: manual_rate,
-                    bdt_to_usdt: parseFloat((1 / manual_rate).toFixed(6)),
-                    source: 'admin_manual',
-                    is_active: true,
-                    fetched_at: new Date().toISOString(),
-                    expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24h expiry
-                });
+                // Insert new manual rate
+                await (supabase as any)
+                    .from('exchange_rates_live')
+                    .insert({
+                        usdt_to_bdt: manual_rate,
+                        bdt_to_usdt: parseFloat((1 / manual_rate).toFixed(6)),
+                        source: 'admin_manual',
+                        is_active: true,
+                        fetched_at: new Date().toISOString(),
+                        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+                    });
 
-            // Record in history
-            await (supabase as any)
-                .from('exchange_rate_history')
-                .insert({
-                    usdt_to_bdt: manual_rate,
-                    bdt_to_usdt: parseFloat((1 / manual_rate).toFixed(6)),
-                    source: 'admin_manual',
-                });
+                // Record in history
+                await (supabase as any)
+                    .from('exchange_rate_history')
+                    .insert({
+                        usdt_to_bdt: manual_rate,
+                        bdt_to_usdt: parseFloat((1 / manual_rate).toFixed(6)),
+                        source: 'admin_manual',
+                    });
+            } catch (newTableError) {
+                // Fallback to legacy exchange_rates table
+                try {
+                    // Deactivate old rates
+                    await (supabase as any)
+                        .from('exchange_rates')
+                        .update({ is_active: false })
+                        .eq('is_active', true);
+
+                    // Insert new manual rate into legacy table
+                    await (supabase as any)
+                        .from('exchange_rates')
+                        .insert({
+                            usdt_to_bdt: manual_rate,
+                            bdt_to_usdt: parseFloat((1 / manual_rate).toFixed(6)),
+                            effective_from: new Date().toISOString(),
+                            source: 'admin_manual',
+                        });
+                } catch (legacyError) {
+                    console.error('Failed to insert manual rate:', legacyError);
+                }
+            }
         }
 
         return NextResponse.json({
