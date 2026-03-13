@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { verifyQStashSignature } from '@/lib/upstash/workflows';
+import { verifyQStashSignature, QStashClient } from '@/lib/upstash/workflows';
 import { MarketService } from '@/lib/services/MarketService';
-import { Client as QStashClient } from '@upstash/qstash';
 
 export const runtime = 'edge';
 export const maxDuration = 60; // Extra time for seeding orderbook

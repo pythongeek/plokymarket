@@ -91,44 +91,45 @@ export async function POST(request: NextRequest) {
         // Generate pipeline ID
         const pipelineId = `ai-${market_id}-${Date.now()}`;
 
-        // Insert AI pipeline result
+        // Insert AI pipeline result - using type assertion for JSON fields
+        const pipelineData = {
+            market_id: market_id,
+            query: JSON.stringify({
+                question: market.question,
+                sources: sources
+            }),
+            retrieval_output: JSON.stringify({
+                sources: sources,
+                evidence: evidence
+            }),
+            synthesis_output: JSON.stringify({
+                outcome: outcome,
+                confidence: confidence,
+                reasoning: reasoning
+            }),
+            deliberation_output: JSON.stringify({
+                confidenceLevel: confidenceLevel,
+                recommendedAction: recommendedAction
+            }),
+            explanation_output: JSON.stringify({
+                naturalLanguageReasoning: reasoning,
+                keyEvidenceCitations: evidence
+            }),
+            final_outcome: outcome !== 'UNKNOWN' ? outcome : null,
+            final_confidence: confidence,
+            confidence_level: confidenceLevel,
+            recommended_action: recommendedAction,
+            status: 'completed',
+            completed_at: new Date().toISOString(),
+            total_execution_time_ms: execution_time_ms,
+            synthesis_model_version: result.model_version || 'gemini-pro',
+            deliberation_model_version: result.model_version || 'gemini-pro',
+            explanation_model_version: result.model_version || 'gemini-pro'
+        } as any;
+
         const { data: pipeline, error: pipelineError } = await supabase
             .from('ai_resolution_pipelines')
-            .insert({
-                pipeline_id: pipelineId,
-                market_id: market_id,
-                query: {
-                    question: market.question,
-                    sources: sources
-                },
-                retrieval_output: {
-                    sources: sources,
-                    evidence: evidence
-                },
-                synthesis_output: {
-                    outcome: outcome,
-                    confidence: confidence,
-                    reasoning: reasoning
-                },
-                deliberation_output: {
-                    confidenceLevel: confidenceLevel,
-                    recommendedAction: recommendedAction
-                },
-                explanation_output: {
-                    naturalLanguageReasoning: reasoning,
-                    keyEvidenceCitations: evidence
-                },
-                final_outcome: outcome !== 'UNKNOWN' ? outcome : null,
-                final_confidence: confidence,
-                confidence_level: confidenceLevel,
-                recommended_action: recommendedAction,
-                status: 'completed',
-                completed_at: new Date().toISOString(),
-                total_execution_time_ms: execution_time_ms,
-                synthesis_model_version: result.model_version || 'gemini-pro',
-                deliberation_model_version: result.model_version || 'gemini-pro',
-                explanation_model_version: result.model_version || 'gemini-pro'
-            })
+            .insert(pipelineData)
             .select()
             .single();
 

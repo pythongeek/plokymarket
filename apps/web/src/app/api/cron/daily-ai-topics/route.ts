@@ -12,44 +12,30 @@ export const preferredRegion = 'iad1';
 
 // Initialize Supabase admin client is managed via createServiceClient
 
-// Verify QStash signature or Bearer token (for cron-job.org)
+// Verify cron-job.org secret or Bearer token
 async function verifyQStashSignature(request: NextRequest): Promise<boolean> {
-  const signature = request.headers.get('upstash-signature');
   const authHeader = request.headers.get('authorization');
   const cronSecret = request.headers.get('x-cron-secret') || request.headers.get('cron-secret');
 
-  // Allow in development without signature
-  if (process.env.NODE_ENV === 'development' && !signature && !authHeader) {
-    console.log('[Cron] Development mode - skipping signature verification');
+  if (process.env.NODE_ENV === 'development') {
     return true;
   }
 
-  // Check for QStash signature
-  if (signature) {
-    console.log('[Cron] QStash signature detected');
+  const validSecret = process.env.CRON_SECRET || process.env.MASTER_CRON_SECRET || process.env.CRONJOB_API_TOKEN;
+  
+  if (!validSecret) {
     return true;
   }
 
-  // Check for Bearer token (cron-job.org uses Authorization header)
-  if (authHeader) {
-    const secret = process.env.CRON_SECRET || process.env.CRONJOB_API_TOKEN;
-    if (authHeader === `Bearer ${secret}` || authHeader.startsWith('Bearer ')) {
-      console.log('[Cron] Bearer token verified');
-      return true;
-    }
-    console.warn('[Cron] Bearer token present but invalid');
+  if (authHeader && (authHeader === `Bearer ${validSecret}` || authHeader === validSecret)) {
+    return true;
   }
 
-  // Check for X-Cron-Secret or Cron-Secret header
-  if (cronSecret) {
-    const secret = process.env.CRON_SECRET || process.env.CRONJOB_API_TOKEN || 'ploky-daily-ai-secret-2024';
-    if (cronSecret === secret) {
-      console.log('[Cron] X-Cron-Secret verified');
-      return true;
-    }
+  if (cronSecret && cronSecret === validSecret) {
+    return true;
   }
 
-  console.warn('[Cron] Missing valid authorization - signature:', !!signature, 'authHeader:', !!authHeader, 'cronSecret:', !!cronSecret);
+  console.warn('[Cron] Missing valid authorization');
   return false;
 }
 

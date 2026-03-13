@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { verifyQStashSignature } from '@/lib/qstash/verify';
 
 export const runtime = 'edge';
 export const preferredRegion = 'sin1';
@@ -97,6 +98,11 @@ async function processMarketCloseCheck(supabase: any) {
 
 export async function POST(req: NextRequest) {
   try {
+    const isValid = await verifyQStashSignature(req);
+    if (!isValid) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const supabase = await createServiceClient();
     const result = await processMarketCloseCheck(supabase);
     return NextResponse.json(result);

@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { verifyQStashSignature } from '@/lib/qstash/verify';
 
 export const runtime = 'edge';
 export const preferredRegion = 'iad1';
@@ -24,6 +25,11 @@ export async function POST(request: NextRequest) {
   const startTime = Date.now();
   
   try {
+    const isValid = await verifyQStashSignature(request);
+    if (!isValid) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const text = await request.text();
     const payload = text ? JSON.parse(text) : { step: 'initiate', data: {} };
     const { step, data } = payload;

@@ -5,15 +5,26 @@
 
 import { getBrowserClient } from '@/lib/supabase/client';
 import type {
-  VerificationWorkflow,
-  WorkflowExecution,
-  WorkflowAnalyticsDaily,
   DbResult,
   DbListResult,
   RealtimePayload,
+  WorkflowAnalyticsDaily,
   WorkflowSchedule,
-  WorkflowStats,
+  WorkflowExecution,
+  VerificationWorkflow,
 } from '@/types/database';
+import type {
+  UnifiedWorkflow,
+  UnifiedWorkflowExecution,
+  UnifiedWorkflowStats
+} from '@/types/unified';
+import {
+  toUnifiedWorkflow,
+  toUnifiedWorkflowExecution
+} from '@/types/unified';
+
+// Re-export for convenience
+export type { WorkflowAnalyticsDaily, WorkflowSchedule, WorkflowExecution, VerificationWorkflow };
 
 const supabase = getBrowserClient();
 
@@ -25,7 +36,7 @@ export async function fetchWorkflows(options: {
   isActive?: boolean;
   category?: string;
   limit?: number;
-} = {}): Promise<DbListResult<VerificationWorkflow>> {
+} = {}): Promise<DbListResult<UnifiedWorkflow>> {
   let query = supabase
     .from('verification_workflows')
     .select('*', { count: 'exact' });
@@ -46,39 +57,48 @@ export async function fetchWorkflows(options: {
 
   const { data, error, count } = await query;
 
+  // Convert to UnifiedWorkflow for UI consumption
+  const unifiedData = (data || []).map(toUnifiedWorkflow);
+
   return {
-    data: data || [],
+    data: unifiedData,
     error,
     count,
   };
 }
 
-export async function fetchWorkflowById(id: string): Promise<DbResult<VerificationWorkflow>> {
+export async function fetchWorkflowById(id: string): Promise<DbResult<UnifiedWorkflow>> {
   const { data, error } = await supabase
     .from('verification_workflows')
     .select('*')
     .eq('id', id)
     .single();
 
-  return { data, error };
+  return {
+    data: data ? toUnifiedWorkflow(data) : null,
+    error
+  };
 }
 
 export async function createWorkflow(
-  workflowData: Partial<VerificationWorkflow>
-): Promise<DbResult<VerificationWorkflow>> {
+  workflowData: Partial<UnifiedWorkflow>
+): Promise<DbResult<UnifiedWorkflow>> {
   const { data, error } = await supabase
     .from('verification_workflows')
     .insert(workflowData)
     .select()
     .single();
 
-  return { data, error };
+  return {
+    data: data ? toUnifiedWorkflow(data) : null,
+    error
+  };
 }
 
 export async function updateWorkflow(
   id: string,
-  updates: Partial<VerificationWorkflow>
-): Promise<DbResult<VerificationWorkflow>> {
+  updates: Partial<UnifiedWorkflow>
+): Promise<DbResult<UnifiedWorkflow>> {
   const { data, error } = await supabase
     .from('verification_workflows')
     .update({ ...updates, updated_at: new Date().toISOString() })
@@ -86,7 +106,10 @@ export async function updateWorkflow(
     .select()
     .single();
 
-  return { data, error };
+  return {
+    data: data ? toUnifiedWorkflow(data) : null,
+    error
+  };
 }
 
 export async function deleteWorkflow(id: string): Promise<DbResult<null>> {
@@ -108,7 +131,7 @@ export async function fetchWorkflowExecutions(options: {
   status?: string;
   limit?: number;
   offset?: number;
-} = {}): Promise<DbListResult<WorkflowExecution>> {
+} = {}): Promise<DbListResult<UnifiedWorkflowExecution>> {
   let query = supabase
     .from('workflow_executions')
     .select('*', { count: 'exact' });
@@ -132,24 +155,30 @@ export async function fetchWorkflowExecutions(options: {
 
   const { data, error, count } = await query;
 
+  // Convert to UnifiedWorkflowExecution for UI
+  const unifiedData = (data || []).map(toUnifiedWorkflowExecution);
+
   return {
-    data: data || [],
+    data: unifiedData,
     error,
     count,
   };
 }
 
-export async function fetchWorkflowExecutionById(id: string): Promise<DbResult<WorkflowExecution>> {
+export async function fetchWorkflowExecutionById(id: string): Promise<DbResult<UnifiedWorkflowExecution>> {
   const { data, error } = await supabase
     .from('workflow_executions')
     .select('*')
     .eq('id', id)
     .single();
 
-  return { data, error };
+  return {
+    data: data ? toUnifiedWorkflowExecution(data) : null,
+    error
+  };
 }
 
-export async function fetchPendingExecutions(): Promise<DbListResult<WorkflowExecution>> {
+export async function fetchPendingExecutions(): Promise<DbListResult<UnifiedWorkflowExecution>> {
   const { data, error, count } = await supabase
     .from('workflow_executions')
     .select('*', { count: 'exact' })
@@ -157,13 +186,13 @@ export async function fetchPendingExecutions(): Promise<DbListResult<WorkflowExe
     .order('scheduled_for', { ascending: true });
 
   return {
-    data: data || [],
+    data: (data || []).map(toUnifiedWorkflowExecution),
     error,
     count,
   };
 }
 
-export async function fetchRunningExecutions(): Promise<DbListResult<WorkflowExecution>> {
+export async function fetchRunningExecutions(): Promise<DbListResult<UnifiedWorkflowExecution>> {
   const { data, error, count } = await supabase
     .from('workflow_executions')
     .select('*', { count: 'exact' })
@@ -171,13 +200,13 @@ export async function fetchRunningExecutions(): Promise<DbListResult<WorkflowExe
     .order('started_at', { ascending: false });
 
   return {
-    data: data || [],
+    data: (data || []).map(toUnifiedWorkflowExecution),
     error,
     count,
   };
 }
 
-export async function fetchFailedExecutions(limit: number = 50): Promise<DbListResult<WorkflowExecution>> {
+export async function fetchFailedExecutions(limit: number = 50): Promise<DbListResult<UnifiedWorkflowExecution>> {
   const { data, error, count } = await supabase
     .from('workflow_executions')
     .select('*', { count: 'exact' })
@@ -186,13 +215,13 @@ export async function fetchFailedExecutions(limit: number = 50): Promise<DbListR
     .limit(limit);
 
   return {
-    data: data || [],
+    data: (data || []).map(toUnifiedWorkflowExecution),
     error,
     count,
   };
 }
 
-export async function fetchEscalatedExecutions(): Promise<DbListResult<WorkflowExecution>> {
+export async function fetchEscalatedExecutions(): Promise<DbListResult<UnifiedWorkflowExecution>> {
   const { data, error, count } = await supabase
     .from('workflow_executions')
     .select('*', { count: 'exact' })
@@ -200,7 +229,7 @@ export async function fetchEscalatedExecutions(): Promise<DbListResult<WorkflowE
     .order('escalated_at', { ascending: false });
 
   return {
-    data: data || [],
+    data: (data || []).map(toUnifiedWorkflowExecution),
     error,
     count,
   };
@@ -242,7 +271,7 @@ export async function fetchWorkflowAnalytics(
   };
 }
 
-export async function fetchWorkflowStats(): Promise<DbResult<WorkflowStats>> {
+export async function fetchWorkflowStats(): Promise<DbResult<UnifiedWorkflowStats>> {
   // Get total executions
   const { count: totalExecutions, error: totalError } = await supabase
     .from('workflow_executions')
@@ -285,7 +314,7 @@ export async function fetchWorkflowStats(): Promise<DbResult<WorkflowStats>> {
 
   if (last24hSuccessError) return { data: null, error: last24hSuccessError };
 
-  const stats: WorkflowStats = {
+  const stats: UnifiedWorkflowStats = {
     totalExecutions: totalExecutions || 0,
     successfulExecutions: successfulExecutions || 0,
     failedExecutions: failedExecutions || 0,
@@ -353,7 +382,7 @@ export async function deleteQStashSchedule(scheduleId: string): Promise<boolean>
 export async function triggerWorkflowExecution(
   workflowId: string,
   eventId: string
-): Promise<DbResult<WorkflowExecution>> {
+): Promise<DbResult<UnifiedWorkflowExecution>> {
   const { data, error } = await supabase
     .from('workflow_executions')
     .insert({
@@ -368,7 +397,10 @@ export async function triggerWorkflowExecution(
     .select()
     .single();
 
-  return { data, error };
+  return {
+    data: data ? toUnifiedWorkflowExecution(data) : null,
+    error
+  };
 }
 
 export async function retryWorkflowExecution(

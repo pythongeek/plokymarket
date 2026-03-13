@@ -17,11 +17,12 @@ import { useTranslation } from 'react-i18next';
 import { useQueryStates, parseAsString, parseAsStringEnum } from 'nuqs';
 import { useDebouncedCallback } from 'use-debounce';
 import { supabase } from '@/lib/supabase';
-import type { Event } from '@/types/database';
+import type { UnifiedEvent } from '@/types/unified';
+import { toUnifiedEvents } from '@/types/unified';
 import type { Market } from '@/types';
 import { motion } from 'framer-motion';
 
-export function MarketsClient({ initialEvents }: { initialEvents: Event[] }) {
+export function MarketsClient({ initialEvents }: { initialEvents: UnifiedEvent[] }) {
     const { t } = useTranslation();
 
     const { setEvents, subscribeToEvents, events: storeEvents } = useMarketStore();
@@ -57,7 +58,7 @@ export function MarketsClient({ initialEvents }: { initialEvents: Event[] }) {
 
     // Local state for debounced search results (if active)
     const [isSearching, setIsSearching] = useState(false);
-    const [searchResults, setSearchResults] = useState<Event[]>([]);
+    const [searchResults, setSearchResults] = useState<UnifiedEvent[]>([]);
 
     // Debounced Search implementation
     const debouncedSearch = useDebouncedCallback(async (query: string) => {
@@ -79,7 +80,9 @@ export function MarketsClient({ initialEvents }: { initialEvents: Event[] }) {
                 .limit(20);
 
             if (error) throw error;
-            setSearchResults(data as Event[] || []);
+            // Convert to UnifiedEvent for type safety
+            const unifiedEvents = toUnifiedEvents(data || []);
+            setSearchResults(unifiedEvents);
         } catch (err) {
             console.warn('Text search failed, falling back to local filtering', err);
             const filtered = markets.filter(m => m.question?.toLowerCase().includes(query.toLowerCase()));
@@ -144,12 +147,16 @@ export function MarketsClient({ initialEvents }: { initialEvents: Event[] }) {
                     result.sort((a, b) => (b.volume || b.total_volume || 0) - (a.volume || a.total_volume || 0));
                     break;
                 case 'newest':
-                    result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                    result.sort((a, b) => {
+                        const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+                        const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
+                        return dateB - dateA;
+                    });
                     break;
                 case 'ending':
                     result.sort((a, b) => {
-                        const tA = a.trading_closes_at ? new Date(a.trading_closes_at).getTime() : 0;
-                        const tB = b.trading_closes_at ? new Date(b.trading_closes_at).getTime() : 0;
+                        const tA = a.trading_closes_at ? new Date(a.trading_closes_at).getTime() : Number.MAX_SAFE_INTEGER;
+                        const tB = b.trading_closes_at ? new Date(b.trading_closes_at).getTime() : Number.MAX_SAFE_INTEGER;
                         return tA - tB;
                     });
                     break;

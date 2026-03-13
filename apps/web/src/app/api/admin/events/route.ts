@@ -3,6 +3,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
+import type { UnifiedEvent } from '@/types/unified'
 
 // ─── Auth guard helper ────────────────────────────────────────────────────────
 async function requireAdmin(supabase: Awaited<ReturnType<typeof createClient>>) {
@@ -37,15 +38,15 @@ export async function GET(req: NextRequest) {
 
     // Try the RPC function first (returns resolver_reference + market_count)
     const { data: rpcData, error: rpcError } = await supabase.rpc('get_admin_events', {
-      p_status:   status   ?? null,
-      p_category: category ?? null,
-      p_search:   search   ?? null,
+      p_status:   status   ?? undefined,
+      p_category: category ?? undefined,
+      p_search:   search   ?? undefined,
       p_limit:    limit,
       p_offset:   offset,
     })
 
     if (!rpcError && rpcData) {
-      return NextResponse.json({ data: rpcData, count: rpcData.length })
+      return NextResponse.json({ data: rpcData as unknown as UnifiedEvent[], count: rpcData.length })
     }
 
     // Fallback: direct table query if RPC fails
@@ -70,7 +71,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ data: data ?? [], count: count ?? 0 })
+    return NextResponse.json({ data: (data ?? []) as UnifiedEvent[], count: count ?? 0 })
   } catch (err: any) {
     console.error('[admin/events] Unexpected error:', err)
     return NextResponse.json({ error: err?.message ?? 'Internal error' }, { status: 500 })

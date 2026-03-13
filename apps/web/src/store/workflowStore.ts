@@ -6,14 +6,16 @@
 import { create } from 'zustand';
 import { subscribeWithSelector, persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
+import type { RealtimePayload, VerificationWorkflow, WorkflowExecution } from '@/types/database';
 import type {
-  VerificationWorkflow,
-  WorkflowExecution,
-  WorkflowSchedule,
-  WorkflowStats,
-  RealtimePayload
-} from '@/types/database';
+  UnifiedWorkflow,
+  UnifiedWorkflowExecution,
+  UnifiedWorkflowStats,
+} from '@/types/unified';
 import * as workflowService from '@/services/workflows';
+
+// Re-export for selectors
+export type { VerificationWorkflow, WorkflowExecution };
 
 // ===================================
 // STORE STATE INTERFACE
@@ -21,12 +23,12 @@ import * as workflowService from '@/services/workflows';
 
 interface WorkflowState {
   // Workflows
-  workflows: Map<string, VerificationWorkflow>;
+  workflows: Map<string, UnifiedWorkflow>;
   workflowIds: string[];
   selectedWorkflowId: string | null;
 
   // Executions
-  executions: Map<string, WorkflowExecution>;
+  executions: Map<string, UnifiedWorkflowExecution>;
   executionIds: string[];
   pendingExecutionIds: string[];
   runningExecutionIds: string[];
@@ -34,10 +36,10 @@ interface WorkflowState {
   escalatedExecutionIds: string[];
 
   // Schedules
-  schedules: WorkflowSchedule[];
+  schedules: import('@/types/database').WorkflowSchedule[];
 
   // Stats
-  stats: WorkflowStats | null;
+  stats: UnifiedWorkflowStats | null;
 
   // Filters
   selectedCategory: string | null;
@@ -54,25 +56,25 @@ interface WorkflowState {
 
 interface WorkflowActions {
   // Workflow Actions
-  setWorkflows: (workflows: VerificationWorkflow[]) => void;
-  addWorkflow: (workflow: VerificationWorkflow) => void;
-  updateWorkflow: (id: string, updates: Partial<VerificationWorkflow>) => void;
+  setWorkflows: (workflows: UnifiedWorkflow[]) => void;
+  addWorkflow: (workflow: UnifiedWorkflow) => void;
+  updateWorkflow: (id: string, updates: Partial<UnifiedWorkflow>) => void;
   removeWorkflow: (id: string) => void;
   setSelectedWorkflow: (id: string | null) => void;
 
   // Execution Actions
-  setExecutions: (executions: WorkflowExecution[]) => void;
-  addExecution: (execution: WorkflowExecution) => void;
-  updateExecution: (id: string, updates: Partial<WorkflowExecution>) => void;
+  setExecutions: (executions: UnifiedWorkflowExecution[]) => void;
+  addExecution: (execution: UnifiedWorkflowExecution) => void;
+  updateExecution: (id: string, updates: Partial<UnifiedWorkflowExecution>) => void;
   removeExecution: (id: string) => void;
 
   // Schedule Actions
-  setSchedules: (schedules: WorkflowSchedule[]) => void;
-  addSchedule: (schedule: WorkflowSchedule) => void;
+  setSchedules: (schedules: import('@/types/database').WorkflowSchedule[]) => void;
+  addSchedule: (schedule: import('@/types/database').WorkflowSchedule) => void;
   removeSchedule: (id: string) => void;
 
   // Stats Actions
-  setStats: (stats: WorkflowStats) => void;
+  setStats: (stats: UnifiedWorkflowStats) => void;
 
   // Filter Actions
   setCategory: (category: string | null) => void;
@@ -80,7 +82,7 @@ interface WorkflowActions {
 
   // Fetch Actions
   fetchWorkflows: () => Promise<void>;
-  fetchWorkflowById: (id: string) => Promise<VerificationWorkflow | null>;
+  fetchWorkflowById: (id: string) => Promise<UnifiedWorkflow | null>;
   fetchExecutions: (options?: { workflowId?: string; status?: string }) => Promise<void>;
   fetchPendingExecutions: () => Promise<void>;
   fetchRunningExecutions: () => Promise<void>;
@@ -416,13 +418,13 @@ export const useWorkflowStore = create<WorkflowState & WorkflowActions>()(
 
               switch (eventType) {
                 case 'INSERT':
-                  get().addExecution(newExecution as WorkflowExecution);
+                  get().addExecution(newExecution as UnifiedWorkflowExecution);
                   break;
                 case 'UPDATE':
-                  get().updateExecution((newExecution as WorkflowExecution).id, newExecution as Partial<WorkflowExecution>);
+                  get().updateExecution((newExecution as UnifiedWorkflowExecution).id, newExecution as Partial<UnifiedWorkflowExecution>);
                   break;
                 case 'DELETE':
-                  get().removeExecution((oldExecution as WorkflowExecution).id);
+                  get().removeExecution((oldExecution as UnifiedWorkflowExecution).id);
                   break;
               }
             });

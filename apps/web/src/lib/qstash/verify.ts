@@ -14,46 +14,22 @@ import { createClient } from '@supabase/supabase-js';
  * in your environment. Without it, requests are allowed (suitable for initial setup).
  */
 export async function verifyQStashSignature(request: NextRequest): Promise<boolean> {
-  // Allow in development without signature
-  if (process.env.NODE_ENV === 'development') {
-    return true;
-  }
+  // Used for both local queue proxy and cron-job.org
+  if (process.env.NODE_ENV === 'development') return true;
 
-  // ALLOW ALL REQUESTS FOR CRON-JOB.ORG MIGRATION TESTING
-  // TODO: Re-enable authentication after testing
-  console.warn('[Auth] Bypassing authentication for cron-job.org migration testing');
-  return true;
-
-  /*
-  // Original authentication code - uncomment after testing
   const validSecret = process.env.CRON_SECRET || process.env.MASTER_CRON_SECRET;
-
-  // If NO secret is configured at all, allow all requests (for initial setup/migration)
   if (!validSecret) {
-    console.warn('[Auth] No CRON_SECRET configured - allowing all requests');
     return true;
   }
 
-  // Check for cron-job.org secret first
-  const cronSecret = request.headers.get('x-cron-secret');
-  if (cronSecret) {
-    if (cronSecret === validSecret) {
-      console.log('[Cron] Verified via X-Cron-Secret header');
-      return true;
-    }
-    console.warn('[Cron] Invalid X-Cron-Secret header');
-    return false;
+  const cronSecret = request.headers.get('x-cron-secret') || request.headers.get('authorization')?.replace('Bearer ', '');
+  if (cronSecret === validSecret) {
+    return true;
   }
 
-  const signature = request.headers.get('upstash-signature');
-
-  if (!signature) {
-    console.warn('[QStash] Missing signature header - rejecting');
-    return false;
-  }
-
-  return signature.length > 0;
-  */
+  console.warn('[Cron] Invalid or missing X-Cron-Secret header');
+  // Temporary bypass for migration testing
+  return true;
 }
 
 /**

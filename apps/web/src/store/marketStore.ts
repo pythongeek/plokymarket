@@ -8,7 +8,9 @@ import { create } from 'zustand';
 import { subscribeWithSelector, persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
 import { enableMapSet } from 'immer';
-import type { Event, RealtimePayload } from '@/types/database';
+import type { RealtimePayload } from '@/types/database';
+import type { UnifiedEvent, Event as DBEvent } from '@/types/unified';
+import { toUnifiedEvents } from '@/types/unified';
 
 enableMapSet();
 import { supabase } from '@/lib/supabase';
@@ -18,9 +20,13 @@ import * as eventsService from '@/services/events';
 // STORE STATE INTERFACE
 // ===================================
 
+// UnifiedEvent is the primary type - extends DB row with UI fields
+// RawEvent type for database compatibility
+export type { UnifiedEvent } from '@/types/unified';
+
 interface MarketState {
   // Data
-  events: Map<string, Event>;
+  events: Map<string, UnifiedEvent>;
   filteredEventIds: string[];
   selectedEventId: string | null;
   featuredEventIds: string[];
@@ -57,12 +63,12 @@ interface MarketState {
 
 interface MarketActions {
   // Data Actions
-  setEvents: (events: Event[]) => void;
-  addEvent: (event: Event) => void;
-  updateEvent: (id: string, updates: Partial<Event>) => void;
+  setEvents: (events: UnifiedEvent[]) => void;
+  addEvent: (event: UnifiedEvent) => void;
+  updateEvent: (id: string, updates: Partial<UnifiedEvent>) => void;
   removeEvent: (id: string) => void;
   setSelectedEvent: (id: string | null) => void;
-  createMarket: (data: any) => Promise<{ success: boolean; event?: Event; error?: any }>;
+  createMarket: (data: any) => Promise<{ success: boolean; event?: UnifiedEvent; error?: any }>;
 
   // Filter Actions
   setCategory: (category: string | null) => void;
@@ -73,8 +79,8 @@ interface MarketActions {
   // Fetch Actions
   fetchEvents: (reset?: boolean) => Promise<void>;
   fetchMoreEvents: () => Promise<void>;
-  fetchEventById: (id: string) => Promise<Event | null>;
-  fetchEventBySlug: (slug: string) => Promise<Event | null>;
+  fetchEventById: (id: string) => Promise<UnifiedEvent | null>;
+  fetchEventBySlug: (slug: string) => Promise<UnifiedEvent | null>;
   fetchFeaturedEvents: () => Promise<void>;
   fetchTrendingEvents: () => Promise<void>;
   fetchEndingSoonEvents: () => Promise<void>;
@@ -442,13 +448,13 @@ export const useMarketStore = create<MarketState & MarketActions>()(
 
               switch (eventType) {
                 case 'INSERT':
-                  get().addEvent(newEvent as Event);
+                  get().addEvent(newEvent as UnifiedEvent);
                   break;
                 case 'UPDATE':
-                  get().updateEvent((newEvent as Event).id, newEvent as Partial<Event>);
+                  get().updateEvent((newEvent as UnifiedEvent).id, newEvent as Partial<UnifiedEvent>);
                   break;
                 case 'DELETE':
-                  get().removeEvent((oldEvent as Event).id);
+                  get().removeEvent((oldEvent as UnifiedEvent).id);
                   break;
               }
             });
@@ -465,7 +471,7 @@ export const useMarketStore = create<MarketState & MarketActions>()(
               const { eventType, new: newEvent } = payload;
 
               if (eventType === 'INSERT' || eventType === 'UPDATE') {
-                const event = newEvent as Event;
+                const event = newEvent as UnifiedEvent;
                 if (event.is_featured) {
                   get().addEvent(event);
                   set((s) => {
@@ -666,7 +672,7 @@ function recalculateFiltered(state: MarketState) {
 // ===================================
 
 export const selectEvents = (state: MarketState) =>
-  state.filteredEventIds.map((id) => state.events.get(id)).filter(Boolean) as Event[];
+  state.filteredEventIds.map((id) => state.events.get(id)).filter(Boolean) as UnifiedEvent[];
 
 export const selectEventById = (state: MarketState, id: string) =>
   state.events.get(id);
@@ -675,13 +681,13 @@ export const selectSelectedEvent = (state: MarketState) =>
   state.selectedEventId ? state.events.get(state.selectedEventId) : null;
 
 export const selectFeaturedEvents = (state: MarketState) =>
-  state.featuredEventIds.map((id) => state.events.get(id)).filter(Boolean) as Event[];
+  state.featuredEventIds.map((id) => state.events.get(id)).filter(Boolean) as UnifiedEvent[];
 
 export const selectTrendingEvents = (state: MarketState) =>
-  state.trendingEventIds.map((id) => state.events.get(id)).filter(Boolean) as Event[];
+  state.trendingEventIds.map((id) => state.events.get(id)).filter(Boolean) as UnifiedEvent[];
 
 export const selectEndingSoonEvents = (state: MarketState) =>
-  state.endingSoonEventIds.map((id) => state.events.get(id)).filter(Boolean) as Event[];
+  state.endingSoonEventIds.map((id) => state.events.get(id)).filter(Boolean) as UnifiedEvent[];
 
 export const selectCategories = (state: MarketState) => {
   const categories = new Set<string>();

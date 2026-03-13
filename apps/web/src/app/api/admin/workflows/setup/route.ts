@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
-import { Client as QStashClient } from '@upstash/qstash';
+import { QStashClient } from '@/lib/upstash/workflows';
 
 export const runtime = 'edge';
 

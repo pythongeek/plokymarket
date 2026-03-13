@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { nanoid } from 'nanoid';
-import { Client as QStashClient } from '@upstash/qstash';
+import { QStashClient } from '@/lib/upstash/workflows';
 import { MarketService } from '@/lib/services/MarketService';
 
 export const runtime = 'edge';

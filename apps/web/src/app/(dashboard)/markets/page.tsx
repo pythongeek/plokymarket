@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { MarketsClient } from './MarketsClient';
+import { toUnifiedEvents } from '@/types/unified';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,5 +20,8 @@ export default async function MarketsPage() {
     console.error('Failed to fetch initial events for SSR:', error);
   }
 
-  return <MarketsClient initialEvents={events || []} />;
+  // Convert to UnifiedEvent for type safety
+  const unifiedEvents = toUnifiedEvents(events || []);
+
+  return <MarketsClient initialEvents={unifiedEvents} />;
 }

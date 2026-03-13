@@ -1,9 +1,10 @@
 import { createClient } from '@/lib/supabase/client';
-import type { PlatformSettings, DbResult } from '@/types/database';
+import type { DbResult } from '@/types/database';
+import type { UnifiedPlatformSettings } from '@/types/unified';
 
 const supabase = createClient();
 
-export async function getPlatformSettings(key: string): Promise<DbResult<PlatformSettings>> {
+export async function getPlatformSettings(key: string): Promise<DbResult<UnifiedPlatformSettings>> {
     const { data, error } = await supabase
         .from('platform_settings')
         .select('*')
@@ -17,7 +18,7 @@ export async function updatePlatformSettings(
     key: string,
     value: any,
     updatedBy: string
-): Promise<DbResult<PlatformSettings>> {
+): Promise<DbResult<UnifiedPlatformSettings>> {
     const { data, error } = await supabase
         .from('platform_settings')
         .update({
@@ -46,6 +47,6 @@ export async function isTradingPausedGlobally(): Promise<boolean> {
 export async function setGlobalTradingPause(
     paused: boolean,
     updatedBy: string
-): Promise<DbResult<PlatformSettings>> {
+): Promise<DbResult<UnifiedPlatformSettings>> {
     return updatePlatformSettings('trading_paused', paused, updatedBy);
 }

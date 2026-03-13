@@ -61,12 +61,12 @@ export function verifyRequestAuth(
 }
 
 // Re-export utilities from upstash/workflows
+export type { WorkflowType } from '@/lib/upstash/workflows';
 export {
     createWorkflowExecution,
     updateWorkflowStatus,
     logWorkflowStep,
     formatBanglaDate,
     formatBanglaCurrency,
-    banglaTemplates,
-    WorkflowType
+    banglaTemplates
 } from '@/lib/upstash/workflows';

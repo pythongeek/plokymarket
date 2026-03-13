@@ -6,7 +6,6 @@
 
 import { getBrowserClient } from '@/lib/supabase/client';
 import type {
-  Event,
   EventStatus,
   TradingStatus,
   ResolutionSystem,
@@ -15,6 +14,8 @@ import type {
   DbListResult,
   RealtimePayload
 } from '@/types/database';
+import type { UnifiedEvent } from '@/types/unified';
+import { toUnifiedEvent, toUnifiedEvents } from '@/types/unified';
 
 const supabase = getBrowserClient();
 
@@ -30,7 +31,7 @@ export async function fetchEvents(options: {
   search?: string;
   limit?: number;
   offset?: number;
-} = {}): Promise<DbListResult<Event>> {
+} = {}): Promise<DbListResult<UnifiedEvent>> {
   try {
     let query = supabase
       .from('events')
@@ -49,8 +50,11 @@ export async function fetchEvents(options: {
 
     const { data, error, count } = await query;
 
+    // Convert to UnifiedEvent for UI consumption
+    const unifiedData = toUnifiedEvents(data || []);
+
     return {
-      data: data || [],
+      data: unifiedData,
       error: error ? new Error(error.message) : null,
       count
     };
@@ -59,40 +63,51 @@ export async function fetchEvents(options: {
   }
 }
 
-export async function fetchEventById(id: string): Promise<DbResult<Event>> {
+export async function fetchEventById(id: string): Promise<DbResult<UnifiedEvent>> {
   const { data, error } = await supabase
     .from('events')
     .select('*')
     .eq('id', id)
     .single();
 
-  return { data, error: error ? new Error(error.message) : null };
+  // Convert to UnifiedEvent
+  return {
+    data: data ? toUnifiedEvent(data) : null,
+    error: error ? new Error(error.message) : null
+  };
 }
 
-export async function fetchEventBySlug(slug: string): Promise<DbResult<Event>> {
+export async function fetchEventBySlug(slug: string): Promise<DbResult<UnifiedEvent>> {
   const { data, error } = await supabase
     .from('events')
     .select('*')
     .eq('slug', slug)
     .single();
 
-  return { data, error: error ? new Error(error.message) : null };
+  // Convert to UnifiedEvent
+  return {
+    data: data ? toUnifiedEvent(data) : null,
+    error: error ? new Error(error.message) : null
+  };
 }
 
-export async function createEvent(eventData: Partial<Event>): Promise<DbResult<Event>> {
+export async function createEvent(eventData: Partial<UnifiedEvent>): Promise<DbResult<UnifiedEvent>> {
   const { data, error } = await supabase
     .from('events')
     .insert(eventData)
     .select()
     .single();
 
-  return { data, error: error ? new Error(error.message) : null };
+  return {
+    data: data ? toUnifiedEvent(data) : null,
+    error: error ? new Error(error.message) : null
+  };
 }
 
 export async function updateEvent(
   id: string,
-  updates: Partial<Event>
-): Promise<DbResult<Event>> {
+  updates: Partial<UnifiedEvent>
+): Promise<DbResult<UnifiedEvent>> {
   const { data, error } = await supabase
     .from('events')
     .update(updates)
@@ -100,7 +115,10 @@ export async function updateEvent(
     .select()
     .single();
 
-  return { data, error: error ? new Error(error.message) : null };
+  return {
+    data: data ? toUnifiedEvent(data) : null,
+    error: error ? new Error(error.message) : null
+  };
 }
 
 // ===================================
@@ -248,7 +266,7 @@ export async function fetchEventsByCategory() {
   return { data, error: error ? new Error(error.message) : null };
 }
 
-export async function fetchTrendingEvents(limit: number = 10): Promise<DbListResult<Event>> {
+export async function fetchTrendingEvents(limit: number = 10): Promise<DbListResult<UnifiedEvent>> {
   const { data, error, count } = await supabase
     .from('events')
     .select('*', { count: 'exact' })
@@ -257,10 +275,15 @@ export async function fetchTrendingEvents(limit: number = 10): Promise<DbListRes
     .order('total_volume', { ascending: false })
     .limit(limit);
 
-  return { data: data || [], error: error ? new Error(error.message) : null, count };
+  // Convert to UnifiedEvent
+  return {
+    data: toUnifiedEvents(data || []),
+    error: error ? new Error(error.message) : null,
+    count
+  };
 }
 
-export async function fetchEndingSoonEvents(limit: number = 10): Promise<DbListResult<Event>> {
+export async function fetchEndingSoonEvents(limit: number = 10): Promise<DbListResult<UnifiedEvent>> {
   const now = new Date().toISOString();
   const { data, error, count } = await supabase
     .from('events')
@@ -270,7 +293,12 @@ export async function fetchEndingSoonEvents(limit: number = 10): Promise<DbListR
     .order('trading_closes_at', { ascending: true })
     .limit(limit);
 
-  return { data: data || [], error: error ? new Error(error.message) : null, count };
+  // Convert to UnifiedEvent
+  return {
+    data: toUnifiedEvents(data || []),
+    error: error ? new Error(error.message) : null,
+    count
+  };
 }
 
 // ===================================
@@ -281,7 +309,7 @@ export async function resolveEvent(
   eventId: string,
   outcome: 'yes' | 'no',
   resolutionData?: Record<string, any>
-): Promise<DbResult<Event>> {
+): Promise<DbResult<UnifiedEvent>> {
   const { data, error } = await supabase
     .from('events')
     .update({
@@ -294,10 +322,13 @@ export async function resolveEvent(
     .select()
     .single();
 
-  return { data, error: error ? new Error(error.message) : null };
+  return {
+    data: data ? toUnifiedEvent(data) : null,
+    error: error ? new Error(error.message) : null
+  };
 }
 
-export async function toggleFeatured(eventId: string, featured: boolean): Promise<DbResult<Event>> {
+export async function toggleFeatured(eventId: string, featured: boolean): Promise<DbResult<UnifiedEvent>> {
   const { data, error } = await supabase
     .from('events')
     .update({ is_featured: featured })
@@ -305,10 +336,13 @@ export async function toggleFeatured(eventId: string, featured: boolean): Promis
     .select()
     .single();
 
-  return { data, error: error ? new Error(error.message) : null };
+  return {
+    data: data ? toUnifiedEvent(data) : null,
+    error: error ? new Error(error.message) : null
+  };
 }
 
-export async function toggleTrending(eventId: string, trending: boolean): Promise<DbResult<Event>> {
+export async function toggleTrending(eventId: string, trending: boolean): Promise<DbResult<UnifiedEvent>> {
   const { data, error } = await supabase
     .from('events')
     .update({ is_trending: trending })
@@ -316,14 +350,17 @@ export async function toggleTrending(eventId: string, trending: boolean): Promis
     .select()
     .single();
 
-  return { data, error: error ? new Error(error.message) : null };
+  return {
+    data: data ? toUnifiedEvent(data) : null,
+    error: error ? new Error(error.message) : null
+  };
 }
 
 export async function pauseEvent(
   eventId: string,
   reason: string,
   pausedBy: string
-): Promise<DbResult<Event>> {
+): Promise<DbResult<UnifiedEvent>> {
   const { data, error } = await supabase
     .from('events')
     .update({
@@ -336,10 +373,13 @@ export async function pauseEvent(
     .select()
     .single();
 
-  return { data: data as unknown as Event, error: error ? new Error(error.message) : null };
+  return {
+    data: data ? toUnifiedEvent(data) : null,
+    error: error ? new Error(error.message) : null
+  };
 }
 
-export async function resumeEvent(eventId: string): Promise<DbResult<Event>> {
+export async function resumeEvent(eventId: string): Promise<DbResult<UnifiedEvent>> {
   const { data, error } = await supabase
     .from('events')
     .update({
@@ -353,7 +393,10 @@ export async function resumeEvent(eventId: string): Promise<DbResult<Event>> {
     .select()
     .single();
 
-  return { data: data as unknown as Event, error: error ? new Error(error.message) : null };
+  return {
+    data: data ? toUnifiedEvent(data) : null,
+    error: error ? new Error(error.message) : null
+  };
 }
 
 export async function pauseCategory(
