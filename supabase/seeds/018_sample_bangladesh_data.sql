@@ -4,7 +4,9 @@
 DO $$
 DECLARE
     v_user_id UUID;
+    v_event_id UUID;
     v_market_id UUID;
+    v_hist_event_id UUID;
     v_hist_market_id UUID;
 BEGIN
     -- 1. Get the first user for seeding (Generic approach for demo)
@@ -13,22 +15,34 @@ BEGIN
     IF v_user_id IS NULL THEN
         RAISE NOTICE 'No users found for seeding history.';
     ELSE
-        -- 2. Insert Bangladeshi Markets
+        -- 2. Create Events and Markets
         
-        -- Politics
-        INSERT INTO public.markets (question, description, category, trading_closes_at, event_date, image_url)
+        -- Politics Event
+        INSERT INTO public.events (title, answer_type, status)
+        VALUES ('Bangladesh Politics 2027', 'binary', 'active')
+        RETURNING id INTO v_event_id;
+
+        -- Politics Market
+        INSERT INTO public.markets (event_id, question, description, category, trading_closes_at, event_date, image_url)
         VALUES (
+            v_event_id,
             'Will Bangladesh hold National Elections by January 2027?',
             'Prediction on the timing of the next general election in Bangladesh.',
             'Politics',
             '2026-12-31 23:59:59+00',
             '2027-01-31 23:59:59+00',
             'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?w=400'
-        ) RETURNING id INTO v_market_id;
+        );
 
-        -- Infrastructure
-        INSERT INTO public.markets (question, description, category, trading_closes_at, event_date, image_url)
+        -- Infrastructure Event
+        INSERT INTO public.events (title, answer_type, status)
+        VALUES ('Matarbari Port 2026', 'binary', 'active')
+        RETURNING id INTO v_event_id;
+
+        -- Infrastructure Market
+        INSERT INTO public.markets (event_id, question, description, category, trading_closes_at, event_date, image_url)
         VALUES (
+            v_event_id,
             'Will the Matarbari Deep Sea Port handle 1M+ TEUs by end of 2026?',
             'Performance prediction for the new deep-sea port in Maheshkhali.',
             'Economy',
@@ -37,9 +51,15 @@ BEGIN
             'https://images.unsplash.com/photo-1520641328082-9076dc77cd39?w=400'
         );
 
-        -- Sports (Cricket)
-        INSERT INTO public.markets (question, description, category, trading_closes_at, event_date, image_url)
+        -- Sports Event
+        INSERT INTO public.events (title, answer_type, status)
+        VALUES ('Cricket 2026', 'binary', 'active')
+        RETURNING id INTO v_event_id;
+
+        -- Sports Market
+        INSERT INTO public.markets (event_id, question, description, category, trading_closes_at, event_date, image_url)
         VALUES (
+            v_event_id,
             'Will Bangladesh win the 2026 T20 World Cup Group Stage?',
             'Prediction on the Tigers performance in the group stage.',
             'Sports',
@@ -48,9 +68,15 @@ BEGIN
             'https://images.unsplash.com/photo-1531415074968-036ba1b575da?w=400'
         );
 
-        -- Economy (Exchange Rate)
-        INSERT INTO public.markets (question, description, category, trading_closes_at, event_date, image_url)
+        -- Economy Event
+        INSERT INTO public.events (title, answer_type, status)
+        VALUES ('BDT Exchange Rate 2026', 'binary', 'active')
+        RETURNING id INTO v_event_id;
+
+        -- Economy Market
+        INSERT INTO public.markets (event_id, question, description, category, trading_closes_at, event_date, image_url)
         VALUES (
+            v_event_id,
             'Will USD/BDT exchange rate exceed 130 by June 2026?',
             'Forex market prediction for the Bangladeshi Taka.',
             'Economy',
@@ -60,9 +86,15 @@ BEGIN
         );
 
         -- 3. Seed Realistic Historical Winning Data
-        -- Insert a resolved market "Will Padma Bridge 2nd phase complete by 2025?" (Resolved YES)
-        INSERT INTO public.markets (question, description, category, status, winning_outcome, trading_closes_at, event_date, resolved_at)
+        -- Create historical event
+        INSERT INTO public.events (title, answer_type, status)
+        VALUES ('Bangladesh Exports 2025', 'binary', 'resolved')
+        RETURNING id INTO v_hist_event_id;
+
+        -- Insert a resolved market "Will Bangladesh reach $50B in exports by 2025?" (Resolved YES)
+        INSERT INTO public.markets (event_id, question, description, category, status, winning_outcome, trading_closes_at, event_date, resolved_at)
         VALUES (
+            v_hist_event_id,
             'Will Bangladesh reach $50B in exports by 2025?',
             'Historical prediction for export milestones.',
             'Economy',
@@ -95,5 +127,6 @@ BEGIN
             (v_user_id, 'USER_JOIN', '{"message": "Welcome to Plokymarket!"}'),
             (v_user_id, 'MARKET_RESOLVE', jsonb_build_object('marketId', v_hist_market_id, 'outcome', 'YES', 'message', 'You won 500 BDT in Export Milestone market!'));
 
+        RAISE NOTICE '✅ Seed data inserted successfully!';
     END IF;
 END $$;

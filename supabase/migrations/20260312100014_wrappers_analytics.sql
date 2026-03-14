@@ -4,6 +4,7 @@
 -- ============================================================
 
 -- WRAPPER: deprecated, calls update_leaderboard_v2
+DROP FUNCTION IF EXISTS update_leaderboard(UUID, INTEGER);
 CREATE OR REPLACE FUNCTION update_leaderboard(
   p_user_id         UUID,
   p_score_delta     INTEGER
@@ -14,6 +15,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- WRAPPER: deprecated, calls get_leaderboard_v2
+DROP FUNCTION IF EXISTS get_leaderboard(INT, INT);
 CREATE OR REPLACE FUNCTION get_leaderboard(
   p_limit  INT DEFAULT 100,
   p_offset INT DEFAULT 0
@@ -28,6 +30,7 @@ END;
 $$;
 
 -- WRAPPER: deprecated, calls get_leaderboard_v2
+DROP FUNCTION IF EXISTS fetch_leaderboard(INT);
 CREATE OR REPLACE FUNCTION fetch_leaderboard(
   limit_count INT DEFAULT 100
 ) RETURNS TABLE(user_id UUID, username TEXT, pnl NUMERIC, rank INT)

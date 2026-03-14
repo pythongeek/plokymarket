@@ -7,6 +7,8 @@
 -- ── 1. ADD MISSING COLUMNS ─────────────────────────────────
 -- These columns may be needed by the new RPCs
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS remaining_quantity NUMERIC DEFAULT 0;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS outcome outcome_type DEFAULT 'YES';
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS average_fill_price NUMERIC DEFAULT 0;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_cost NUMERIC DEFAULT 0;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS fee_amount NUMERIC DEFAULT 0;

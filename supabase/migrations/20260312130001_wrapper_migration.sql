@@ -25,6 +25,11 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- Ensure the top-level name also wraps v3
 -- (only if create_event_complete exists and doesn't already delegate)
 DO $$ BEGIN
+  -- Drop first if parameter names changed
+  DROP FUNCTION IF EXISTS public.create_event_complete(jsonb);
+EXCEPTION WHEN OTHERS THEN NULL; END $$;
+
+DO $$ BEGIN
   IF EXISTS (
     SELECT 1 FROM pg_proc p JOIN pg_namespace n ON p.pronamespace = n.oid
     WHERE n.nspname = 'public' AND p.proname = 'create_event_complete'
@@ -46,6 +51,11 @@ END $$;
 -- ══════════════════════════════════════════════════════════════
 -- GROUP 2: MARKETS — create_market → v2
 -- ══════════════════════════════════════════════════════════════
+
+DO $$ BEGIN
+  -- Drop first if parameter names changed
+  DROP FUNCTION IF EXISTS public.create_market(uuid, text);
+EXCEPTION WHEN OTHERS THEN NULL; END $$;
 
 DO $$ BEGIN
   IF EXISTS (
@@ -72,6 +82,10 @@ END $$;
 -- ══════════════════════════════════════════════════════════════
 
 -- Already wrapped in Phase 3 migration. Verify & reinforce:
+DO $$ BEGIN
+  DROP FUNCTION IF EXISTS public.place_order_atomic(UUID, UUID, TEXT, NUMERIC, NUMERIC, TEXT);
+EXCEPTION WHEN OTHERS THEN NULL; END $$;
+
 CREATE OR REPLACE FUNCTION public.place_order_atomic(
   p_user_id UUID, p_market_id UUID, p_side TEXT,
   p_price NUMERIC, p_size NUMERIC, p_order_type TEXT DEFAULT 'limit'
@@ -85,6 +99,10 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- submit_order → place_order_atomic_v2
+DO $$ BEGIN
+  DROP FUNCTION IF EXISTS public.submit_order(UUID, UUID, TEXT, NUMERIC, NUMERIC);
+EXCEPTION WHEN OTHERS THEN NULL; END $$;
+
 CREATE OR REPLACE FUNCTION public.submit_order(
   p_user_id UUID, p_market_id UUID, p_side TEXT,
   p_price NUMERIC, p_size NUMERIC
@@ -98,6 +116,10 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- cancel_order → cancel_order_v2
+DO $$ BEGIN
+  DROP FUNCTION IF EXISTS public.cancel_order(UUID, UUID);
+EXCEPTION WHEN OTHERS THEN NULL; END $$;
+
 CREATE OR REPLACE FUNCTION public.cancel_order(
   p_order_id UUID, p_user_id UUID DEFAULT NULL
 ) RETURNS jsonb AS $$
@@ -108,6 +130,10 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- get_order_book → get_order_book_v2
+DO $$ BEGIN
+  DROP FUNCTION IF EXISTS public.get_order_book(UUID, INT);
+EXCEPTION WHEN OTHERS THEN NULL; END $$;
+
 CREATE OR REPLACE FUNCTION public.get_order_book(
   p_market_id UUID, p_depth INT DEFAULT 20
 ) RETURNS TABLE(side TEXT, price NUMERIC, total_quantity NUMERIC, order_count BIGINT) AS $$
@@ -117,6 +143,10 @@ END;
 $$ LANGUAGE plpgsql STABLE;
 
 -- get_user_orders → get_user_orders_v2
+DO $$ BEGIN
+  DROP FUNCTION IF EXISTS public.get_user_orders(UUID, INT);
+EXCEPTION WHEN OTHERS THEN NULL; END $$;
+
 CREATE OR REPLACE FUNCTION public.get_user_orders(
   p_user_id UUID, p_limit INT DEFAULT 50
 ) RETURNS TABLE(
@@ -168,6 +198,10 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- get_market_trades → v2
+DO $$ BEGIN
+  DROP FUNCTION IF EXISTS public.get_market_trades(UUID, INT);
+EXCEPTION WHEN OTHERS THEN NULL; END $$;
+
 CREATE OR REPLACE FUNCTION public.get_market_trades(
   p_market_id UUID, p_limit INT DEFAULT 50
 ) RETURNS TABLE(
@@ -206,6 +240,10 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- credit_wallet → deposit_funds_v2
+DO $$ BEGIN
+  DROP FUNCTION IF EXISTS public.credit_wallet(UUID, NUMERIC);
+EXCEPTION WHEN OTHERS THEN NULL; END $$;
+
 CREATE OR REPLACE FUNCTION public.credit_wallet(
   p_user_id UUID, p_amount NUMERIC
 ) RETURNS jsonb AS $$
@@ -241,6 +279,10 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- unlock_wallet_funds → release_funds_v2
+DO $$ BEGIN
+  DROP FUNCTION IF EXISTS public.unlock_wallet_funds(UUID, NUMERIC);
+EXCEPTION WHEN OTHERS THEN NULL; END $$;
+
 CREATE OR REPLACE FUNCTION public.unlock_wallet_funds(
   p_user_id UUID, p_amount NUMERIC
 ) RETURNS jsonb AS $$
@@ -260,6 +302,11 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- ══════════════════════════════════════════════════════════════
 
 -- resolve_market → settle_market_v2
+DO $$ BEGIN
+  -- Drop function first if it exists (to handle parameter name changes)
+  DROP FUNCTION IF EXISTS public.resolve_market(UUID, TEXT);
+EXCEPTION WHEN OTHERS THEN NULL; END $$;
+
 DO $$ BEGIN
   IF EXISTS (
     SELECT 1 FROM pg_proc p JOIN pg_namespace n ON p.pronamespace = n.oid
@@ -286,6 +333,10 @@ END $$;
 -- GROUP 8: ANALYTICS — get_platform_analytics → v2
 -- ══════════════════════════════════════════════════════════════
 
+DO $$ BEGIN
+  DROP FUNCTION IF EXISTS public.get_platform_analytics(VARCHAR);
+EXCEPTION WHEN OTHERS THEN NULL; END $$;
+
 CREATE OR REPLACE FUNCTION public.get_platform_analytics(
   p_period VARCHAR DEFAULT '24h'
 ) RETURNS jsonb AS $$
@@ -304,6 +355,10 @@ $$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
 -- ══════════════════════════════════════════════════════════════
 -- GROUP 10: POSITIONS — update_position → upsert_position_v2
 -- ══════════════════════════════════════════════════════════════
+
+DO $$ BEGIN
+  DROP FUNCTION IF EXISTS public.update_position(UUID, UUID, outcome_type, NUMERIC, NUMERIC);
+EXCEPTION WHEN OTHERS THEN NULL; END $$;
 
 CREATE OR REPLACE FUNCTION public.update_position(
   p_user_id UUID, p_market_id UUID, p_outcome outcome_type,

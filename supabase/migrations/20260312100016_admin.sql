@@ -6,13 +6,41 @@
 CREATE TABLE IF NOT EXISTS admin_audit_log (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   action            TEXT NOT NULL,
-  performed_by      UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  performed_by      UUID REFERENCES users(id) ON DELETE RESTRICT,
   target_table      TEXT,
   target_id         UUID,
   diff_jsonb        JSONB,
   ip_address        INET,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- FIX: Ensure ALL required columns exist before creating indexes (handles schema drift safely)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='admin_audit_log' AND column_name='action') THEN
+        ALTER TABLE admin_audit_log ADD COLUMN action TEXT NOT NULL DEFAULT 'unknown';
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='admin_audit_log' AND column_name='performed_by') THEN
+        ALTER TABLE admin_audit_log ADD COLUMN performed_by UUID REFERENCES users(id) ON DELETE RESTRICT;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='admin_audit_log' AND column_name='target_table') THEN
+        ALTER TABLE admin_audit_log ADD COLUMN target_table TEXT;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='admin_audit_log' AND column_name='target_id') THEN
+        ALTER TABLE admin_audit_log ADD COLUMN target_id UUID;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='admin_audit_log' AND column_name='diff_jsonb') THEN
+        ALTER TABLE admin_audit_log ADD COLUMN diff_jsonb JSONB;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='admin_audit_log' AND column_name='ip_address') THEN
+        ALTER TABLE admin_audit_log ADD COLUMN ip_address INET;
+    END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_admin_audit_log_performed_by ON admin_audit_log(performed_by);
 CREATE INDEX IF NOT EXISTS idx_admin_audit_log_target ON admin_audit_log(target_table, target_id);

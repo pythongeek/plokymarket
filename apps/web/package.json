@@ -7,19 +7,7 @@
     "build": "next build",
     "vercel-build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "qstash:setup:batch": "node scripts/setup-qstash-schedule.js",
-    "qstash:setup:check": "node scripts/setup-qstash.js",
-    "qstash:setup:daily-topics": "node scripts/setup-daily-topics-cron.js",
-    "qstash:setup:daily-ai": "node scripts/setup-daily-ai-cron.js",
-    "qstash:setup:tick": "node scripts/setup-tick-adjustment-cron.js",
-    "qstash:setup:leaderboard": "node scripts/setup-leaderboard-cron.js",
-    "qstash:setup:all": "node scripts/setup-all-qstash.js",
-    "qstash:setup:phase2": "node scripts/setup-phase2-workflows.js",
-    "qstash:setup:phase2:ps": ".\\scripts\\setup-phase2-workflows.ps1",
-    "usdt:setup": "node scripts/setup-usdt-workflows.js",
-    "usdt:cleanup": "node scripts/setup-usdt-workflows.js cleanup",
-    "usdt:schedules": "node scripts/setup-qstash-schedules.js"
+    "lint": "next lint"
   },
   "dependencies": {
     "@google-cloud/vertexai": "^1.10.0",
@@ -52,13 +40,12 @@
     "@radix-ui/react-toggle-group": "^1.1.11",
     "@radix-ui/react-tooltip": "^1.1.2",
     "@sentry/nextjs": "^10.41.0",
-    "@supabase/ssr": "^0.5.0",
-    "@supabase/supabase-js": "^2.45.0",
+    "@supabase/ssr": "^0.9.0",
+    "@supabase/supabase-js": "^2.99.1",
     "@tanstack/react-query": "^5.90.21",
     "@tanstack/react-query-devtools": "^5.91.3",
     "@tanstack/react-virtual": "^3.13.18",
     "@types/canvas-confetti": "^1.9.0",
-    "@upstash/qstash": "^2.9.0",
     "@upstash/redis": "^1.36.2",
     "canvas-confetti": "^1.9.4",
     "chart.js": "^4.5.1",
@@ -105,7 +92,9 @@
     "zustand": "^4.5.4"
   },
   "devDependencies": {
-    "@types/node": "^20.14.0",
+    "@cloudflare/workers-types": "^4.20260313.1",
+    "@playwright/test": "^1.58.2",
+    "@types/node": "^20.19.37",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "autoprefixer": "^10.4.19",
@@ -113,6 +102,7 @@
     "eslint-config-next": "^15.0.0",
     "postcss": "^8.4.40",
     "puppeteer": "^24.37.1",
+    "supabase": "^2.78.1",
     "tailwindcss": "^3.4.7",
     "typescript": "^5.5.0"
   }
