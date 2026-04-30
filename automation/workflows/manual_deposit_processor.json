@@ -1,0 +1,184 @@
+{
+    "name": "Manual Deposit Processor",
+    "nodes": [
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "manual-deposit-created",
+                "options": {}
+            },
+            "name": "Webhook",
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 1,
+            "position": [
+                100,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "chatId": "YOUR_TELEGRAM_CHAT_ID",
+                "text": "=🚨 *নতুন ডিপোজিট রিকোয়েস্ট*\n\nমাধ্যম: {{ $json.body.data.method.toUpperCase() }}\nপরিমাণ: ৳{{ $json.body.data.amount_bdt }}\nTrxID: {{ $json.body.data.transaction_id }}\nফোন: {{ $json.body.data.user_phone_number }}\n\n⏱️ সময়সীমা: ১০ মিনিট\nলিংক: {{ $env.ADMIN_PANEL_URL }}/deposits/{{ $json.body.data.id }}",
+                "additionalFields": {
+                    "parse_mode": "Markdown"
+                }
+            },
+            "name": "Notify Agent",
+            "type": "n8n-nodes-base.telegram",
+            "typeVersion": 1,
+            "position": [
+                300,
+                300
+            ],
+            "credentials": {
+                "telegramApi": {
+                    "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+                    "name": "Telegram Account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "amount": 10,
+                "unit": "minutes"
+            },
+            "name": "Wait 10 Minutes",
+            "type": "n8n-nodes-base.wait",
+            "typeVersion": 1,
+            "position": [
+                500,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "table": "manual_deposits",
+                "filters": {
+                    "conditions": [
+                        {
+                            "keyName": "id",
+                            "condition": "equal",
+                            "keyValue": "={{ $node[\"Webhook\"].json.body.data.id }}"
+                        },
+                        {
+                            "keyName": "status",
+                            "condition": "equal",
+                            "keyValue": "pending"
+                        }
+                    ]
+                }
+            },
+            "name": "Check Status",
+            "type": "n8n-nodes-base.supabase",
+            "typeVersion": 1,
+            "position": [
+                700,
+                300
+            ],
+            "credentials": {
+                "supabaseApi": {
+                    "id": "YOUR_SUPABASE_CREDENTIAL_ID",
+                    "name": "Supabase Account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "boolean": [
+                        {
+                            "value1": "={{ $json.id ? true : false }}",
+                            "value2": true
+                        }
+                    ]
+                }
+            },
+            "name": "Is Still Pending?",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 1,
+            "position": [
+                900,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "chatId": "YOUR_TELEGRAM_CHAT_ID",
+                "text": "=⚠️ *URGENT: ডিপোজিট পেন্ডিং!*\n\nআইডি: {{ $node[\"Webhook\"].json.body.data.id }}\nইউজার ১০ মিনিট ধরে অপেক্ষা করছে। দয়া করে দ্রুত প্রসেস করুন।",
+                "additionalFields": {
+                    "parse_mode": "Markdown"
+                }
+            },
+            "name": "Urgent Alert",
+            "type": "n8n-nodes-base.telegram",
+            "typeVersion": 1,
+            "position": [
+                1100,
+                200
+            ],
+            "credentials": {
+                "telegramApi": {
+                    "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+                    "name": "Telegram Account"
+                }
+            }
+        }
+    ],
+    "connections": {
+        "Webhook": {
+            "main": [
+                [
+                    {
+                        "node": "Notify Agent",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Notify Agent": {
+            "main": [
+                [
+                    {
+                        "node": "Wait 10 Minutes",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Wait 10 Minutes": {
+            "main": [
+                [
+                    {
+                        "node": "Check Status",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Check Status": {
+            "main": [
+                [
+                    {
+                        "node": "Is Still Pending?",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Is Still Pending?": {
+            "main": [
+                [
+                    {
+                        "node": "Urgent Alert",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    }
+}

@@ -1,0 +1,236 @@
+{
+  "name": "Plokymarket Sports Market Verification",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/10 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [250, 300],
+      "events": [
+        {
+          "type": "scheduledTime",
+          "resetSchedule": false
+        }
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Query sports markets closing within 6 hours\nreturn {\n  json: {\n    query: `\n      SELECT m.id, m.question, m.category, m.trading_closes_at,\n             m.status, m.yes_price, m.no_price,\n             m.resolution_source, m.resolution_source_type\n      FROM markets m\n      WHERE m.status = 'active'\n        AND m.category IN ('Sports', 'Cricket', 'Football', 'BPL')\n        AND m.trading_closes_at <= NOW() + INTERVAL '6 hours'\n        AND m.trading_closes_at > NOW()\n        AND (m.resolution_source_type = 'SPORTS_API' OR m.resolution_source_type IS NULL)\n      ORDER BY m.trading_closes_at ASC\n      LIMIT 10\n    `\n  }\n};"
+      },
+      "id": "prepare-query",
+      "name": "Prepare Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/rpc/execute_sql",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "sql",
+              "value": "={{ $json.query }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "query-markets",
+      "name": "Query Sports Markets",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [690, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract markets\nconst response = $input.first().json;\nconst markets = Array.isArray(response) ? response : [response].filter(Boolean);\n\n// Return array for iteration\nreturn markets.map(m => ({\n  json: {\n    market_id: m.id,\n    question: m.question,\n    category: m.category,\n    trading_closes_at: m.trading_closes_at,\n    yes_price: m.yes_price,\n    no_price: m.no_price\n  }\n}));\n"
+      },
+      "id": "extract-markets",
+      "name": "Extract Markets",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [910, 300]
+    },
+    {
+      "parameters": {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "split-batch",
+      "name": "Split in Batches",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 2,
+      "position": [1130, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse question to determine search query\nconst market = $input.first().json;\n\n// Extract team names and match info from question\nconst question = market.question;\n\n// Determine cricket vs football\nlet searchQuery = question;\nif (question.toLowerCase().includes('bpl') || question.toLowerCase().includes('cricket')) {\n  searchQuery = question + ' cricinfo score update';\n} else if (question.toLowerCase().includes('football') || question.toLowerCase().includes('soccer')) {\n  searchQuery = question + ' match result';\n}\n\nreturn {\n  json: {\n    market_id: market.market_id,\n    searchQuery,\n    category: market.category\n  }\n};"
+      },
+      "id": "prepare-search",
+      "name": "Prepare Search",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1350, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://www.googleapis.com/customsearch/v1",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "={{ $env.GOOGLE_SEARCH_API_KEY }}"
+            },
+            {
+              "name": "cx",
+              "value": "={{ $env.GOOGLE_SEARCH_CX }}"
+            },
+            {
+              "name": "q",
+              "value": "={{ $json.searchQuery }}"
+            },
+            {
+              "name": "num",
+              "value": "=5"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "search-result",
+      "name": "Search Result",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1570, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Analyze search results for match outcome\nconst market = $input.first().json;\nconst searchResults = $input.first().json.items || [];\n\n// Parse snippets for match status keywords\nconst snippets = searchResults.map(r => r.snippet || '').join(' ').toLowerCase();\n\n// Cricket keywords\nconst cricketWon = ['won', 'beat', 'defeated', 'chase', 'target', ' innings '];\nconst cricketLost = ['lost', 'defeat', 'beat by', 'failed'];\n\n// Football keywords\nconst footballWon = ['won', 'beat', 'defeated', 'score', 'goal'];\nconst footballLost = ['lost', 'defeat', 'lost to'];\n\n// Determine outcome based on category\nlet outcome = 'UNCERTAIN';\nlet confidence = 30;\n\nif (market.category === 'Cricket' || market.category === 'Sports' || market.category === 'BPL') {\n  // Check for team mentions in question\n  const teams = market.question.match(/[A-Z][a-z]+(?:\\s+[A-Z][a-z]+)*/g) || [];\n\n  // Simple heuristic: check if any won/lost keywords match teams\n  for (const team of teams) {\n    if (snippets.includes(team.toLowerCase() + ' won') || snippets.includes('won by ' + team.toLowerCase())) {\n      outcome = 'YES';\n      confidence = 75;\n      break;\n    }\n  }\n\n  // If no clear winner, check if match is in progress or completed\n  if (snippets.includes('match ended') || snippets.includes('result')) {\n    confidence = 85;\n  } else if (snippets.includes('in progress') || snippets.includes('live')) {\n    confidence = 50;\n    outcome = 'UNCERTAIN';\n  }\n} else {\n  // Football - similar logic\n  if (snippets.includes('full time') || snippets.includes('final score')) {\n    confidence = 80;\n  }\n}\n\nreturn {\n  json: {\n    market_id: market.market_id,\n    outcome,\n    confidence,\n    searchQuery: market.searchQuery,\n    snippets_preview: snippets.substring(0, 200),\n    results_count: searchResults.length,\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "id": "analyze-result",
+      "name": "Analyze Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1790, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Check if confidence is high enough to trigger resolution\nconst data = $input.first().json;\nconst threshold = 80;\n\nconst shouldTrigger = data.confidence >= threshold && data.outcome !== 'UNCERTAIN';\n\nreturn {\n  json: {\n    ...data,\n    should_trigger_resolution: shouldTrigger,\n    threshold\n  }\n};"
+      },
+      "id": "check-confidence",
+      "name": "Check Confidence",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2010, 300]
+    },
+    {
+      "parameters": {
+      "method": "POST",
+        "url": "={{ $env.N8N_WEBHOOK_URL }}/webhook/plokymarket-batch-resolution",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-n8n-api-key",
+              "value": "={{ $env.N8N_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "market_id",
+              "value": "={{ $json.market_id }}"
+            },
+            {
+              "name": "question",
+              "value": "={{ $json.searchQuery }}"
+            },
+            {
+              "name": "category",
+              "value": "={{ $json.category }}"
+            },
+            {
+              "name": "trigger_source",
+              "value": "sports_verification"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "trigger-resolution",
+      "name": "Trigger Resolution",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2230, 300]
+    },
+    {
+      "parameters": {
+      "jsCode": "// Compile all results\nconst allResults = [];\nfor (const item of $input.all()) {\n  if (item.json.market_id) {\n    allResults.push(item.json);\n  }\n}\n\nconst resolved = allResults.filter(r => r.should_trigger_resolution);\nconst uncertain = allResults.filter(r => !r.should_trigger_resolution);\n\nreturn {\n  json: {\n    total_checked: allResults.length,\n    triggered_resolution: resolved.length,\n    pending_verification: uncertain.length,\n    results: allResults,\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "id": "compile-results",
+      "name": "Compile Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2450, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Final result\nconst data = $input.first().json;\nreturn {\n  json: {\n    success: true,\n    markets_checked: data.total_checked,\n    resolutions_triggered: data.triggered_resolution,\n    pending_verification: data.pending_verification,\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "id": "final-result",
+      "name": "Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2670, 300]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [\n        [{ "node": "Prepare Query", "type": "main", "index": 0 }]\n      ]\n    },\n    "Prepare Query": {\n      "main": [\n        [{ "node": "Query Sports Markets", "type": "main", "index": 0 }]\n      ]\n    },\n    "Query Sports Markets": {\n      "main": [\n        [{ "node": "Extract Markets", "type": "main", "index": 0 }]\n      ]\n    },\n    "Extract Markets": {\n      "main": [\n        [{ "node": "Split in Batches", "type": "main", "index": 0 }]\n      ]\n    },\n    "Split in Batches": {\n      "main": [\n        [{ "node": "Prepare Search", "type": "main", "index": 0 }]\n      ]\n    },\n    "Prepare Search": {\n      "main": [\n        [{ "node": "Search Result", "type": "main", "index": 0 }]\n      ]\n    },\n    "Search Result": {\n      "main": [\n        [{ "node": "Analyze Result", "type": "main", "index": 0 }]\n      ]\n    },\n    "Analyze Result": {\n      "main": [\n        [{ "node": "Check Confidence", "type": "main", "index": 0 }]\n      ]\n    },\n    "Check Confidence": {\n      "main": [\n        [{ "node": "Trigger Resolution", "type": "main", "index": 0 }]\n      ]\n    },\n    "Trigger Resolution": {\n      "main": [\n        [{ "node": "Compile Results", "type": "main", "index": 0 }]\n      ]\n    },\n    "Compile Results": {\n      "main": [\n        [{ "node": "Result", "type": "main", "index": 0 }]\n      ]\n    }\n  },\n  "settings": {\n    "executionOrder": "v1",\n    "saveManualExecutions": true,\n    "callerPolicy": "workflowsFromSameOwner"\n  },\n  "staticData": null,\n  "tags": [\n    { "name": "plokymarket", "id": "tag-plokymarket" },\n    { "name": "sports", "id": "tag-sports" },\n    { "name": "verification", "id": "tag-verification" }\n  ]\n}\n

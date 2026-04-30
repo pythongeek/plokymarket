@@ -1,0 +1,74 @@
+-- Migration: Add resolution_systems table to remote database
+-- This table is missing from the remote Supabase project
+-- Created: 2026-03-18
+
+BEGIN;
+
+-- Create resolution_systems table
+CREATE TABLE IF NOT EXISTS "public"."resolution_systems" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "event_id" "uuid" NOT NULL,
+    "market_id" "uuid",
+    "primary_method" character varying(50) DEFAULT 'manual_admin'::character varying NOT NULL,
+    "confidence_threshold" integer DEFAULT 85,
+    "ai_keywords" "text"[] DEFAULT '{}'::"text"[],
+    "ai_sources" "text"[] DEFAULT '{}'::"text"[],
+    "resolver_reference" "text",
+    "status" character varying(20) DEFAULT 'pending'::character varying,
+    "proposed_outcome" integer,
+    "final_outcome" integer,
+    "resolution_notes" "text",
+    "evidence_urls" "text"[],
+    "scheduled_resolution_at" timestamp with time zone,
+    "resolved_at" timestamp with time zone,
+    "resolved_by" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "updated_at" timestamp with time zone DEFAULT "now"(),
+    CONSTRAINT "resolution_systems_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "valid_resolution_method" CHECK ((("primary_method")::"text" = ANY ((ARRAY['manual_admin'::character varying, 'ai_oracle'::character varying, 'expert_panel'::character varying, 'external_api'::character varying, 'consensus'::character varying, 'community_vote'::character varying, 'hybrid'::character varying])::"text"[]))),
+    CONSTRAINT "valid_resolution_status" CHECK ((("status")::"text" = ANY ((ARRAY['pending'::character varying, 'in_progress'::character varying, 'resolved'::character varying, 'disputed'::character varying, 'cancelled'::character varying])::"text"[])))
+);
+
+-- Add foreign key constraints
+ALTER TABLE "public"."resolution_systems" 
+    ADD CONSTRAINT "resolution_systems_event_id_fkey" 
+    FOREIGN KEY ("event_id") REFERENCES "public"."events"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+ALTER TABLE "public"."resolution_systems" 
+    ADD CONSTRAINT "resolution_systems_market_id_fkey" 
+    FOREIGN KEY ("market_id") REFERENCES "public"."markets"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+ALTER TABLE "public"."resolution_systems" 
+    ADD CONSTRAINT "resolution_systems_resolved_by_fkey" 
+    FOREIGN KEY ("resolved_by") REFERENCES "auth"."users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- Create indexes for performance
+CREATE INDEX IF NOT EXISTS "idx_resolution_systems_event_id" ON "public"."resolution_systems" ("event_id");
+CREATE INDEX IF NOT EXISTS "idx_resolution_systems_market_id" ON "public"."resolution_systems" ("market_id");
+CREATE INDEX IF NOT EXISTS "idx_resolution_systems_status" ON "public"."resolution_systems" ("status");
+CREATE INDEX IF NOT EXISTS "idx_resolution_systems_primary_method" ON "public"."resolution_systems" ("primary_method");
+CREATE INDEX IF NOT EXISTS "idx_resolution_systems_created_at" ON "public"."resolution_systems" ("created_at");
+
+-- Enable RLS
+ALTER TABLE "public"."resolution_systems" ENABLE ROW LEVEL SECURITY;
+
+-- RLS Policies
+CREATE POLICY "resolution_systems_select_policy" ON "public"."resolution_systems"
+    FOR SELECT USING (true);
+
+CREATE POLICY "resolution_systems_insert_policy" ON "public"."resolution_systems"
+    FOR INSERT WITH CHECK (auth.uid() IN (SELECT id FROM public.users WHERE is_admin = true));
+
+CREATE POLICY "resolution_systems_update_policy" ON "public"."resolution_systems"
+    FOR UPDATE USING (auth.uid() IN (SELECT id FROM public.users WHERE is_admin = true));
+
+CREATE POLICY "resolution_systems_delete_policy" ON "public"."resolution_systems"
+    FOR DELETE USING (auth.uid() IN (SELECT id FROM public.users WHERE is_admin = true));
+
+-- Set table owner
+ALTER TABLE "public"."resolution_systems" OWNER TO "postgres";
+
+-- Add comment
+COMMENT ON TABLE "public"."resolution_systems" IS 'Stores resolution system configurations for markets - defines how markets should be resolved (manual, AI, expert panel, etc.)';
+
+COMMIT;

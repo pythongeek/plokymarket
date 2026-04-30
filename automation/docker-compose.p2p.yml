@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  n8n-p2p:
+    image: n8nio/n8n:1.70.0
+    container_name: polymarket-p2p-n8n
+    restart: unless-stopped
+    ports:
+      - "5680:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_P2P_USER:-admin}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_P2P_PASSWORD}
+      - WEBHOOK_URL=${N8N_WEBHOOK_URL:-https://your-domain.com/}
+      - NODE_FUNCTION_ALLOW_EXTERNAL=axios,cheerio,puppeteer
+      - EXECUTIONS_MODE=regular
+      - N8N_LOG_LEVEL=info
+      - GENERIC_TIMEZONE=Asia/Dhaka
+      - BINANCE_AFFILIATE_CODE=${BINANCE_AFFILIATE_CODE}
+    volumes:
+      - n8n_p2p_data:/home/node/.n8n
+    command: n8n start
+    networks:
+      - p2p_net
+    healthcheck:
+      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:5678/rest/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  ngrok-p2p:
+    image: ngrok/ngrok:latest
+    container_name: polymarket-p2p-ngrok
+    restart: unless-stopped
+    command: http n8n-p2p:5678 --authtoken=${NGROK_AUTH_TOKEN}
+    ports:
+      - "4041:4040"
+    depends_on:
+      - n8n-p2p
+    networks:
+      - p2p_net
+
+volumes:
+  n8n_p2p_data:
+    name: polymarket-p2p-n8n-data
+
+networks:
+  p2p_net:
+    name: polymarket_p2p_net
+    driver: bridge

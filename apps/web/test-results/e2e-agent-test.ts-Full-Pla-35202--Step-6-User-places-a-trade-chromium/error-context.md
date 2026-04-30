@@ -1,0 +1,65 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e4]:
+    - link "Plokymarket" [ref=e6] [cursor=pointer]:
+      - /url: /
+      - img [ref=e8]
+      - generic [ref=e11]: Plokymarket
+    - generic [ref=e12]:
+      - generic [ref=e13]:
+        - generic [ref=e14]: স্বাগতম
+        - generic [ref=e15]: আপনার অ্যাকাউন্টে প্রবেশ করতে আপনার তথ্য দিন
+      - generic [ref=e16]:
+        - generic [ref=e17]:
+          - alert [ref=e18]:
+            - img [ref=e19]
+            - generic [ref=e21]: Invalid email or password. Please try again.
+          - generic [ref=e22]:
+            - generic [ref=e23]: ইমেইল
+            - generic [ref=e24]:
+              - img [ref=e25]
+              - textbox "ইমেইল" [ref=e28]:
+                - /placeholder: name@example.com
+                - text: testuser_auto_test@plokymarket.bd
+          - generic [ref=e29]:
+            - generic [ref=e30]: পাসওয়ার্ড
+            - generic [ref=e31]:
+              - img [ref=e32]
+              - textbox "পাসওয়ার্ড" [ref=e35]:
+                - /placeholder: আপনার পাসওয়ার্ড দিন
+                - text: TestUser_Auto!9
+              - button [ref=e36] [cursor=pointer]:
+                - img [ref=e37]
+          - generic [ref=e40]:
+            - generic [ref=e41]:
+              - checkbox "আমাকে মনে রাখুন" [ref=e42] [cursor=pointer]
+              - checkbox
+              - generic [ref=e43]: আমাকে মনে রাখুন
+            - link "পাসওয়ার্ড ভুলে গেছেন?" [ref=e44] [cursor=pointer]:
+              - /url: /forgot-password
+          - button "লগইন করুন" [ref=e45] [cursor=pointer]:
+            - text: লগইন করুন
+            - img
+          - generic [ref=e50]: অথবা এর মাধ্যমে চালিয়ে যান
+          - button "Google Login with Google" [ref=e51] [cursor=pointer]:
+            - img "Google" [ref=e52]
+            - text: Login with Google
+        - generic [ref=e53]:
+          - paragraph [ref=e54]: "পরীক্ষার জন্য ডেমো তথ্য:"
+          - 'button "ব্যবহার করতে ক্লিক করুন: admin@plokymarket.bd / PlokyAdmin2026!" [ref=e55] [cursor=pointer]'
+        - generic [ref=e56]:
+          - text: অ্যাকাউন্ট নেই?
+          - link "অ্যাকাউন্ট তৈরি করুন" [ref=e57] [cursor=pointer]:
+            - /url: /register
+    - paragraph [ref=e58]:
+      - text: লগইন করে আপনি আমাদের
+      - link "সেবার শর্তাবলী" [ref=e59] [cursor=pointer]:
+        - /url: /terms
+      - text: এবং
+      - link "গোপনীয়তা নীতি" [ref=e60] [cursor=pointer]:
+        - /url: /privacy
+      - text: তে সম্মত হচ্ছেন
+  - alert [ref=e61]
+```

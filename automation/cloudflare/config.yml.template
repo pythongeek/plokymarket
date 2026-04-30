@@ -1,0 +1,18 @@
+tunnel: <TUNNEL_ID>
+credentials-file: C:\Users\Administrator\.cloudflared\<TUNNEL_ID>.json
+
+ingress:
+  # Main n8n instance for payments and general logic
+  - hostname: n8n.plokymarket.com
+    service: http://localhost:5678
+  
+  # Isolated n8n instance for P2P scraping
+  - hostname: p2p.plokymarket.com
+    service: http://localhost:5680
+  
+  # AI-KYC Service
+  - hostname: kyc-ai.plokymarket.com
+    service: http://localhost:8000
+
+  # Default catch-all (404)
+  - service: http_status:404

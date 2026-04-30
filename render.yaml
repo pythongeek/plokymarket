@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: ai-kyc-service
+    env: docker
+    plan: free
+    dockerContext: ./apps/ai-kyc
+    dockerfilePath: ./apps/ai-kyc/Dockerfile
+    envVars:
+      - key: PORT
+        value: 8000
+    autoDeploy: false

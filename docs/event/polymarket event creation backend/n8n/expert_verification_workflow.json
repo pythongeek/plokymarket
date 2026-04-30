@@ -1,0 +1,207 @@
+{
+  "name": "Expert Vote AI Verification",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "expert-vote-verification",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "id": "webhook-trigger",
+      "name": "Webhook: Expert Vote",
+      "webhookId": "expert-vote-verification"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ev.id, ev.reasoning, ev.vote_outcome, m.question, m.outcome as final_outcome FROM expert_votes ev JOIN markets m ON ev.event_id = m.id WHERE ev.id = '{{ $json.body.vote_id }}' AND ev.ai_verification_status = 'pending';"
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "id": "fetch-vote",
+      "name": "Fetch Vote Data",
+      "credentials": {
+        "postgres": {
+          "id": "supabase-db-creds",
+          "name": "Supabase DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.length > 0 }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [650, 300],
+      "id": "vote-found",
+      "name": "Vote Found?"
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent",
+        "authentication": "queryAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={\n  \"contents\": [{\n    \"parts\": [{\n      \"text\": \"You are an expert validator for a prediction market system.\\n\\nEvent Question: {{ $json[0].question }}\\nExpert's Vote: {{ $json[0].vote_outcome == 1 ? 'YES' : 'NO' }}\\nExpert's Reasoning: {{ $json[0].reasoning }}\\nActual Outcome: {{ $json[0].final_outcome == 1 ? 'YES' : 'NO' }}\\n\\nTask: Verify if the expert's reasoning aligns with the final outcome and is logically sound.\\n\\nRate the relevance and quality of the reasoning on a scale of 1-10.\\n- 8-10: Excellent reasoning, directly supports the outcome\\n- 5-7: Good reasoning, somewhat supports the outcome\\n- 1-4: Poor reasoning, contradicts or irrelevant to outcome\\n\\nProvide response in JSON format:\\n{\\n  \\\"relevance_score\\\": number (1-10),\\n  \\\"feedback\\\": \\\"brief explanation of the rating\\\"\\n}\"\n    }]\n  }]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [850, 400],
+      "id": "gemini-verify",
+      "name": "Gemini AI Verification",
+      "credentials": {
+        "httpQueryAuth": {
+          "id": "gemini-api-key",
+          "name": "Gemini API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const geminiResponse = items[0].json;\n\n// Extract text from Gemini response\nlet aiText = '';\nif (geminiResponse.candidates && geminiResponse.candidates[0]) {\n  aiText = geminiResponse.candidates[0].content?.parts?.[0]?.text || '';\n}\n\n// Parse JSON from response\nlet result = { relevance_score: 5, feedback: 'Unable to parse AI response' };\ntry {\n  const cleanJson = aiText.replace(/```json|```/g, '').trim();\n  const parsed = JSON.parse(cleanJson);\n  result = { ...result, ...parsed };\n} catch (e) {\n  console.error('Failed to parse AI response:', e);\n}\n\n// Ensure score is within range\nresult.relevance_score = Math.max(1, Math.min(10, result.relevance_score));\n\nreturn [{ json: result }];"
+      },
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1050, 400],
+      "id": "parse-ai",
+      "name": "Parse AI Response"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT verify_expert_vote('{{ $('Webhook: Expert Vote').item.json.body.vote_id }}'::uuid, {{ $json.relevance_score }}, '{{ $json.feedback }}', (SELECT outcome FROM markets m JOIN expert_votes ev ON ev.event_id = m.id WHERE ev.id = '{{ $('Webhook: Expert Vote').item.json.body.vote_id }}'::uuid));"
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [1250, 400],
+      "id": "update-vote",
+      "name": "Update Vote in DB",
+      "credentials": {
+        "postgres": {
+          "id": "supabase-db-creds",
+          "name": "Supabase DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"status\": \"verified\", \"vote_id\": \"{{ $('Webhook: Expert Vote').item.json.body.vote_id }}\", \"relevance_score\": {{ $('Parse AI Response').item.json.relevance_score }}, \"feedback\": \"{{ $('Parse AI Response').item.json.feedback }}\"}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1450, 400],
+      "id": "respond-success",
+      "name": "Return Success"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"status\": \"error\", \"message\": \"Vote not found or already verified\"}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [850, 200],
+      "id": "respond-not-found",
+      "name": "Return Not Found"
+    }
+  ],
+  "connections": {
+    "Webhook: Expert Vote": {
+      "main": [
+        [
+          {
+            "node": "Fetch Vote Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Vote Data": {
+      "main": [
+        [
+          {
+            "node": "Vote Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vote Found?": {
+      "main": [
+        [
+          {
+            "node": "Return Not Found",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Gemini AI Verification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini AI Verification": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Update Vote in DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Vote in DB": {
+      "main": [
+        [
+          {
+            "node": "Return Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": []
+}

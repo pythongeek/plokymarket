@@ -1,0 +1,63 @@
+{
+  "timestamp": "2026-03-03T13:18:44.326Z",
+  "appUrl": "https://polymarket-bangladesh.vercel.app",
+  "schedules": [
+    {
+      "name": "Hourly Price Snapshot",
+      "description": "Records hourly price snapshots and updates 24h changes",
+      "cron": "0 * * * *",
+      "endpoint": "/api/upstash-workflow/price-snapshot",
+      "method": "POST",
+      "retries": 3,
+      "status": "created"
+    },
+    {
+      "name": "Market Close Check",
+      "description": "Checks for markets closing soon and notifies followers",
+      "cron": "*/15 * * * *",
+      "endpoint": "/api/upstash-workflow/market-close-check",
+      "method": "POST",
+      "retries": 3,
+      "status": "created"
+    },
+    {
+      "name": "Combined Market Data",
+      "description": "Fetch crypto and sports market data (consolidated from execute-crypto + execute-sports)",
+      "cron": "*/5 * * * *",
+      "endpoint": "/api/workflows/combined-market-data",
+      "method": "POST",
+      "retries": 3,
+      "status": "created"
+    },
+    {
+      "name": "Combined Analytics",
+      "description": "Run analytics, tick adjustment, and exchange rate updates (consolidated)",
+      "cron": "0 * * * *",
+      "endpoint": "/api/workflows/combined-analytics",
+      "method": "POST",
+      "retries": 3,
+      "status": "created"
+    },
+    {
+      "name": "Combined Daily Operations",
+      "description": "Daily leaderboard update, AI topics generation, and cleanup (consolidated)",
+      "cron": "0 0 * * *",
+      "timezone": "Asia/Dhaka",
+      "endpoint": "/api/workflows/combined-daily-ops",
+      "method": "POST",
+      "retries": 3,
+      "status": "failed",
+      "error": "{\"error\":\"quota maxSchedules exceeded, current limit: 10\"}"
+    },
+    {
+      "name": "Check Escalations",
+      "description": "Check support escalations every 5 minutes",
+      "cron": "*/5 * * * *",
+      "endpoint": "/api/workflows/check-escalations",
+      "method": "POST",
+      "retries": 2,
+      "status": "failed",
+      "error": "{\"error\":\"quota maxSchedules exceeded, current limit: 10\"}"
+    }
+  ]
+}

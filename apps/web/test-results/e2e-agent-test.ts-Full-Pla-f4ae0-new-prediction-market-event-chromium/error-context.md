@@ -1,0 +1,206 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e6]:
+          - img [ref=e7]
+          - generic [ref=e9]: SYS-CMD
+          - generic [ref=e10]: ⭐ SUPER ADMIN
+        - generic [ref=e11]:
+          - generic [ref=e12]:
+            - img [ref=e13]
+            - generic [ref=e16]: HEALTHY
+          - generic [ref=e17]: admin@plokymarket.bd
+          - button "Exit" [ref=e18] [cursor=pointer]:
+            - img
+            - text: Exit
+    - generic [ref=e19]:
+      - complementary [ref=e20]:
+        - navigation [ref=e21]:
+          - button "ড্যাশবোর্ড Dashboard" [ref=e22] [cursor=pointer]:
+            - img [ref=e23]
+            - generic [ref=e25]:
+              - generic [ref=e26]: ড্যাশবোর্ড
+              - generic [ref=e27]: Dashboard
+          - button "মার্কেট কন্ট্রোল Market Control" [ref=e28] [cursor=pointer]:
+            - img [ref=e29]
+            - generic [ref=e32]:
+              - generic [ref=e33]: মার্কেট কন্ট্রোল
+              - generic [ref=e34]: Market Control
+          - button "ব্যবহারকারী ব্যবস্থাপনা User Management" [ref=e35] [cursor=pointer]:
+            - img [ref=e36]
+            - generic [ref=e41]:
+              - generic [ref=e42]: ব্যবহারকারী ব্যবস্থাপনা
+              - generic [ref=e43]: User Management
+          - button "বিশ্লেষণ Analytics" [ref=e44] [cursor=pointer]:
+            - img [ref=e45]
+            - generic [ref=e47]:
+              - generic [ref=e48]: বিশ্লেষণ
+              - generic [ref=e49]: Analytics
+          - button "ইভেন্ট তালিকা Events" [ref=e50] [cursor=pointer]:
+            - img [ref=e51]
+            - generic [ref=e53]:
+              - generic [ref=e54]: ইভেন্ট তালিকা
+              - generic [ref=e55]: Events
+          - button "রেজোলিউশন Resolution" [ref=e56] [cursor=pointer]:
+            - img [ref=e57]
+            - generic [ref=e63]:
+              - generic [ref=e64]: রেজোলিউশন
+              - generic [ref=e65]: Resolution
+          - button "রেজোলিউশন সিস্টেম Resolution System" [ref=e66] [cursor=pointer]:
+            - img [ref=e67]
+            - generic [ref=e73]:
+              - generic [ref=e74]: রেজোলিউশন সিস্টেম
+              - generic [ref=e75]: Resolution System
+          - button "দৈনিক টপিক্স Daily Topics" [ref=e76] [cursor=pointer]:
+            - img [ref=e77]
+            - generic [ref=e79]:
+              - generic [ref=e80]: দৈনিক টপিক্স
+              - generic [ref=e81]: Daily Topics
+          - button "AI কনফিগ AI Configs" [ref=e82] [cursor=pointer]:
+            - img [ref=e83]
+            - generic [ref=e86]:
+              - generic [ref=e87]: AI কনফিগ
+              - generic [ref=e88]: AI Configs
+          - button "KYC যাচাইকরণ KYC Verification" [ref=e89] [cursor=pointer]:
+            - img [ref=e90]
+            - generic [ref=e93]:
+              - generic [ref=e94]: KYC যাচাইকরণ
+              - generic [ref=e95]: KYC Verification
+          - button "P2P ব্যবস্থাপনা P2P Management" [ref=e96] [cursor=pointer]:
+            - img [ref=e97]
+            - generic [ref=e100]:
+              - generic [ref=e101]: P2P ব্যবস্থাপনা
+              - generic [ref=e102]: P2P Management
+          - button "ডিপোজিট সেটিংস Deposit Settings" [ref=e103] [cursor=pointer]:
+            - img [ref=e104]
+            - generic [ref=e107]:
+              - generic [ref=e108]: ডিপোজিট সেটিংস
+              - generic [ref=e109]: Deposit Settings
+          - button "ডিপোজিট ম্যানেজমেন্ট Deposits" [ref=e110] [cursor=pointer]:
+            - img [ref=e111]
+            - generic [ref=e113]:
+              - generic [ref=e114]: ডিপোজিট ম্যানেজমেন্ট
+              - generic [ref=e115]: Deposits
+          - button "ওয়ার্কফ্লো Workflows" [ref=e116] [cursor=pointer]:
+            - img [ref=e117]
+            - generic [ref=e121]:
+              - generic [ref=e122]: ওয়ার্কফ্লো
+              - generic [ref=e123]: Workflows
+          - generic [ref=e125]:
+            - img [ref=e126]
+            - generic [ref=e129]: Money Operator
+          - button "USDT ড্যাশবোর্ড USDT Dashboard" [ref=e131] [cursor=pointer]:
+            - img [ref=e132]
+            - generic [ref=e134]:
+              - generic [ref=e135]: USDT ড্যাশবোর্ড
+              - generic [ref=e136]: USDT Dashboard
+          - button "ইউজার ম্যানেজমেন্ট User Management" [ref=e137] [cursor=pointer]:
+            - img [ref=e138]
+            - generic [ref=e143]:
+              - generic [ref=e144]: ইউজার ম্যানেজমেন্ট
+              - generic [ref=e145]: User Management
+          - button "ট্রানজেকশন লগ Transactions" [ref=e146] [cursor=pointer]:
+            - img [ref=e147]
+            - generic [ref=e151]:
+              - generic [ref=e152]: ট্রানজেকশন লগ
+              - generic [ref=e153]: Transactions
+          - button "রেট সেটিংস Rate Settings" [ref=e154] [cursor=pointer]:
+            - img [ref=e155]
+            - generic [ref=e158]:
+              - generic [ref=e159]: রেট সেটিংস
+              - generic [ref=e160]: Rate Settings
+        - generic [ref=e162]:
+          - img [ref=e163]
+          - generic [ref=e165]:
+            - paragraph [ref=e166]: 🔒 নিরাপদ সেশন
+            - paragraph [ref=e167]: All actions are logged and monitored.
+            - paragraph [ref=e168]: "Session: 6:57:40 PM"
+      - main [ref=e169]:
+        - generic [ref=e171]:
+          - generic [ref=e172]:
+            - heading "📝 নতুন ইভেন্ট তৈরি করুন (ম্যানুয়াল)" [level=1] [ref=e173]:
+              - generic [ref=e174]: 📝
+              - text: নতুন ইভেন্ট তৈরি করুন (ম্যানুয়াল)
+            - paragraph [ref=e175]: সম্পূর্ণ নিয়ন্ত্রণ সহ ম্যানুয়ালি ইভেন্ট তৈরি করুন - বাংলাদেশ কনটেক্স্ট
+          - generic [ref=e176]:
+            - button "Standard Creator" [ref=e177] [cursor=pointer]:
+              - img
+              - text: Standard Creator
+            - button "Advanced Control Panel" [ref=e178] [cursor=pointer]:
+              - img
+              - text: Advanced Control Panel
+          - generic [ref=e179]:
+            - generic [ref=e180]:
+              - generic [ref=e181]:
+                - heading "Market Creator Form" [level=1] [ref=e182]:
+                  - img [ref=e183]
+                  - text: Market Creator Form
+                - paragraph [ref=e185]: High-stakes administrative interface for platform growth.
+              - generic [ref=e186]: Ready to Deploy
+            - generic [ref=e187]:
+              - generic [ref=e188]:
+                - generic [ref=e189] [cursor=pointer]:
+                  - generic [ref=e190]:
+                    - img [ref=e191]
+                    - generic [ref=e194]:
+                      - generic [ref=e195]: Core Definition
+                      - generic [ref=e196]: Name, question, category, and outcomes
+                  - img [ref=e197]
+                - generic [ref=e199]:
+                  - generic [ref=e200]:
+                    - generic [ref=e201]:
+                      - generic [ref=e202]: Market Name (শিরোনাম)
+                      - textbox "Market Name (শিরোনাম)" [ref=e203]:
+                        - /placeholder: "e.g. BPL 2024 Final: Comilla vs Fortune Barishal"
+                        - text: "[AUTO-TEST] BTC to $100k? — 1771851453166"
+                    - generic [ref=e204]:
+                      - generic [ref=e205]: Market Slug
+                      - textbox "Market Slug" [ref=e207]: auto-test-btc-to-100k-1771851453166
+                  - generic [ref=e208]:
+                    - generic [ref=e209]: Market Question
+                    - textbox "Market Question" [ref=e210]:
+                      - /placeholder: The exact question users will bet on...
+                      - text: "Automated test event created by e2e test suite. Run ID: 1771851453166."
+                  - generic [ref=e211]:
+                    - generic [ref=e212]:
+                      - generic [ref=e213]: Category
+                      - combobox [ref=e214] [cursor=pointer]:
+                        - generic: Technology
+                        - img
+                      - combobox [ref=e215]
+                    - generic [ref=e216]:
+                      - generic [ref=e217]: Outcome 1 (Yes)
+                      - textbox "Outcome 1 (Yes)" [active] [ref=e218]: "Yes"
+                    - generic [ref=e219]:
+                      - generic [ref=e220]: Outcome 2 (No)
+                      - textbox "Outcome 2 (No)" [ref=e221]: "No"
+              - generic [ref=e223] [cursor=pointer]:
+                - generic [ref=e224]:
+                  - img [ref=e225]
+                  - generic [ref=e228]:
+                    - generic [ref=e229]: Temporal & Financial Parameters
+                    - generic [ref=e230]: Timing, pricing, and initial liquidity
+                - img [ref=e231]
+              - generic [ref=e234] [cursor=pointer]:
+                - generic [ref=e235]:
+                  - img [ref=e236]
+                  - generic [ref=e239]:
+                    - generic [ref=e240]: Advanced Configuration
+                    - generic [ref=e241]: Visuals, oracles, and risk management
+                - img [ref=e242]
+              - generic [ref=e244]:
+                - alert [ref=e245]:
+                  - img [ref=e246]
+                  - generic [ref=e250]:
+                    - img [ref=e251]
+                    - text: All systems go. Market is ready for insertion.
+                - button "Deploy Market" [ref=e254] [cursor=pointer]:
+                  - generic [ref=e255]:
+                    - img
+                    - text: Deploy Market
+  - alert [ref=e256]
+```

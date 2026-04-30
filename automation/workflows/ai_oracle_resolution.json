@@ -1,0 +1,331 @@
+{
+  "name": "Plokymarket AI Oracle Resolution",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "plokymarket-resolution",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "webhookId": "plokymarket-resolution"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract market data from webhook payload\nconst marketData = $input.first().json.body || $input.first().json;\n\n// Build keywords from category and question\nconst words = (marketData.question || '').split(' ').filter(w => w.length > 3);\nconst keywords = [\n  marketData.category,\n  ...words.slice(0, 10)\n];\n\n// Bengali and international news sources\nconst bengaliSources = [\n  'prothomalo.com',\n  'bdnews24.com',\n  'banglatribune.com',\n  'thedailystar.net',\n  'somoynews.tv',\n  'dailybangladeshtimes.com'\n];\n\nconst internationalSources = [\n  'bbc.com',\n  'reuters.com',\n  'apnews.com'\n];\n\nreturn {\n  json: {\n    market_id: marketData.market_id,\n    question: marketData.question,\n    category: marketData.category,\n    keywords,\n    sources: [...bengaliSources, ...internationalSources],\n    trigger_source: marketData.trigger_source || 'manual'\n  }\n};"
+      },
+      "id": "extract-data",
+      "name": "Extract Market Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://www.googleapis.com/customsearch/v1",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "={{ $env.GOOGLE_SEARCH_API_KEY }}"
+            },
+            {
+              "name": "cx",
+              "value": "={{ $env.GOOGLE_SEARCH_CX }}"
+            },
+            {
+              "name": "q",
+              "value": "={{ $json.question }} বাংলাদেশ"
+            },
+            {
+              "name": "num",
+              "value": "=5"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "google-search-bd",
+      "name": "Google Search BD",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [690, 150]
+    },
+    {
+      "parameters": {
+        "url": "=https://www.googleapis.com/customsearch/v1",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "={{ $env.GOOGLE_SEARCH_API_KEY }}"
+            },
+            {
+              "name": "cx",
+              "value": "={{ $env.GOOGLE_SEARCH_CX }}"
+            },
+            {
+              "name": "q",
+              "value": "={{ $json.question }}"
+            },
+            {
+              "name": "num",
+              "value": "=5"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "google-search-intl",
+      "name": "Google Search Intl",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [690, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://newsapi.org/v2/everything",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "apiKey",
+              "value": "={{ $env.NEWS_API_KEY }}"
+            },
+            {
+              "name": "q",
+              "value": "={{ $json.question }} Bangladesh"
+            },
+            {
+              "name": "sortBy",
+              "value": "=relevancy"
+            },
+            {
+              "name": "pageSize",
+              "value": "=5"
+            },
+            {
+              "name": "language",
+              "value": "=bn"
+            }
+          ]
+        }
+      },
+      "id": "newsapi-bengali",
+      "name": "NewsAPI Bengali",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [690, 450]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combine all search results\nconst googleBD = $input.byIndex[0].json.items || [];\nconst googleIntl = $input.byIndex[1].json.items || [];\nconst newsBengali = $input.byIndex[2].json.articles || [];\n\n// Deduplicate and format sources\nconst seenUrls = new Set();\nconst sources = [];\n\n// Process Bengali news first (priority)\nfor (const item of googleBD) {\n  if (!seenUrls.has(item.link)) {\n    seenUrls.add(item.link);\n    sources.push({\n      url: item.link,\n      title: item.title,\n      snippet: item.snippet,\n      source: 'google_bd',\n      language: 'bn'\n    });\n  }\n}\n\nfor (const item of newsBengali) {\n  if (!seenUrls.has(item.url)) {\n    seenUrls.add(item.url);\n    sources.push({\n      url: item.url,\n      title: item.title,\n      snippet: item.description,\n      source: 'newsapi',\n      language: 'bn'\n    });\n  }\n}\n\nfor (const item of googleIntl) {\n  if (!seenUrls.has(item.link)) {\n    seenUrls.add(item.link);\n    sources.push({\n      url: item.link,\n      title: item.title,\n      snippet: item.snippet,\n      source: 'google_intl',\n      language: 'en'\n    });\n  }\n}\n\nreturn {\n  json: {\n    ...$input.first().json,\n    sources: sources.slice(0, 10)\n  }\n};"
+      },
+      "id": "combine-sources",
+      "name": "Combine Sources",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [910, 300]
+    },
+    {
+      "parameters": {
+        "model": "={{ $env.GEMINI_MODEL || 'gemini-1.5-flash' }}",
+        "options": {},
+        "prompt": "=আপনি একটি AI Oracle যা একটি ভবিষ্যদ্বাণী মার্কেট প্ল্যাটফর্মের জন্য উত্তর নির্ধারণ করে।\n\nপ্রশ্ন: {{ $json.question }}\n\nসোর্স:\n{{ JSON.stringify($json.sources, null, 2) }}\n\nবিশ্লেষণ করুন এবং নির্ধারণ করুন:\n1. সম্ভাব্য উত্তর কী? (YES বা NO)\n2. আপনার আত্মবিশ্বাসের মাত্রা কত? (0-100%)\n3. সোর্সগুলির উপর ভিত্তি করে বিস্তারিত যুক্তি দিন\n4. সবচেয়ে প্রাসঙ্গিক সোর্সগুলি তালিকা করুন\n\nএই সঠিক JSON ফর্ম্যাটে উত্তর দিন:\n{\n  \"outcome\": \"YES\" বা \"NO\" বা \"UNCERTAIN\",\n  \"confidence_score\": 0-100 এর মধ্যে সংখ্যা,\n  \"reasoning\": \"বিস্তারিত ব্যাখ্যা বাংলায়\",\n  \"relevant_sources\": [\"url1\", \"url2\"]\n}"
+      },
+      "id": "gemini-analysis",
+      "name": "Gemini AI Analysis",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [1130, 300],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "gemini-api",
+          "name": "Gemini API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Gemini response\nconst geminiResponse = $input.first().json.response;\nlet analysis;\n\ntry {\n  // Try to find and parse JSON\n  const jsonMatch = geminiResponse.match(/\\{[\\s\\S]*\\}/);\n  if (jsonMatch) {\n    analysis = JSON.parse(jsonMatch[0]);\n  } else {\n    throw new Error('No JSON found');\n  }\n} catch (e) {\n  // Fallback parsing\n  const lowerResp = geminiResponse.toLowerCase();\n  const outcome = lowerResp.includes('\"yes\"') ? 'YES' :\n                  lowerResp.includes('\"no\"') ? 'NO' : 'UNCERTAIN';\n  \n  const confidenceMatch = geminiResponse.match(/(\\d+)\\s*%/);\n  const confidence = confidenceMatch ? parseInt(confidenceMatch[1]) : 50;\n  \n  analysis = {\n    outcome,\n    confidence_score: confidence,\n    reasoning: geminiResponse.substring(0, 500),\n    relevant_sources: []\n  };\n}\n\n// Ensure valid outcome\nif (!['YES', 'NO', 'UNCERTAIN'].includes(analysis.outcome)) {\n  analysis.outcome = 'UNCERTAIN';\n}\n\n// Ensure confidence is 0-100\nanalysis.confidence_score = Math.max(0, Math.min(100, analysis.confidence_score || 50));\n\nreturn {\n  json: {\n    ...$input.first().json,\n    outcome: analysis.outcome,\n    confidence_score: analysis.confidence_score,\n    reasoning: analysis.reasoning,\n    relevant_sources: analysis.relevant_sources || []\n  }\n};"
+      },
+      "id": "parse-response",
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1350, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Determine if auto-resolve or manual review\nconst confidence = $input.first().json.confidence_score;\nconst outcome = $input.first().json.outcome;\nconst threshold = 90;\n\nconst canAutoResolve = confidence >= threshold && outcome !== 'UNCERTAIN';\n\nreturn {\n  json: {\n    ...$input.first().json,\n    can_auto_resolve: canAutoResolve,\n    needs_manual_review: !canAutoResolve,\n    resolution_action: canAutoResolve ? 'auto_resolve' : 'manual_review',\n    threshold\n  }\n};"
+      },
+      "id": "check-confidence",
+      "name": "Check Confidence",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1570, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/rpc/execute_on_resolution_result",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "market_id",
+              "value": "={{ $json.market_id }}"
+            },
+            {
+              "name": "outcome",
+              "value": "={{ $json.outcome }}"
+            },
+            {
+              "name": "confidence_score",
+              "value": "={{ $json.confidence_score }}"
+            },
+            {
+              "name": "reasoning",
+              "value": "={{ $json.reasoning }}"
+            },
+            {
+              "name": "sources",
+              "value": "={{ JSON.stringify($json.sources) }}"
+            },
+            {
+              "name": "auto_resolve",
+              "value": "={{ $json.can_auto_resolve }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "save-to-supabase",
+      "name": "Save to Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1790, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format result for Plokymarket\nconst data = $input.first().json;\n\nconst result = {\n  success: true,\n  market_id: data.market_id,\n  question: data.question,\n  outcome: data.outcome,\n  confidence: data.confidence_score,\n  auto_resolved: data.can_auto_resolve,\n  needs_manual_review: data.needs_manual_review,\n  reasoning: data.reasoning,\n  sources_count: data.sources?.length || 0,\n  timestamp: new Date().toISOString()\n};\n\nreturn { json: result };"
+      },
+      "id": "format-result",
+      "name": "Format Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2010, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}"
+      },
+      "id": "respond-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2230, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [{ "node": "Extract Market Data", "type": "main", "index": 0 }]
+      ]
+    },
+    "Extract Market Data": {
+      "main": [
+        [
+          { "node": "Google Search BD", "type": "main", "index": 0 },
+          { "node": "Google Search Intl", "type": "main", "index": 0 },
+          { "node": "NewsAPI Bengali", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Google Search BD": {
+      "main": [
+        [{ "node": "Combine Sources", "type": "main", "index": 0 }]
+      ]
+    },
+    "Google Search Intl": {
+      "main": [
+        [{ "node": "Combine Sources", "type": "main", "index": 0 }]
+      ]
+    },
+    "NewsAPI Bengali": {
+      "main": [
+        [{ "node": "Combine Sources", "type": "main", "index": 0 }]
+      ]
+    },
+    "Combine Sources": {
+      "main": [
+        [{ "node": "Gemini AI Analysis", "type": "main", "index": 0 }]
+      ]
+    },
+    "Gemini AI Analysis": {
+      "main": [
+        [{ "node": "Parse AI Response", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [{ "node": "Check Confidence", "type": "main", "index": 0 }]
+      ]
+    },
+    "Check Confidence": {
+      "main": [
+        [{ "node": "Save to Supabase", "type": "main", "index": 0 }]
+      ]
+    },
+    "Save to Supabase": {
+      "main": [
+        [{ "node": "Format Result", "type": "main", "index": 0 }]
+      ]
+    },
+    "Format Result": {
+      "main": [
+        [{ "node": "Respond to Webhook", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [
+    { "name": "plokymarket", "id": "tag-plokymarket" },
+    { "name": "oracle", "id": "tag-oracle" },
+    { "name": "ai", "id": "tag-ai" }
+  ]
+}

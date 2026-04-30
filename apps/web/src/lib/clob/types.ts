@@ -1,0 +1,115 @@
+import { DoublyLinkedList } from './ds/DoublyLinkedList';
+
+export type Side = "buy" | "sell" | "bid" | "ask";
+export type OrderType = 'LIMIT' | 'MARKET' | 'limit' | 'market'; // Type wasn't specified in strict list but implied? "timeInForce" is. "type" field check? Req doesn't show "type". Wait. "timeInForce" is there. "type" is likely needed for logic. I will keep it but maybe default? User list didn't explicitly forbid extra fields but showed specific ones. I will keep existing "type" but fix "side".
+export type TimeInForce = 'GTC' | 'IOC' | 'FOK' | 'GTD' | 'gtc' | 'ioc' | 'fok' | 'gtd';
+export type OrderStatus =
+    | "open"
+    | "OPEN"  // Allow uppercase for compatibility
+    | "filled"
+    | "FILLED"
+    | "cancelled"
+    | "CANCELLED"
+    | "partially_filled"
+    | "PARTIALLY_FILLED"
+    | "expired"
+    | "EXPIRED"
+    | "cancelling"
+    | "CANCELLING"; // Ensure 'cancelling' is present to prevent state-transition errors
+export type STPFlag = 'none' | 'decrease' | 'cancel' | 'both';
+
+// Core Order Structure
+export interface Order {
+    id: string;                    // UUID v7
+    userId: string;
+    side: Side;
+    price: bigint;                 // Normalized to tick size
+    quantity: bigint;              // was size
+    remainingQuantity: bigint;     // was remaining
+    filledQuantity: bigint;        // was filled
+    createdAt: number;             // Nanosecond precision timestamp
+    timeInForce: TimeInForce;
+    stpFlag: STPFlag;              // was stpMode
+    status: OrderStatus;
+    cancelRequested: boolean;      // Soft cancel tracking
+
+    // Fields NOT in user spec but likely needed for logic:
+    marketId: string; // Essential for engine routing
+    type: OrderType;  // Limit vs Market essential? Or implied?
+    postOnly: boolean; // Common
+    updatedAt: number;
+
+    // Internal use for O(1) removal
+    _node?: any;
+}
+
+export interface OrderLevel {
+    price: bigint;
+    totalQuantity: bigint;
+    orderCount: number;
+    orders: DoublyLinkedList<Order>;
+    maxOrderId: string; // Debugging and audit reference
+    dirty: boolean;     // Reconciliation tracking
+    lastModified: number; // Unix timestamp (nanoseconds)
+}
+
+export interface MarketDataLevel {
+    price: number;
+    size: number;
+    total: number;
+}
+
+export interface OrderBookState {
+    marketId: string;
+    bids: MarketDataLevel[];
+    asks: MarketDataLevel[];
+    timestamp: number;
+}
+
+export interface Trade {
+    id: string;
+    marketId: string;
+    makerOrderId?: string;
+    takerOrderId?: string;
+    price: bigint;
+    size: bigint;
+    side: Side;
+    fee: bigint;
+    makerRebate: bigint;
+    createdAt: number;
+}
+
+export interface FillResult {
+    fills: Trade[];
+    remainingQuantity: bigint; // Renamed to match style
+    order: Order;
+}
+
+export type RiskCheckType =
+    | 'BALANCE'
+    | 'POSITION_LIMIT'
+    | 'RATE_LIMIT'
+    | 'MARKET_STATUS'
+    | 'SELF_TRADE'
+    | 'WASH_TRADING';
+
+export interface RiskValidationResult {
+    passed: boolean;
+    failedCheck?: RiskCheckType;
+    details?: Record<string, unknown>;
+    retryable: boolean;
+}
+
+export type UserTier = 'TIER_1' | 'TIER_2' | 'TIER_3';
+
+export interface RiskContext {
+    balance?: bigint; // Passed from external wallet service if available
+    position?: bigint; // Current position
+    openOrders?: number; // Count of open orders
+
+    // Position Limits
+    tier: UserTier;
+    totalNotional: bigint; // Current total exposure
+    correlatedExposure: bigint; // For delta-adjusted checks
+    portfolioVolatility: number; // For stress test (0-1 range or distinct metric)
+}

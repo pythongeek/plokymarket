@@ -1,0 +1,458 @@
+🔐 Financial Integrity
+Correction Plan — Prediction Market Platform
+Race Condition, Double-Spend & Wallet Integrity Fix (Vercel / Next.js)
+⚠️ গুরুত্বপূর্ণ নোট: এই plan-এ existing codebase থেকে কোনো কিছু delete করা হবে না। শুধুমাত্র নতুন SQL migration, নতুন TypeScript functions, এবং existing code-এর gaps fill করা হবে। সমস্ত fix Vercel serverless এবং Supabase-compatible।
+সমস্যার পূর্ণ চিত্র (Root Cause Analysis)
+আপনার codebase-এ মূলত ৩টি আলাদা layer-এ সমস্যা রয়েছে। এগুলো individually কম বিপজ্জনক মনে হলেও একসাথে মিলে real money loss এর কারণ হতে পারে:
+#
+File
+সমস্যা
+Severity
+Fix Step
+1
+orders/route.ts
+TOCTOU Race: balance check ও freeze_funds এর মধ্যে gap আছে
+🔴 Critical
+Step 2
+2
+010_wallet_system.sql
+settle_trade_cash এ FOR UPDATE lock নেই
+🔴 Critical
+Step 1
+3
+010_wallet_system.sql
+unfreeze_funds এ row lock নেই — negative balance possible
+🔴 Critical
+Step 1
+4
+010_wallet_system.sql
+wallet_transactions audit log table নেই
+🟠 High
+Step 1
+5
+wallet/service.ts
+processDeposit এ idempotency নেই — same txid দুবার process হবে
+🔴 Critical
+Step 3
+6
+useRealtimeBalance.ts
+Realtime subscription user_id filter করে না — অন্যের data দেখানোর risk
+🔴 Critical
+Step 4
+7
+useRealtimeBalance.ts
+Optimistic locking / version check নেই
+🟡 Medium
+Step 4
+8
+All
+Idempotency keys table নেই — network retry তে double execution
+🔴 Critical
+Step 5
+সবচেয়ে বিপজ্জনক হলো TOCTOU (Time-Of-Check to Time-Of-Use) vulnerability — যেখানে orders/route.ts এ প্রথমে balance check করা হয়, তারপর freeze_funds call করা হয়। এই দুই operation এর মাঝে millisecond-এর gap-এ দুটো concurrent request একই balance দুবার ব্যবহার করতে পারে।
+STEP 1: Database Foundation Fix — SQL Migration (011_integrity_fix.sql)
+এই step-এ আমরা নতুন একটি migration file তৈরি করব যেটা existing 010_wallet_system.sql-এর উপর নির্ভর করে। এখানে ৪টি কাজ করা হবে:
+১.ক — wallet_transactions Audit Log Table যোগ করা
+Existing code-এ wallet_balances আপডেট হয় কিন্তু কোনো immutable transaction log রাখা হয় না। এই table যোগ করলে ডেটার অমিল হলে ধরা পড়বে:
+-- File: supabase/migrations/011_integrity_fix.sql
+-- ১. Audit log — প্রতিটি wallet change এখানে record হবে
+CREATE TABLE IF NOT EXISTS wallet_transactions (
+  id            UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id       UUID NOT NULL REFERENCES auth.users(id),
+  amount        DECIMAL(36, 18) NOT NULL,
+  type          TEXT NOT NULL CHECK (type IN (
+                  'deposit','withdrawal','freeze',
+                  'unfreeze','trade_settle','refund')),
+  reference_id  TEXT,   -- txid / order_id / trade_id
+  balance_before DECIMAL(36, 18) NOT NULL,
+  balance_after  DECIMAL(36, 18) NOT NULL,
+  created_at    TIMESTAMPTZ DEFAULT NOW()
+);
+-- Fast lookups by user
+CREATE INDEX IF NOT EXISTS idx_wallet_tx_user
+  ON wallet_transactions(user_id, created_at DESC);
+১.খ — Idempotency Keys Table যোগ করা
+Network timeout হলে client retry করে — এতে same request দুবার execute হওয়ার risk থাকে। Idempotency key দিয়ে database নিজেই duplicate block করবে:
+-- ২. Idempotency keys — duplicate request block করার জন্য
+CREATE TABLE IF NOT EXISTS idempotency_keys (
+  key         TEXT PRIMARY KEY,
+  user_id     UUID NOT NULL REFERENCES auth.users(id),
+  operation   TEXT NOT NULL,
+  result      JSONB,
+  created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+-- ৩ দিন পর auto-expire (cron দিয়ে বা Supabase pg_cron দিয়ে)
+CREATE INDEX IF NOT EXISTS idx_idem_user
+  ON idempotency_keys(user_id, created_at);
+১.গ — settle_trade_cash এ Row Lock যোগ করা (CRITICAL)
+⚠️ Critical Gap: Existing settle_trade_cash function-এ buyer এবং seller উভয়ের row lock করা হয় না। Concurrent trade settlement এ এই function দুবার চললে ভুল balance হতে পারে। নিচের replacement function-টি existing function-এর পরিবর্তে যোগ করা হবে:
+-- ৩. settle_trade_cash — এখন row lock সহ, audit log সহ
+CREATE OR REPLACE FUNCTION settle_trade_cash(
+  p_buyer_id  UUID,
+  p_seller_id UUID,
+  p_amount    DECIMAL,
+  p_trade_id  TEXT DEFAULT NULL
+)
+RETURNS VOID LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  v_buyer_locked  DECIMAL;
+  v_seller_bal    DECIMAL;
+BEGIN
+  -- Deadlock এড়াতে সবসময় ছোট user_id আগে lock করতে হবে
+  IF p_buyer_id < p_seller_id THEN
+    SELECT locked_balance INTO v_buyer_locked
+      FROM wallets WHERE user_id = p_buyer_id FOR UPDATE;
+    SELECT balance INTO v_seller_bal
+      FROM wallets WHERE user_id = p_seller_id FOR UPDATE;
+  ELSE
+    SELECT balance INTO v_seller_bal
+      FROM wallets WHERE user_id = p_seller_id FOR UPDATE;
+    SELECT locked_balance INTO v_buyer_locked
+      FROM wallets WHERE user_id = p_buyer_id FOR UPDATE;
+  END IF;
+  -- Buyer: locked_balance থেকে কাটা (balance আগেই freeze করা আছে)
+  UPDATE wallets
+    SET locked_balance = locked_balance - p_amount,
+        updated_at = NOW()
+    WHERE user_id = p_buyer_id;
+  -- Seller: balance বাড়ানো
+  UPDATE wallets
+    SET balance = balance + p_amount,
+        updated_at = NOW()
+    WHERE user_id = p_seller_id;
+  -- Audit log
+  INSERT INTO wallet_transactions
+    (user_id, amount, type, reference_id, balance_before, balance_after)
+  VALUES
+    (p_buyer_id,  -p_amount, 'trade_settle', p_trade_id,
+     v_buyer_locked, v_buyer_locked - p_amount),
+    (p_seller_id,  p_amount, 'trade_settle', p_trade_id,
+     v_seller_bal,  v_seller_bal + p_amount);
+END;
+$$;
+১.ঘ — unfreeze_funds এ Row Lock ও Validation যোগ করা
+Existing unfreeze_funds-এ lock বা validation নেই। যদি ভুলভাবে দুবার call হয় তাহলে locked_balance negative হবে। নিচের version টি safer:
+-- ৪. unfreeze_funds — এখন validation সহ
+CREATE OR REPLACE FUNCTION unfreeze_funds(
+  p_user_id UUID,
+  p_amount  DECIMAL
+)
+RETURNS BOOLEAN LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  v_locked DECIMAL;
+BEGIN
+  SELECT locked_balance INTO v_locked
+    FROM wallets WHERE user_id = p_user_id FOR UPDATE;
+  IF v_locked IS NULL OR v_locked < p_amount THEN
+    RETURN FALSE;  -- পর্যাপ্ত locked fund নেই
+  END IF;
+  UPDATE wallets
+    SET balance        = balance + p_amount,
+        locked_balance = locked_balance - p_amount,
+        updated_at     = NOW()
+    WHERE user_id = p_user_id;
+  RETURN TRUE;
+END;
+$$;
+১.ঙ — Atomic Order + Freeze RPC (সবচেয়ে গুরুত্বপূর্ণ)
+এটি হলো TOCTOU vulnerability-র মূল সমাধান। একটি single RPC call-এই balance validation এবং fund freeze একসাথে atomic ভাবে করা হবে, যাতে check এবং freeze এর মাঝে কোনো gap না থাকে:
+-- ৫. place_order_atomic — balance check + freeze একটি transaction এ
+CREATE OR REPLACE FUNCTION place_order_atomic(
+  p_user_id        UUID,
+  p_market_id      UUID,
+  p_side           TEXT,
+  p_outcome        TEXT,
+  p_price          DECIMAL,
+  p_quantity       DECIMAL,
+  p_order_type     TEXT DEFAULT 'limit',
+  p_idempotency_key TEXT DEFAULT NULL
+)
+RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  v_balance     DECIMAL;
+  v_required    DECIMAL;
+  v_order_id    UUID;
+  v_existing    JSONB;
+BEGIN
+  -- Idempotency check: আগে এই key দিয়ে কোনো order হয়েছিল কিনা
+  IF p_idempotency_key IS NOT NULL THEN
+    SELECT result INTO v_existing FROM idempotency_keys
+      WHERE key = p_idempotency_key AND user_id = p_user_id;
+    IF FOUND THEN RETURN v_existing; END IF;
+  END IF;
+  v_required := p_price * p_quantity;
+  -- Row-level lock নিয়ে balance check
+  SELECT balance INTO v_balance
+    FROM wallets WHERE user_id = p_user_id FOR UPDATE;
+  IF v_balance IS NULL OR v_balance < v_required THEN
+    RETURN jsonb_build_object('error', 'Insufficient balance');
+  END IF;
+  -- Fund freeze (এখন কোনো race নেই, row already locked)
+  IF p_side = 'buy' THEN
+    UPDATE wallets
+      SET balance        = balance - v_required,
+          locked_balance = locked_balance + v_required,
+          updated_at     = NOW()
+      WHERE user_id = p_user_id;
+  END IF;
+  -- Order insert
+  INSERT INTO orders
+    (user_id, market_id, side, outcome, order_type,
+     price, quantity, filled_quantity, status)
+  VALUES
+    (p_user_id, p_market_id, p_side, p_outcome, p_order_type,
+     p_price, p_quantity, 0, 'open')
+  RETURNING id INTO v_order_id;
+  -- Idempotency key save
+  IF p_idempotency_key IS NOT NULL THEN
+    INSERT INTO idempotency_keys (key, user_id, operation, result)
+    VALUES (p_idempotency_key, p_user_id, 'place_order',
+      jsonb_build_object('success', true, 'order_id', v_order_id))
+    ON CONFLICT (key) DO NOTHING;
+  END IF;
+  RETURN jsonb_build_object('success', true, 'order_id', v_order_id);
+END;
+$$;
+✅ Step 1 Complete: Migration file তৈরি হলে এটি supabase/migrations/011_integrity_fix.sql হিসেবে save করুন এবং supabase db push দিয়ে apply করুন।
+STEP 2: orders/route.ts — TOCTOU Fix (Atomic RPC ব্যবহার)
+Existing orders/route.ts-এ POST handler-এ প্রথমে balance check হয়, তারপর আলাদাভাবে freeze_funds call হয়। এই ২টি operation এর মাঝে race window আছে। এখন নতুন place_order_atomic RPC ব্যবহার করে পুরো flow single call এ করা হবে।
+Existing file-এ balance check block ও freeze_funds block replace করতে হবে। বাকি সব code (validation, activity log, cache invalidation) অপরিবর্তিত থাকবে।
+Existing Code — পরিবর্তিত হবে (লাল section)
+// ❌ BEFORE — Race condition vulnerable (orders/route.ts)
+// এই দুটো separate call এর মাঝে gap আছে:
+const { data: wallet } = await supabase
+  .from('wallets').select('*')
+  .eq('user_id', user.id).single();
+if (!wallet || wallet.balance < requiredFunds) { ... }
+// এখানে অন্য request এসে balance নিয়ে যেতে পারে!
+if (side === 'buy') {
+  const { error: lockError } = await supabase.rpc('freeze_funds', {
+    p_user_id: user.id, p_amount: requiredFunds
+  });
+}
+const { data: order, error: orderError } = await supabase
+  .from('orders').insert({ ... }).select().single();
+Fixed Code — Atomic RPC ব্যবহার (সবুজ section)
+Existing file-এর POST handler-এ // Check the user's wallet থেকে // Trigger the matching engine পর্যন্ত অংশটি নিচের code দিয়ে replace করুন:
+// ✅ AFTER — apps/web/src/app/api/orders/route.ts এ এই section replace করুন
+// (Existing validation, auth, activity log code অপরিবর্তিত থাকবে)
+// Idempotency key — client থেকে পাঠানো, না হলে generate করুন
+const idempotencyKey = body.idempotency_key ||
+  `order-${user.id}-${Date.now()}`;
+// ✅ SINGLE ATOMIC RPC — balance check + freeze + order insert
+// এখন আর কোনো race condition নেই
+const { data: result, error: atomicError } = await supabase
+  .rpc('place_order_atomic', {
+    p_user_id:         user.id,
+    p_market_id:       market_id,
+    p_side:            side,
+    p_outcome:         outcome,
+    p_price:           price,
+    p_quantity:        quantity,
+    p_order_type:      order_type,
+    p_idempotency_key: idempotencyKey,
+  });
+if (atomicError || result?.error) {
+  return NextResponse.json(
+    { error: result?.error || 'Order placement failed' },
+    { status: result?.error === 'Insufficient balance' ? 400 : 500 }
+  );
+}
+const orderId = result.order_id;
+// Trigger matching engine (existing code অপরিবর্তিত)
+await supabase.rpc('match_order', { p_order_id: orderId });
+📌 Note: Existing freeze_funds, unfreeze_funds RPC call এবং manual order insert — সব replace হয়ে যাবে এই একটি atomic call দিয়ে। Rollback এখন database-level এ handle হবে।
+STEP 3: wallet/service.ts — Deposit Idempotency Fix
+Existing PaymentVerificationService.processDeposit method-এ একই txid দিয়ে দুবার call করলে ব্যালেন্স দুবার বাড়বে। কারণ process_deposit_tx RPC-তে duplicate check নেই।
+Database-এ process_deposit_tx RPC Update করুন
+Supabase-এ এই নতুন function যোগ করুন যা 011_integrity_fix.sql-এর idempotency_keys table ব্যবহার করবে:
+-- supabase/migrations/011_integrity_fix.sql এ যোগ করুন
+CREATE OR REPLACE FUNCTION process_deposit_tx(
+  p_user_id UUID,
+  p_amount  DECIMAL,
+  p_txid    TEXT
+)
+RETURNS BOOLEAN LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  v_balance DECIMAL;
+BEGIN
+  -- Idempotency: একই txid আগে process হয়েছে কিনা
+  IF EXISTS (
+    SELECT 1 FROM idempotency_keys
+    WHERE key = 'deposit-' || p_txid
+  ) THEN
+    RETURN TRUE;  -- Already processed, safe to return
+  END IF;
+  -- Balance lock নিয়ে update
+  SELECT balance INTO v_balance
+    FROM wallets WHERE user_id = p_user_id FOR UPDATE;
+  UPDATE wallets
+    SET balance    = balance + p_amount,
+        updated_at = NOW()
+    WHERE user_id = p_user_id;
+  -- Audit log
+  INSERT INTO wallet_transactions
+    (user_id, amount, type, reference_id, balance_before, balance_after)
+  VALUES
+    (p_user_id, p_amount, 'deposit', p_txid,
+     v_balance, v_balance + p_amount);
+  -- Idempotency key save
+  INSERT INTO idempotency_keys (key, user_id, operation, result)
+  VALUES ('deposit-' || p_txid, p_user_id, 'deposit',
+    jsonb_build_object('amount', p_amount))
+  ON CONFLICT (key) DO NOTHING;
+  RETURN TRUE;
+END;
+$$;
+✅ wallet/service.ts পরিবর্তন: TypeScript service.ts file-এ কোনো পরিবর্তন দরকার নেই। processDeposit method টি এখনো supabase.rpc('process_deposit_tx', ...) call করবে — শুধু database function টি এখন idempotent।
+STEP 4: useRealtimeBalance.ts — Security & Optimistic Lock Fix
+🔴 Security Bug: Existing subscription-এ table: 'wallets' filter করা হয় কিন্তু user_id filter নেই। এর মানে হলো যেকোনো user-এর wallet update হলে সবাই সেই data পাবে। নিচের পরিবর্তনগুলো existing useRealtimeBalance.ts-এ করতে হবে:
+Security Fix: User-ID Filter যোগ করুন
+// apps/web/src/hooks/useRealtimeBalance.ts
+// EXISTING useEffect এর channel subscription অংশ replace করুন:
+useEffect(() => {
+  let userId: string | null = null;
+  const init = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    userId = user.id;
+    await fetchBalance();
+    // ✅ FIX: user_id দিয়ে filter — অন্যের data আসবে না
+    const channel = supabase
+      .channel(`wallet:${user.id}`)   // unique channel per user
+      .on('postgres_changes', {
+        event:  '*',
+        schema: 'public',
+        table:  'wallets',
+        filter: `user_id=eq.${user.id}`,  // ← এটাই মূল fix
+      },
+      (payload: any) => {
+        if (payload.new) {
+          // ✅ Optimistic lock: server data যদি আরো নতুন হয় তাহলেই update
+          setBalance(prev => {
+            const incoming = payload.new as WalletBalance;
+            if (!prev) return incoming;
+            // updated_at compare করে stale update ignore করুন
+            const prevTime = (prev as any).updated_at || '';
+            const newTime  = (incoming as any).updated_at || '';
+            if (newTime >= prevTime) {
+              setSyncing(false);
+              return incoming;
+            }
+            return prev;  // পুরনো data ignore
+          });
+        }
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  };
+  const cleanup = init();
+  return () => { cleanup.then(fn => fn && fn()); };
+}, [fetchBalance, supabase]);
+Syncing State যোগ করুন
+Existing hook-এর useState section-এ শুধু একটি নতুন state যোগ করুন এবং return value-এ include করুন:
+// Existing useState এর পরে এটি যোগ করুন:
+const [syncing, setSyncing] = useState(false);
+// Order place করার আগে call করুন:
+// setSyncing(true) — UI তে 'Syncing...' দেখাবে
+// Existing return statement update করুন:
+return {
+  balance,
+  loading,
+  error,
+  syncing,           // ← নতুন
+  setSyncing,        // ← নতুন (order place button থেকে call করুন)
+  refreshBalance,
+  availableBalance: (balance?.usdt_balance || 0) - (balance?.locked_usdt || 0),
+};
+STEP 5: Frontend — Idempotency Key Integration (Order Placement)
+Client side থেকে order place করার সময় প্রতিটি request-এ একটি unique idempotency key পাঠাতে হবে। এতে network retry বা double-click এর ক্ষেত্রে server same order দুবার create করবে না।
+Order Placement Component-এ Key Generation
+আপনার trade form বা order placement component যেখানেই থাকুক, সেখানে নিচের pattern follow করুন:
+// apps/web/src/components/trading/OrderForm.tsx (বা equivalent)
+// Existing import এর সাথে যোগ করুন:
+import { v4 as uuidv4 } from 'uuid';
+// Existing state এর পাশে:
+const [idempotencyKey, setIdempotencyKey] = useState(uuidv4());
+// Order submit handler (existing handleSubmit function এ যোগ করুন):
+const handleSubmit = async () => {
+  setSyncing(true);  // useRealtimeBalance থেকে
+  const response = await fetch('/api/orders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      market_id, side, outcome, price, quantity,
+      idempotency_key: idempotencyKey,  // ← নতুন field যোগ করুন
+    }),
+  });
+  if (response.ok) {
+    // Success হলে নতুন key generate করুন পরের order এর জন্য
+    setIdempotencyKey(uuidv4());
+  }
+  // Error হলে same key রাখুন — retry safe হবে
+};
+STEP 6: Concurrency Stress Test — Verification
+Fix করার পর verify করতে হবে যে race condition সত্যিই ঠিক হয়েছে। নিচের test script টি একই ওয়ালেট থেকে ১০টি concurrent request পাঠাবে:
+// scripts/stress-test-wallet.ts
+// npm install @supabase/supabase-js — already installed
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+async function stressTestWallet(userId: string) {
+  const { createClient } = await import('@supabase/supabase-js');
+  const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
+  // Initial balance check
+  const { data: before } = await sb.from('wallets')
+    .select('balance').eq('user_id', userId).single();
+  console.log('Before:', before?.balance);
+  // ১০টি concurrent freeze request (৫০ টাকা করে)
+  const requests = Array(10).fill(null).map((_, i) =>
+    sb.rpc('freeze_funds', { p_user_id: userId, p_amount: 50 })
+      .then(r => ({ index: i, success: !r.error, data: r.data }))
+  );
+  const results = await Promise.all(requests);
+  const successCount = results.filter(r => r.success && r.data).length;
+  console.log(`Successful freezes: ${successCount}/10`);
+  const { data: after } = await sb.from('wallets')
+    .select('balance, locked_balance').eq('user_id', userId).single();
+  console.log('After balance:', after?.balance);
+  console.log('After locked:', after?.locked_balance);
+  // ✅ Expected: balance + locked_balance === initial balance
+  const intact = parseFloat(before?.balance) ===
+    parseFloat(after?.balance) + parseFloat(after?.locked_balance);
+  console.log(intact ? '✅ Financial integrity maintained' :
+                       '❌ INTEGRITY VIOLATION DETECTED');
+}
+STEP 7: Deployment Checklist — Vercel + Supabase
+সমস্ত fix apply করার পর নিচের deployment steps follow করুন। Vercel serverless environment-এ কোনো connection pooling issue না হয় সেজন্য বিশেষ সতর্কতা রাখা হয়েছে:
+# ১. Migration apply করুন
+supabase db push
+# ২. Migration সফল হয়েছে কিনা verify করুন
+supabase db diff
+# ৩. RPC functions exist করে কিনা test করুন
+supabase functions list
+# ৪. uuid package add করুন (idempotency key generation)
+npm install uuid
+npm install --save-dev @types/uuid
+# ৫. Vercel এ deploy
+vercel --prod
+🔒 Supabase RLS Policy: wallets table-এ Row Level Security (RLS) ensure করুন যাতে authenticated user শুধু নিজের row read/write করতে পারে: ALTER TABLE wallets ENABLE ROW LEVEL SECURITY; — এবং appropriate policy add করুন।
+সম্পূর্ণ পরিবর্তনের Summary
+File/Location
+পরিবর্তনের ধরন
+কী যোগ/পরিবর্তন হলো
+migrations/011_integrity_fix.sql
+নতুন file তৈরি
+wallet_transactions, idempotency_keys tables; settle_trade_cash, unfreeze_funds, process_deposit_tx, place_order_atomic functions
+apps/web/src/app/api/orders/route.ts
+Existing POST handler update
+Balance check + freeze_funds → place_order_atomic single RPC; idempotency_key support
+apps/web/src/hooks/useRealtimeBalance.ts
+Existing hook update
+user_id filter যোগ; syncing state; optimistic lock comparison
+apps/web/src/components/trading/OrderForm.tsx
+Client code addition
+idempotency_key generation এবং submission
+scripts/stress-test-wallet.ts
+নতুন test script
+Concurrent request test for race condition verification
+এই plan সম্পূর্ণভাবে follow করলে আপনার prediction market platform-এ financial double-spending, race conditions, এবং duplicate deposit সমস্যাগুলো দূর হবে। সবচেয়ে গুরুত্বপূর্ণ হলো place_order_atomic — এই একটি change-ই TOCTOU vulnerability সম্পূর্ণ eliminate করে এবং Bangladeshi টাকা ও USDT উভয়ের জন্য safe।

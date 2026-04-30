@@ -1,0 +1,31 @@
+# Cloud Build configuration for Google Cloud Run
+steps:
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/plokymarket-web', '.']
+  
+  # Push the container image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/plokymarket-web']
+  
+  # Deploy container image to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'plokymarket-web'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/plokymarket-web'
+      - '--region'
+      - 'asia-south1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--set-env-vars'
+      - 'GOOGLE_CLOUD_PROJECT=$PROJECT_ID,VERTEX_LOCATION=asia-south1'
+      - '--service-account'
+      - 'vertex-express@gen-lang-client-0578182636.iam.gserviceaccount.com'
+
+images:
+  - 'gcr.io/$PROJECT_ID/plokymarket-web'

@@ -1,0 +1,187 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e6]:
+          - img [ref=e7]
+          - generic [ref=e9]: SYS-CMD
+          - generic [ref=e10]: ⭐ SUPER ADMIN
+        - generic [ref=e11]:
+          - generic [ref=e12]:
+            - img [ref=e13]
+            - generic [ref=e16]: HEALTHY
+          - generic [ref=e17]: admin@plokymarket.bd
+          - button "Exit" [ref=e18] [cursor=pointer]:
+            - img
+            - text: Exit
+    - generic [ref=e19]:
+      - complementary [ref=e20]:
+        - navigation [ref=e21]:
+          - button "ড্যাশবোর্ড Dashboard" [ref=e22] [cursor=pointer]:
+            - img [ref=e23]
+            - generic [ref=e25]:
+              - generic [ref=e26]: ড্যাশবোর্ড
+              - generic [ref=e27]: Dashboard
+          - button "মার্কেট কন্ট্রোল Market Control" [ref=e28] [cursor=pointer]:
+            - img [ref=e29]
+            - generic [ref=e32]:
+              - generic [ref=e33]: মার্কেট কন্ট্রোল
+              - generic [ref=e34]: Market Control
+          - button "ব্যবহারকারী ব্যবস্থাপনা User Management" [ref=e35] [cursor=pointer]:
+            - img [ref=e36]
+            - generic [ref=e41]:
+              - generic [ref=e42]: ব্যবহারকারী ব্যবস্থাপনা
+              - generic [ref=e43]: User Management
+          - button "বিশ্লেষণ Analytics" [ref=e44] [cursor=pointer]:
+            - img [ref=e45]
+            - generic [ref=e47]:
+              - generic [ref=e48]: বিশ্লেষণ
+              - generic [ref=e49]: Analytics
+          - button "ইভেন্ট তালিকা Events" [ref=e50] [cursor=pointer]:
+            - img [ref=e51]
+            - generic [ref=e53]:
+              - generic [ref=e54]: ইভেন্ট তালিকা
+              - generic [ref=e55]: Events
+          - button "রেজোলিউশন Resolution" [ref=e56] [cursor=pointer]:
+            - img [ref=e57]
+            - generic [ref=e63]:
+              - generic [ref=e64]: রেজোলিউশন
+              - generic [ref=e65]: Resolution
+          - button "রেজোলিউশন সিস্টেম Resolution System" [ref=e66] [cursor=pointer]:
+            - img [ref=e67]
+            - generic [ref=e73]:
+              - generic [ref=e74]: রেজোলিউশন সিস্টেম
+              - generic [ref=e75]: Resolution System
+          - button "দৈনিক টপিক্স Daily Topics" [ref=e76] [cursor=pointer]:
+            - img [ref=e77]
+            - generic [ref=e79]:
+              - generic [ref=e80]: দৈনিক টপিক্স
+              - generic [ref=e81]: Daily Topics
+          - button "AI কনফিগ AI Configs" [ref=e82] [cursor=pointer]:
+            - img [ref=e83]
+            - generic [ref=e86]:
+              - generic [ref=e87]: AI কনফিগ
+              - generic [ref=e88]: AI Configs
+          - button "KYC যাচাইকরণ KYC Verification" [ref=e89] [cursor=pointer]:
+            - img [ref=e90]
+            - generic [ref=e93]:
+              - generic [ref=e94]: KYC যাচাইকরণ
+              - generic [ref=e95]: KYC Verification
+          - button "P2P ব্যবস্থাপনা P2P Management" [ref=e96] [cursor=pointer]:
+            - img [ref=e97]
+            - generic [ref=e100]:
+              - generic [ref=e101]: P2P ব্যবস্থাপনা
+              - generic [ref=e102]: P2P Management
+          - button "ডিপোজিট সেটিংস Deposit Settings" [ref=e103] [cursor=pointer]:
+            - img [ref=e104]
+            - generic [ref=e107]:
+              - generic [ref=e108]: ডিপোজিট সেটিংস
+              - generic [ref=e109]: Deposit Settings
+          - button "ডিপোজিট ম্যানেজমেন্ট Deposits" [ref=e110] [cursor=pointer]:
+            - img [ref=e111]
+            - generic [ref=e113]:
+              - generic [ref=e114]: ডিপোজিট ম্যানেজমেন্ট
+              - generic [ref=e115]: Deposits
+          - button "ওয়ার্কফ্লো Workflows" [ref=e116] [cursor=pointer]:
+            - img [ref=e117]
+            - generic [ref=e121]:
+              - generic [ref=e122]: ওয়ার্কফ্লো
+              - generic [ref=e123]: Workflows
+          - generic [ref=e125]:
+            - img [ref=e126]
+            - generic [ref=e129]: Money Operator
+          - button "USDT ড্যাশবোর্ড USDT Dashboard" [ref=e131] [cursor=pointer]:
+            - img [ref=e132]
+            - generic [ref=e134]:
+              - generic [ref=e135]: USDT ড্যাশবোর্ড
+              - generic [ref=e136]: USDT Dashboard
+          - button "ইউজার ম্যানেজমেন্ট User Management" [ref=e137] [cursor=pointer]:
+            - img [ref=e138]
+            - generic [ref=e143]:
+              - generic [ref=e144]: ইউজার ম্যানেজমেন্ট
+              - generic [ref=e145]: User Management
+          - button "ট্রানজেকশন লগ Transactions" [ref=e146] [cursor=pointer]:
+            - img [ref=e147]
+            - generic [ref=e151]:
+              - generic [ref=e152]: ট্রানজেকশন লগ
+              - generic [ref=e153]: Transactions
+          - button "রেট সেটিংস Rate Settings" [ref=e154] [cursor=pointer]:
+            - img [ref=e155]
+            - generic [ref=e158]:
+              - generic [ref=e159]: রেট সেটিংস
+              - generic [ref=e160]: Rate Settings
+        - generic [ref=e162]:
+          - img [ref=e163]
+          - generic [ref=e165]:
+            - paragraph [ref=e166]: 🔒 নিরাপদ সেশন
+            - paragraph [ref=e167]: All actions are logged and monitored.
+            - paragraph [ref=e168]: "Session: 7:08:17 PM"
+      - main [ref=e169]:
+        - generic [ref=e171]:
+          - generic [ref=e172]:
+            - generic [ref=e173]:
+              - heading "মার্কেট ব্যবস্থাপনা" [level=1] [ref=e174]
+              - paragraph [ref=e175]: Market Creation & Quality Gate Management
+            - button "নতুন মার্কেট তৈরি করুন" [ref=e176] [cursor=pointer]:
+              - img
+              - text: নতুন মার্কেট তৈরি করুন
+          - generic [ref=e177]:
+            - generic [ref=e181]:
+              - generic [ref=e182]:
+                - paragraph [ref=e183]: মোট খসড়া
+                - paragraph [ref=e184]: "0"
+                - paragraph [ref=e185]: Total Drafts
+              - img [ref=e187]
+            - generic [ref=e193]:
+              - generic [ref=e194]:
+                - paragraph [ref=e195]: পর্যালোচনা মুলতুবি
+                - paragraph [ref=e196]: "0"
+                - paragraph [ref=e197]: Pending Review
+              - img [ref=e199]
+            - generic [ref=e205]:
+              - generic [ref=e206]:
+                - paragraph [ref=e207]: স্থাপিত
+                - paragraph [ref=e208]: "0"
+                - paragraph [ref=e209]: Deployed
+              - img [ref=e211]
+            - generic [ref=e217]:
+              - generic [ref=e218]:
+                - paragraph [ref=e219]: প্রত্যাখ্যাত
+                - paragraph [ref=e220]: "0"
+                - paragraph [ref=e221]: Rejected
+              - img [ref=e223]
+          - generic [ref=e227]:
+            - tablist [ref=e228]:
+              - tab "খসড়া ও মার্কেট" [selected] [ref=e229] [cursor=pointer]:
+                - img
+                - text: খসড়া ও মার্কেট
+              - tab "লাইভ মার্কেট 0" [ref=e230] [cursor=pointer]:
+                - img
+                - text: লাইভ মার্কেট
+                - generic [ref=e231]: "0"
+              - tab "আইনি পর্যালোচনা" [ref=e232] [cursor=pointer]:
+                - img
+                - text: আইনি পর্যালোচনা
+            - tabpanel "খসড়া ও মার্কেট" [ref=e233]:
+              - generic [ref=e234]:
+                - generic [ref=e235]:
+                  - img [ref=e236]
+                  - textbox "মার্কেট খুঁজুন... (Search markets)" [ref=e239]
+                - combobox [ref=e240] [cursor=pointer]:
+                  - img
+                  - generic: সকল স্ট্যাটাস
+                  - img
+                - button [ref=e241] [cursor=pointer]:
+                  - img
+              - generic [ref=e242]:
+                - img [ref=e243]
+                - paragraph [ref=e246]: কোনো মার্কেট খসড়া পাওয়া যায়নি
+                - paragraph [ref=e247]: No market drafts found
+                - button "প্রথম মার্কেট তৈরি করুন" [ref=e248] [cursor=pointer]:
+                  - img
+                  - text: প্রথম মার্কেট তৈরি করুন
+  - alert [ref=e249]
+```

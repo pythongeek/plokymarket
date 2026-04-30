@@ -1,0 +1,1117 @@
+-- ============================================================
+-- PLOKYMARKET DATABASE SCHEMA - SUPABASE AUTH INTEGRATED
+-- Production-ready for Supabase hosted PostgreSQL
+-- ============================================================
+
+-- ===================================
+-- PART 1: EXTENSIONS
+-- ===================================
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- ===================================
+-- PART 2: ENUMS
+-- ===================================
+DO $$ BEGIN
+    CREATE TYPE market_status AS ENUM ('active', 'closed', 'resolved', 'cancelled');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE outcome_type AS ENUM ('YES', 'NO');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE order_type AS ENUM ('limit', 'market');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE order_side AS ENUM ('buy', 'sell');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE order_status AS ENUM ('open', 'partially_filled', 'filled', 'cancelled');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE transaction_type AS ENUM ('deposit', 'withdrawal', 'trade_buy', 'trade_sell', 'settlement', 'refund');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE oracle_status AS ENUM ('pending', 'verified', 'disputed', 'finalized');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE payment_status AS ENUM ('pending', 'completed', 'failed', 'refunded');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE payment_method AS ENUM ('bkash', 'nagad', 'bank_transfer');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+-- ===================================
+-- PART 3: TABLES (Supabase Auth Integrated)
+-- ===================================
+
+-- Users table (linked to Supabase Auth)
+CREATE TABLE IF NOT EXISTS public.users (
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    email TEXT UNIQUE NOT NULL,
+    phone TEXT UNIQUE,
+    full_name TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    is_admin BOOLEAN DEFAULT FALSE,
+    kyc_verified BOOLEAN DEFAULT FALSE
+);
+
+-- Wallets table
+CREATE TABLE IF NOT EXISTS public.wallets (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
+    balance NUMERIC(12, 2) DEFAULT 0 CHECK (balance >= 0),
+    locked_balance NUMERIC(12, 2) DEFAULT 0 CHECK (locked_balance >= 0),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(user_id)
+);
+
+-- Markets table
+-- Links to events via event_id column
+CREATE TABLE IF NOT EXISTS public.markets (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    question TEXT NOT NULL,
+    description TEXT,
+    category TEXT NOT NULL DEFAULT 'General',
+    source_url TEXT,
+    image_url TEXT,
+    creator_id UUID REFERENCES public.users(id),
+    status market_status DEFAULT 'active',
+    resolution_source TEXT,
+    min_price NUMERIC(5, 4) DEFAULT 0.0001 CHECK (min_price > 0),
+    max_price NUMERIC(5, 4) DEFAULT 0.9999 CHECK (max_price < 1),
+    tick_size NUMERIC(5, 4) DEFAULT 0.01,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    trading_closes_at TIMESTAMPTZ NOT NULL,
+    event_date TIMESTAMPTZ NOT NULL,
+    resolved_at TIMESTAMPTZ,
+    winning_outcome outcome_type,
+    resolution_details JSONB DEFAULT '{}',
+    total_volume NUMERIC(12, 2) DEFAULT 0,
+    yes_shares_outstanding BIGINT DEFAULT 0,
+    no_shares_outstanding BIGINT DEFAULT 0,
+    -- Extended columns from production
+    resolution_source_type VARCHAR(20) DEFAULT 'MANUAL',
+    resolution_data JSONB DEFAULT '{}',
+    fee_percent NUMERIC(5,2) DEFAULT 2.0,
+    initial_liquidity NUMERIC DEFAULT 0,
+    maker_rebate_percent NUMERIC(5,2) DEFAULT 0.05,
+    market_category VARCHAR(50) DEFAULT 'binary',
+    min_tick BIGINT DEFAULT 100,
+    max_tick BIGINT DEFAULT 10000,
+    current_tick BIGINT DEFAULT 100,
+    realized_volatility_24h NUMERIC(10,6) DEFAULT 0.02,
+    pending_tick_change JSONB DEFAULT '{}',
+    event_id UUID NOT NULL REFERENCES public.events(id) ON DELETE SET NULL,
+    resolution_source_url TEXT,
+    subcategory VARCHAR(50),
+    tags TEXT[] DEFAULT '{}',
+    slug VARCHAR(100),
+    answer_type VARCHAR(20) DEFAULT 'binary',
+    answer1 VARCHAR(100) DEFAULT 'হ্যাঁ (Yes)',
+    answer2 VARCHAR(100) DEFAULT 'না (No)',
+    is_featured BOOLEAN DEFAULT FALSE,
+    created_by UUID,
+    name VARCHAR(255),
+    liquidity NUMERIC DEFAULT 1000,
+    resolution_delay INTEGER DEFAULT 1440,
+    condition_id VARCHAR(255),
+    token1 VARCHAR(255),
+    token2 VARCHAR(255),
+    neg_risk BOOLEAN DEFAULT FALSE,
+    resolver_reference TEXT,
+    volume NUMERIC DEFAULT 0,
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    market_type VARCHAR(50) DEFAULT 'binary',
+    min_value NUMERIC(18,4),
+    max_value NUMERIC(18,4),
+    scalar_unit TEXT,
+    yes_price_change_24h NUMERIC(10,4) DEFAULT 0,
+    no_price_change_24h NUMERIC(10,4) DEFAULT 0,
+    unique_traders INTEGER DEFAULT 0,
+    close_warned BOOLEAN DEFAULT FALSE,
+    yes_price NUMERIC(10,4) DEFAULT 0.5,
+    no_price NUMERIC(10,4) DEFAULT 0.5,
+    trading_phase VARCHAR(50) DEFAULT 'CONTINUOUS',
+    next_phase_time TIMESTAMPTZ,
+    auction_data JSONB,
+    resolution_delay_hours INTEGER DEFAULT 24,
+    resolution_method VARCHAR(50) DEFAULT 'manual_admin',
+    volume_24h NUMERIC DEFAULT 0,
+    best_bid NUMERIC(5,4),
+    best_ask NUMERIC(5,4),
+    spread NUMERIC(5,4),
+    order_count INTEGER DEFAULT 0,
+    unique_traders_24h INTEGER DEFAULT 0,
+    last_trade_price NUMERIC(5,4),
+    last_trade_at TIMESTAMPTZ,
+    metadata JSONB DEFAULT '{}',
+    current_stage VARCHAR(100) DEFAULT 'created',
+    deployed_at TIMESTAMPTZ,
+    oracle_type VARCHAR(50) DEFAULT 'MANUAL',
+    legal_review_status VARCHAR(50),
+    legal_review_notes TEXT,
+    legal_reviewed_at TIMESTAMPTZ,
+    liquidity_commitment JSONB,
+    liquidity_deposited NUMERIC,
+    deployment_config JSONB,
+    deployment_tx_hash TEXT,
+    resolution_deadline TIMESTAMPTZ,
+    resolution_criteria TEXT,
+    risk_score INTEGER,
+    stages_completed INTEGER[],
+    trading_fee_percent NUMERIC(5,2),
+    confidence INTEGER,
+    trader_count INTEGER,
+    legal_reviewer_id UUID,
+    simulation_config JSONB,
+    simulation_results JSONB,
+    admin_bypass_legal_review BOOLEAN DEFAULT FALSE,
+    admin_bypass_liquidity BOOLEAN DEFAULT FALSE,
+    trading_ends TIMESTAMPTZ,
+    name_bn VARCHAR(255),
+    starts_at TIMESTAMPTZ,
+    ends_at TIMESTAMPTZ,
+    question_bn TEXT,
+    creator_address TEXT,
+    current_price_yes NUMERIC(10,4),
+    current_price_no NUMERIC(10,4)
+);
+
+-- Orders table
+CREATE TABLE IF NOT EXISTS public.orders (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    market_id UUID REFERENCES public.markets(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
+    order_type order_type NOT NULL,
+    side order_side NOT NULL,
+    outcome outcome_type NOT NULL,
+    price NUMERIC(5, 4) NOT NULL CHECK (price > 0 AND price < 1),
+    quantity BIGINT NOT NULL CHECK (quantity > 0),
+    filled_quantity BIGINT DEFAULT 0,
+    status order_status DEFAULT 'open',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    expires_at TIMESTAMPTZ
+);
+
+-- Trades table
+CREATE TABLE IF NOT EXISTS public.trades (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    market_id UUID REFERENCES public.markets(id) ON DELETE CASCADE,
+    buy_order_id UUID REFERENCES public.orders(id),
+    sell_order_id UUID REFERENCES public.orders(id),
+    outcome outcome_type NOT NULL,
+    price NUMERIC(5, 4) NOT NULL,
+    quantity BIGINT NOT NULL,
+    buyer_id UUID REFERENCES public.users(id),
+    seller_id UUID REFERENCES public.users(id),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Positions table
+-- NOTE: market_id references events(id), NOT markets(id)
+-- This is because the events table is the primary trading entity with price data
+-- The get_user_positions_v2 function joins positions.market_id -> events.id
+COMMENT ON TABLE positions IS 'User positions - market_id references events.id (not markets.id)';
+
+CREATE TABLE IF NOT EXISTS public.positions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    market_id UUID REFERENCES public.events(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
+    outcome outcome_type NOT NULL,
+    quantity BIGINT DEFAULT 0 CHECK (quantity >= 0),
+    average_price NUMERIC(5, 4),
+    realized_pnl NUMERIC(12, 2) DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(market_id, user_id, outcome)
+);
+
+-- Transactions table
+CREATE TABLE IF NOT EXISTS public.transactions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
+    type transaction_type NOT NULL,
+    amount NUMERIC(12, 2) NOT NULL,
+    balance_before NUMERIC(12, 2) NOT NULL,
+    balance_after NUMERIC(12, 2) NOT NULL,
+    order_id UUID REFERENCES public.orders(id),
+    trade_id UUID REFERENCES public.trades(id),
+    market_id UUID REFERENCES public.markets(id),
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Oracle Verifications table
+CREATE TABLE IF NOT EXISTS public.oracle_verifications (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    market_id UUID REFERENCES public.markets(id) ON DELETE CASCADE,
+    ai_result outcome_type,
+    ai_confidence NUMERIC(3, 2),
+    ai_reasoning TEXT,
+    scraped_data JSONB DEFAULT '{}',
+    admin_id UUID REFERENCES public.users(id),
+    admin_decision outcome_type,
+    admin_notes TEXT,
+    status oracle_status DEFAULT 'pending',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    finalized_at TIMESTAMPTZ
+);
+
+-- Payment Transactions table
+CREATE TABLE IF NOT EXISTS public.payment_transactions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
+    method payment_method NOT NULL,
+    amount NUMERIC(12, 2) NOT NULL CHECK (amount > 0),
+    status payment_status DEFAULT 'pending',
+    transaction_id TEXT UNIQUE,
+    sender_number TEXT,
+    receiver_number TEXT,
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    completed_at TIMESTAMPTZ
+);
+
+-- ===================================
+-- PART 4: INDEXES
+-- ===================================
+CREATE INDEX IF NOT EXISTS idx_orders_matching ON public.orders(market_id, outcome, side, status, price, created_at)
+    WHERE status IN ('open', 'partially_filled');
+CREATE INDEX IF NOT EXISTS idx_orders_user ON public.orders(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_orders_market_user ON public.orders(market_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_trades_market ON public.trades(market_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_trades_created ON public.trades(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_transactions_user ON public.transactions(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_positions_user_market ON public.positions(user_id, market_id);
+CREATE INDEX IF NOT EXISTS idx_markets_status ON public.markets(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_markets_category ON public.markets(category);
+CREATE INDEX IF NOT EXISTS idx_wallets_user ON public.wallets(user_id);
+CREATE INDEX IF NOT EXISTS idx_users_email ON public.users(email);
+
+-- ===================================
+-- PART 5: UTILITY FUNCTIONS
+-- ===================================
+
+-- Update timestamp function
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create triggers for updated_at
+DROP TRIGGER IF EXISTS update_users_updated_at ON public.users;
+CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON public.users
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_wallets_updated_at ON public.wallets;
+CREATE TRIGGER update_wallets_updated_at BEFORE UPDATE ON public.wallets
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_orders_updated_at ON public.orders;
+CREATE TRIGGER update_orders_updated_at BEFORE UPDATE ON public.orders
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_positions_updated_at ON public.positions;
+CREATE TRIGGER update_positions_updated_at BEFORE UPDATE ON public.positions
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Handle new user from Supabase Auth
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO public.users (id, email, full_name)
+    VALUES (
+        NEW.id,
+        NEW.email,
+        COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email)
+    )
+    ON CONFLICT (id) DO NOTHING;
+    
+    INSERT INTO public.wallets (user_id, balance, locked_balance)
+    VALUES (NEW.id, 1000, 0)
+    ON CONFLICT (user_id) DO NOTHING;
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Trigger for new auth user
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+    AFTER INSERT ON auth.users
+    FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- Calculate current YES/NO prices from order book
+CREATE OR REPLACE FUNCTION get_market_prices(p_market_id UUID)
+RETURNS TABLE(yes_price NUMERIC, no_price NUMERIC, yes_volume BIGINT, no_volume BIGINT) AS $$
+BEGIN
+    RETURN QUERY
+    WITH yes_orders AS (
+        SELECT 
+            COALESCE(MAX(CASE WHEN side = 'buy' THEN price END), 0) as best_yes_bid,
+            COALESCE(MIN(CASE WHEN side = 'sell' THEN price END), 1) as best_yes_ask,
+            COALESCE(SUM(CASE WHEN side = 'buy' THEN quantity - filled_quantity ELSE 0 END), 0) as yes_buy_volume,
+            COALESCE(SUM(CASE WHEN side = 'sell' THEN quantity - filled_quantity ELSE 0 END), 0) as yes_sell_volume
+        FROM public.orders
+        WHERE market_id = p_market_id 
+            AND outcome = 'YES'
+            AND status IN ('open', 'partially_filled')
+    ),
+    no_orders AS (
+        SELECT 
+            COALESCE(MAX(CASE WHEN side = 'buy' THEN price END), 0) as best_no_bid,
+            COALESCE(MIN(CASE WHEN side = 'sell' THEN price END), 1) as best_no_ask,
+            COALESCE(SUM(CASE WHEN side = 'buy' THEN quantity - filled_quantity ELSE 0 END), 0) as no_buy_volume,
+            COALESCE(SUM(CASE WHEN side = 'sell' THEN quantity - filled_quantity ELSE 0 END), 0) as no_sell_volume
+        FROM public.orders
+        WHERE market_id = p_market_id 
+            AND outcome = 'NO'
+            AND status IN ('open', 'partially_filled')
+    )
+    SELECT 
+        CASE 
+            WHEN y.best_yes_ask > 0 THEN LEAST(y.best_yes_ask, 1 - COALESCE(n.best_no_bid, 0))
+            ELSE 0.5
+        END as yes_price,
+        CASE 
+            WHEN n.best_no_ask > 0 THEN LEAST(n.best_no_ask, 1 - COALESCE(y.best_yes_bid, 0))
+            ELSE 0.5
+        END as no_price,
+        COALESCE(y.yes_buy_volume, 0) + COALESCE(y.yes_sell_volume, 0) as yes_volume,
+        COALESCE(n.no_buy_volume, 0) + COALESCE(n.no_sell_volume, 0) as no_volume
+    FROM yes_orders y, no_orders n;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Get order book for a market
+CREATE OR REPLACE FUNCTION get_orderbook(
+    p_market_id UUID, 
+    p_outcome outcome_type,
+    p_side order_side
+)
+RETURNS TABLE(price NUMERIC, quantity BIGINT, total BIGINT) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        o.price,
+        SUM(o.quantity - o.filled_quantity)::BIGINT as quantity,
+        SUM((o.quantity - o.filled_quantity) * o.price)::BIGINT as total
+    FROM public.orders o
+    WHERE o.market_id = p_market_id
+        AND o.outcome = p_outcome
+        AND o.side = p_side
+        AND o.status IN ('open', 'partially_filled')
+    GROUP BY o.price
+    ORDER BY 
+        CASE WHEN p_side = 'buy' THEN o.price END DESC,
+        CASE WHEN p_side = 'sell' THEN o.price END ASC;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ===================================
+-- PART 6: MATCHING ENGINE
+-- ===================================
+
+-- Match Order Function
+CREATE OR REPLACE FUNCTION match_order(p_order_id UUID)
+RETURNS TABLE(matched BOOLEAN, trades_created INT, remaining_quantity BIGINT) AS $$
+DECLARE
+    v_order RECORD;
+    v_match RECORD;
+    v_trade_quantity BIGINT;
+    v_trade_price NUMERIC(5, 4);
+    v_trades_count INT := 0;
+    v_remaining BIGINT;
+BEGIN
+    -- Lock and get the order
+    SELECT * INTO v_order
+    FROM public.orders
+    WHERE id = p_order_id
+    FOR UPDATE;
+    
+    IF NOT FOUND OR v_order.status NOT IN ('open', 'partially_filled') THEN
+        RETURN QUERY SELECT FALSE, 0, 0::BIGINT;
+        RETURN;
+    END IF;
+    
+    v_remaining := v_order.quantity - v_order.filled_quantity;
+    
+    WHILE v_remaining > 0 LOOP
+        IF v_order.side = 'buy' THEN
+            SELECT * INTO v_match
+            FROM public.orders
+            WHERE market_id = v_order.market_id
+              AND status IN ('open', 'partially_filled')
+              AND id != v_order.id
+              AND (
+                  (side = 'sell' AND outcome = v_order.outcome AND price <= v_order.price)
+                  OR
+                  (side = 'buy' 
+                   AND outcome != v_order.outcome 
+                   AND (price + v_order.price) <= 1.00)
+              )
+            ORDER BY 
+              CASE 
+                WHEN side = 'sell' THEN price
+                ELSE (1.00 - price)
+              END ASC,
+              created_at ASC
+            LIMIT 1
+            FOR UPDATE SKIP LOCKED;
+        ELSE
+            SELECT * INTO v_match
+            FROM public.orders
+            WHERE market_id = v_order.market_id
+              AND status IN ('open', 'partially_filled')
+              AND id != v_order.id
+              AND side = 'buy'
+              AND outcome = v_order.outcome
+              AND price >= v_order.price
+            ORDER BY price DESC, created_at ASC
+            LIMIT 1
+            FOR UPDATE SKIP LOCKED;
+        END IF;
+        
+        EXIT WHEN NOT FOUND;
+        
+        v_trade_quantity := LEAST(v_remaining, v_match.quantity - v_match.filled_quantity);
+        
+        IF v_order.created_at < v_match.created_at THEN
+            v_trade_price := v_order.price;
+        ELSE
+            v_trade_price := v_match.price;
+        END IF;
+        
+        -- Create trade
+        INSERT INTO public.trades (
+            market_id, buy_order_id, sell_order_id, outcome,
+            price, quantity, buyer_id, seller_id
+        ) VALUES (
+            v_order.market_id,
+            CASE WHEN v_order.side = 'buy' THEN v_order.id ELSE v_match.id END,
+            CASE WHEN v_order.side = 'sell' THEN v_order.id ELSE v_match.id END,
+            v_order.outcome,
+            v_trade_price,
+            v_trade_quantity,
+            CASE WHEN v_order.side = 'buy' THEN v_order.user_id ELSE v_match.user_id END,
+            CASE WHEN v_order.side = 'sell' THEN v_order.user_id ELSE v_match.user_id END
+        );
+        
+        -- Update orders
+        UPDATE public.orders SET 
+            filled_quantity = filled_quantity + v_trade_quantity,
+            status = CASE 
+                WHEN filled_quantity + v_trade_quantity >= quantity THEN 'filled'::order_status
+                ELSE 'partially_filled'::order_status
+            END
+        WHERE id = v_order.id;
+        
+        UPDATE public.orders SET 
+            filled_quantity = filled_quantity + v_trade_quantity,
+            status = CASE 
+                WHEN filled_quantity + v_trade_quantity >= quantity THEN 'filled'::order_status
+                ELSE 'partially_filled'::order_status
+            END
+        WHERE id = v_match.id;
+        
+        -- Update positions
+        PERFORM update_position(
+            CASE WHEN v_order.side = 'buy' THEN v_order.user_id ELSE v_match.user_id END,
+            v_order.market_id, v_order.outcome, v_trade_quantity, v_trade_price
+        );
+        
+        PERFORM update_position(
+            CASE WHEN v_order.side = 'sell' THEN v_order.user_id ELSE v_match.user_id END,
+            v_order.market_id, v_order.outcome, -v_trade_quantity, v_trade_price
+        );
+        
+        -- Process settlement
+        PERFORM process_trade_settlement(
+            CASE WHEN v_order.side = 'buy' THEN v_order.id ELSE v_match.id END,
+            CASE WHEN v_order.side = 'sell' THEN v_order.id ELSE v_match.id END,
+            v_trade_quantity, v_trade_price
+        );
+        
+        v_remaining := v_remaining - v_trade_quantity;
+        v_trades_count := v_trades_count + 1;
+    END LOOP;
+    
+    RETURN QUERY SELECT v_trades_count > 0, v_trades_count, v_remaining;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Position update helper
+CREATE OR REPLACE FUNCTION update_position(
+    p_user_id UUID, p_market_id UUID, p_outcome outcome_type,
+    p_quantity_delta BIGINT, p_price NUMERIC(5, 4)
+) RETURNS VOID AS $$
+DECLARE
+    v_position RECORD;
+BEGIN
+    SELECT * INTO v_position
+    FROM public.positions
+    WHERE user_id = p_user_id AND market_id = p_market_id AND outcome = p_outcome
+    FOR UPDATE;
+    
+    IF NOT FOUND THEN
+        INSERT INTO public.positions (user_id, market_id, outcome, quantity, average_price)
+        VALUES (p_user_id, p_market_id, p_outcome, p_quantity_delta, p_price);
+    ELSE
+        UPDATE public.positions SET 
+            quantity = quantity + p_quantity_delta,
+            average_price = CASE 
+                WHEN p_quantity_delta > 0 THEN
+                    (average_price * quantity + p_price * p_quantity_delta) / (quantity + p_quantity_delta)
+                ELSE average_price
+            END
+        WHERE user_id = p_user_id AND market_id = p_market_id AND outcome = p_outcome;
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trade settlement
+CREATE OR REPLACE FUNCTION process_trade_settlement(
+    p_buy_order_id UUID, p_sell_order_id UUID,
+    p_quantity BIGINT, p_price NUMERIC(5, 4)
+) RETURNS VOID AS $$
+DECLARE
+    v_buyer_id UUID;
+    v_seller_id UUID;
+    v_total_cost NUMERIC(12, 2);
+BEGIN
+    SELECT user_id INTO v_buyer_id FROM public.orders WHERE id = p_buy_order_id;
+    SELECT user_id INTO v_seller_id FROM public.orders WHERE id = p_sell_order_id;
+    
+    v_total_cost := p_quantity * p_price;
+    
+    -- Update buyer wallet
+    UPDATE public.wallets SET 
+        balance = balance - v_total_cost
+    WHERE user_id = v_buyer_id;
+    
+    -- Update seller wallet
+    UPDATE public.wallets SET 
+        balance = balance + v_total_cost
+    WHERE user_id = v_seller_id;
+    
+    -- Log transactions
+    INSERT INTO public.transactions (user_id, type, amount, balance_before, balance_after, order_id)
+    SELECT user_id, 'trade_buy'::transaction_type, -v_total_cost, 
+           balance + v_total_cost, balance, p_buy_order_id
+    FROM public.wallets WHERE user_id = v_buyer_id;
+    
+    INSERT INTO public.transactions (user_id, type, amount, balance_before, balance_after, order_id)
+    SELECT user_id, 'trade_sell'::transaction_type, v_total_cost, 
+           balance - v_total_cost, balance, p_sell_order_id
+    FROM public.wallets WHERE user_id = v_seller_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Market settlement
+CREATE OR REPLACE FUNCTION settle_market(p_market_id UUID, p_winning_outcome outcome_type)
+RETURNS TABLE(users_settled INT, total_payout NUMERIC(12, 2)) AS $$
+DECLARE
+    v_position RECORD;
+    v_payout NUMERIC(12, 2);
+    v_count INT := 0;
+    v_total NUMERIC(12, 2) := 0;
+BEGIN
+    UPDATE public.markets SET 
+        status = 'resolved'::market_status,
+        winning_outcome = p_winning_outcome,
+        resolved_at = NOW()
+    WHERE id = p_market_id;
+    
+    FOR v_position IN
+        SELECT user_id, outcome, quantity
+        FROM public.positions
+        WHERE market_id = p_market_id AND quantity > 0
+    LOOP
+        IF v_position.outcome = p_winning_outcome THEN
+            v_payout := v_position.quantity * 1.00;
+            
+            UPDATE public.wallets SET balance = balance + v_payout
+            WHERE user_id = v_position.user_id;
+            
+            INSERT INTO public.transactions (user_id, type, amount, balance_before, balance_after, market_id)
+            SELECT user_id, 'settlement'::transaction_type, v_payout,
+                   balance - v_payout, balance, p_market_id
+            FROM public.wallets WHERE user_id = v_position.user_id;
+            
+            v_total := v_total + v_payout;
+        END IF;
+        
+        v_count := v_count + 1;
+    END LOOP;
+    
+    RETURN QUERY SELECT v_count, v_total;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ===================================
+-- PART 7: ROW LEVEL SECURITY (RLS)
+-- ===================================
+
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.wallets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.positions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.payment_transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.markets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.trades ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.oracle_verifications ENABLE ROW LEVEL SECURITY;
+
+-- Users policies
+DROP POLICY IF EXISTS "Users can read own data" ON public.users;
+CREATE POLICY "Users can read own data" ON public.users FOR SELECT
+    USING (auth.uid() = id);
+DROP POLICY IF EXISTS "Users can update own data" ON public.users;  
+CREATE POLICY "Users can update own data" ON public.users FOR UPDATE
+    USING (auth.uid() = id);
+
+-- Wallets policies
+DROP POLICY IF EXISTS "Users can read own wallet" ON public.wallets;
+CREATE POLICY "Users can read own wallet" ON public.wallets FOR SELECT
+    USING (auth.uid() = user_id);
+
+-- Orders policies
+DROP POLICY IF EXISTS "Users can view own orders" ON public.orders;
+CREATE POLICY "Users can view own orders" ON public.orders FOR SELECT
+    USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users can create orders" ON public.orders;
+CREATE POLICY "Users can create orders" ON public.orders FOR INSERT
+    WITH CHECK (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users can cancel own orders" ON public.orders;
+CREATE POLICY "Users can cancel own orders" ON public.orders FOR UPDATE
+    USING (auth.uid() = user_id);
+
+-- Positions policies
+DROP POLICY IF EXISTS "Users can view own positions" ON public.positions;
+CREATE POLICY "Users can view own positions" ON public.positions FOR SELECT
+    USING (auth.uid() = user_id);
+
+-- Transactions policies
+DROP POLICY IF EXISTS "Users can view own transactions" ON public.transactions;
+CREATE POLICY "Users can view own transactions" ON public.transactions FOR SELECT
+    USING (auth.uid() = user_id);
+
+-- Markets policies (public read, admin write)
+DROP POLICY IF EXISTS "Anyone can read markets" ON public.markets;
+CREATE POLICY "Anyone can read markets" ON public.markets FOR SELECT
+    USING (true);
+DROP POLICY IF EXISTS "Admins can manage markets" ON public.markets;   
+CREATE POLICY "Admins can manage markets" ON public.markets FOR ALL
+    USING (EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND is_admin = true));
+
+-- Trades policies (public read)
+DROP POLICY IF EXISTS "Anyone can read trades" ON public.trades;
+CREATE POLICY "Anyone can read trades" ON public.trades FOR SELECT
+    USING (true);
+
+-- Payment transactions policies
+DROP POLICY IF EXISTS "Users can view own payments" ON public.payment_transactions;
+CREATE POLICY "Users can view own payments" ON public.payment_transactions FOR SELECT
+    USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users can create payments" ON public.payment_transactions;
+CREATE POLICY "Users can create payments" ON public.payment_transactions FOR INSERT
+    WITH CHECK (auth.uid() = user_id);
+
+-- Oracle verifications policies
+DROP POLICY IF EXISTS "Admins can manage oracle" ON public.oracle_verifications;
+CREATE POLICY "Admins can manage oracle" ON public.oracle_verifications FOR ALL
+    USING (EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND is_admin = true));
+
+-- ===================================
+-- PART 8: SAMPLE DATA FOR PRODUCTION
+-- ===================================
+
+-- Insert sample markets
+INSERT INTO public.markets (question, description, category, trading_closes_at, event_date, image_url)
+VALUES 
+    ('Will Bitcoin exceed $100,000 by end of 2026?', 'Prediction market for Bitcoin price reaching $100,000 USD before December 31, 2026', 'Crypto', NOW() + INTERVAL '180 days', NOW() + INTERVAL '365 days', 'https://images.unsplash.com/photo-1518546305927-5a555bb7020d?w=400'),
+    ('Will India win the 2026 T20 World Cup?', 'Cricket T20 World Cup winner prediction for 2026 tournament', 'Sports', NOW() + INTERVAL '60 days', NOW() + INTERVAL '90 days', 'https://images.unsplash.com/photo-1531415074968-036ba1b575da?w=400'),
+    ('Will AI pass the Turing test by 2027?', 'Prediction on AI capability to convincingly pass the Turing test', 'Technology', NOW() + INTERVAL '180 days', NOW() + INTERVAL '365 days', 'https://images.unsplash.com/photo-1677442136019-21780ecad995?w=400'),
+    ('Will SpaceX land humans on Mars by 2030?', 'Manned Mars mission prediction for SpaceX', 'Space', NOW() + INTERVAL '365 days', NOW() + INTERVAL '730 days', 'https://images.unsplash.com/photo-1614728894747-a83421e2b9c9?w=400'),
+    ('Will electric vehicles exceed 50% of new car sales by 2028?', 'EV market adoption prediction', 'Automotive', NOW() + INTERVAL '180 days', NOW() + INTERVAL '365 days', 'https://images.unsplash.com/photo-1593941707882-a5bba14938c7?w=400')
+ON CONFLICT DO NOTHING;
+
+-- Grant execute permissions on functions
+GRANT EXECUTE ON FUNCTION match_order(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_market_prices(UUID) TO authenticated, anon;
+GRANT EXECUTE ON FUNCTION get_orderbook(UUID, outcome_type, order_side) TO authenticated, anon;
+
+-- ===================================
+-- PART 9: EVENTS SYSTEM (Migration 142)
+-- ===================================
+
+-- Events table
+-- NOTE: This table has price columns (current_yes_price, current_no_price) for trading
+-- positions.market_id references events.id, and get_user_positions_v2 uses e.current_yes_price/e.current_no_price
+CREATE TABLE IF NOT EXISTS public.events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title TEXT NOT NULL,
+    slug TEXT UNIQUE NOT NULL,
+    question TEXT,
+    description TEXT,
+    ticker VARCHAR(20),
+    category VARCHAR(100) NOT NULL DEFAULT 'general',
+    subcategory VARCHAR(100),
+    tags JSONB DEFAULT '[]'::jsonb,
+    image_url TEXT,
+    thumbnail_url TEXT,
+    banner_url TEXT,
+    status VARCHAR(20) DEFAULT 'draft' CHECK (status IN ('draft', 'pending', 'active', 'paused', 'closed', 'resolved', 'cancelled')),
+    is_featured BOOLEAN DEFAULT FALSE,
+    is_trending BOOLEAN DEFAULT FALSE,
+    is_verified BOOLEAN DEFAULT FALSE,
+    answer_type VARCHAR(20) DEFAULT 'binary' CHECK (answer_type IN ('binary', 'multiple', 'scalar')),
+    answer1 VARCHAR(200) DEFAULT 'হ্যাঁ (Yes)',
+    answer2 VARCHAR(200) DEFAULT 'না (No)',
+    starts_at TIMESTAMPTZ DEFAULT NOW(),
+    ends_at TIMESTAMPTZ,
+    trading_opens_at TIMESTAMPTZ DEFAULT NOW(),
+    trading_closes_at TIMESTAMPTZ,
+    event_date TIMESTAMPTZ,
+    resolved_at TIMESTAMPTZ,
+    resolution_source TEXT,
+    resolution_method VARCHAR(50) DEFAULT 'manual_admin' CHECK (resolution_method IN ('manual_admin', 'ai_oracle', 'expert_panel', 'external_api', 'community_vote', 'hybrid')),
+    resolution_delay_hours INTEGER DEFAULT 24,
+    resolved_outcome INTEGER,
+    resolved_by UUID,
+    winning_token VARCHAR(100),
+    initial_liquidity NUMERIC DEFAULT 1000,
+    current_liquidity NUMERIC DEFAULT 1000,
+    total_volume NUMERIC DEFAULT 0,
+    total_trades INTEGER DEFAULT 0,
+    unique_traders INTEGER DEFAULT 0,
+    -- Price columns for trading (referenced by positions and get_user_positions_v2)
+    current_yes_price NUMERIC(5,4) DEFAULT 0.5000,
+    current_no_price NUMERIC(5,4) DEFAULT 0.5000,
+    price_24h_change NUMERIC(5,4) DEFAULT 0.0000,
+    condition_id VARCHAR(100),
+    token1 VARCHAR(100),
+    token2 VARCHAR(100),
+    neg_risk BOOLEAN DEFAULT FALSE,
+    pause_reason TEXT,
+    paused_at TIMESTAMPTZ,
+    paused_by UUID,
+    estimated_resume_at TIMESTAMPTZ,
+    ai_keywords TEXT[] DEFAULT '{}',
+    ai_sources TEXT[] DEFAULT '{}',
+    ai_confidence_threshold INTEGER DEFAULT 85,
+    created_by UUID REFERENCES auth.users(id),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    search_vector TSVECTOR,
+    market_id UUID,
+    name TEXT,
+    name_en TEXT,
+    resolution_outcome VARCHAR(20),
+    resolution_delay INTEGER DEFAULT 1440,
+    trading_volume_24h NUMERIC DEFAULT 0,
+    price_change_24h NUMERIC,
+    liquidity_score NUMERIC,
+    trending_score NUMERIC,
+    featured_until TIMESTAMPTZ,
+    metadata JSONB DEFAULT '{}',
+    current_stage VARCHAR(100),
+    category_id UUID,
+    resolves_at TIMESTAMPTZ,
+    resolution_value TEXT
+);
+
+-- Add event_id to markets if not exists
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'markets' AND column_name = 'event_id') THEN
+        ALTER TABLE public.markets ADD COLUMN event_id UUID REFERENCES public.events(id) ON DELETE SET NULL;
+    END IF;
+END $$;
+
+-- Event indexes
+CREATE INDEX IF NOT EXISTS idx_events_slug ON public.events(slug);
+CREATE INDEX IF NOT EXISTS idx_events_category ON public.events(category);
+CREATE INDEX IF NOT EXISTS idx_events_status ON public.events(status);
+CREATE INDEX IF NOT EXISTS idx_events_is_featured ON public.events(is_featured) WHERE is_featured = TRUE;
+CREATE INDEX IF NOT EXISTS idx_events_created_at ON public.events(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_markets_event_id ON public.markets(event_id);
+
+-- Event RLS
+ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "events_public_read" ON public.events;
+CREATE POLICY "events_public_read"
+    ON public.events
+    FOR SELECT
+    USING (status IN ('active', 'closed', 'resolved'));
+
+DROP POLICY IF EXISTS "events_authenticated_read" ON public.events;
+CREATE POLICY "events_authenticated_read"
+    ON public.events
+    FOR SELECT
+    TO authenticated
+    USING (true);
+
+DROP POLICY IF EXISTS "events_admin_all" ON public.events;
+CREATE POLICY "events_admin_all"
+    ON public.events
+    FOR ALL
+    TO authenticated
+    USING (EXISTS (
+        SELECT 1 FROM public.user_profiles 
+        WHERE id = auth.uid() AND (is_admin = TRUE OR is_super_admin = TRUE)
+    ));
+
+-- ===================================
+-- PART 10: UPSTASH WORKFLOW SYSTEM (Migration 142b)
+-- ===================================
+
+-- Upstash workflow runs table
+CREATE TABLE IF NOT EXISTS public.upstash_workflow_runs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    workflow_run_id TEXT UNIQUE NOT NULL,
+    message_id TEXT,
+    event_id UUID REFERENCES public.events(id) ON DELETE SET NULL,
+    market_id UUID REFERENCES public.markets(id) ON DELETE SET NULL,
+    workflow_type VARCHAR(50) NOT NULL CHECK (
+        workflow_type IN (
+            'event_creation', 'market_resolution', 'deposit_notification',
+            'withdrawal_processing', 'daily_report', 'auto_verification',
+            'exchange_rate_update', 'price_snapshot', 'market_close_check',
+            'settlement', 'ai_oracle', 'batch_markets', 'cleanup'
+        )
+    ),
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING' CHECK (
+        status IN ('PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'RETRYING', 'CANCELLED')
+    ),
+    started_at TIMESTAMPTZ DEFAULT NOW(),
+    completed_at TIMESTAMPTZ,
+    next_run_at TIMESTAMPTZ,
+    retry_count INTEGER DEFAULT 0,
+    max_retries INTEGER DEFAULT 3,
+    error_message TEXT,
+    error_details JSONB DEFAULT '{}'::jsonb,
+    payload JSONB DEFAULT '{}'::jsonb,
+    result JSONB DEFAULT '{}'::jsonb,
+    execution_time_ms INTEGER,
+    steps_completed INTEGER DEFAULT 0,
+    total_steps INTEGER DEFAULT 1,
+    source VARCHAR(20) DEFAULT 'upstash' CHECK (source IN ('upstash', 'n8n_migrated', 'manual')),
+    migrated_from_id TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Workflow DLQ (Dead Letter Queue)
+CREATE TABLE IF NOT EXISTS public.workflow_dlq (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    workflow_run_id TEXT NOT NULL REFERENCES public.upstash_workflow_runs(workflow_run_id),
+    error_message TEXT NOT NULL,
+    error_stack TEXT,
+    error_code VARCHAR(50),
+    failed_at TIMESTAMPTZ DEFAULT NOW(),
+    failed_step VARCHAR(100),
+    payload_snapshot JSONB DEFAULT '{}'::jsonb,
+    resolved_at TIMESTAMPTZ,
+    resolved_by UUID REFERENCES auth.users(id),
+    resolution_action VARCHAR(20) CHECK (resolution_action IN ('retry', 'discard', 'manual_resolve', 'archived')),
+    resolution_notes TEXT,
+    retry_attempts INTEGER DEFAULT 0,
+    last_retry_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Workflow schedules
+CREATE TABLE IF NOT EXISTS public.workflow_schedules (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    schedule_id TEXT UNIQUE,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    workflow_type VARCHAR(50) NOT NULL,
+    cron_expression TEXT NOT NULL,
+    timezone VARCHAR(50) DEFAULT 'Asia/Dhaka',
+    endpoint_url TEXT NOT NULL,
+    method VARCHAR(10) DEFAULT 'POST',
+    headers JSONB DEFAULT '{}'::jsonb,
+    default_payload JSONB DEFAULT '{}'::jsonb,
+    is_active BOOLEAN DEFAULT TRUE,
+    last_run_at TIMESTAMPTZ,
+    last_run_status VARCHAR(20),
+    next_run_at TIMESTAMPTZ,
+    total_runs INTEGER DEFAULT 0,
+    successful_runs INTEGER DEFAULT 0,
+    failed_runs INTEGER DEFAULT 0,
+    description TEXT,
+    created_by UUID REFERENCES auth.users(id),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Workflow indexes
+CREATE INDEX IF NOT EXISTS idx_upstash_workflow_runs_event_id ON public.upstash_workflow_runs(event_id) WHERE event_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_upstash_workflow_runs_market_id ON public.upstash_workflow_runs(market_id) WHERE market_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_upstash_workflow_runs_status ON public.upstash_workflow_runs(status);
+CREATE INDEX IF NOT EXISTS idx_upstash_workflow_runs_workflow_type ON public.upstash_workflow_runs(workflow_type);
+CREATE INDEX IF NOT EXISTS idx_workflow_dlq_workflow_run_id ON public.workflow_dlq(workflow_run_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_dlq_resolved ON public.workflow_dlq(resolved_at) WHERE resolved_at IS NULL;
+
+-- Workflow RLS
+ALTER TABLE public.upstash_workflow_runs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.workflow_dlq ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.workflow_schedules ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Service role full access workflow runs"
+    ON public.upstash_workflow_runs
+    FOR ALL
+    TO service_role
+    USING (TRUE)
+    WITH CHECK (TRUE);
+
+CREATE POLICY "Service role full access DLQ"
+    ON public.workflow_dlq
+    FOR ALL
+    TO service_role
+    USING (TRUE)
+    WITH CHECK (TRUE);
+
+-- ===================================
+-- PART 11: WORKFLOW HELPER FUNCTIONS
+-- ===================================
+
+-- Record workflow start
+CREATE OR REPLACE FUNCTION record_workflow_start(
+    p_workflow_run_id TEXT,
+    p_workflow_type VARCHAR,
+    p_event_id UUID DEFAULT NULL,
+    p_market_id UUID DEFAULT NULL,
+    p_payload JSONB DEFAULT '{}'::jsonb,
+    p_message_id TEXT DEFAULT NULL
+)
+RETURNS UUID AS $$
+DECLARE
+    v_id UUID;
+BEGIN
+    INSERT INTO public.upstash_workflow_runs (
+        workflow_run_id, message_id, workflow_type, event_id, market_id,
+        status, payload, started_at
+    ) VALUES (
+        p_workflow_run_id, p_message_id, p_workflow_type, p_event_id, p_market_id,
+        'RUNNING', p_payload, NOW()
+    )
+    ON CONFLICT (workflow_run_id) 
+    DO UPDATE SET 
+        status = 'RUNNING',
+        started_at = NOW(),
+        retry_count = public.upstash_workflow_runs.retry_count + 1,
+        updated_at = NOW()
+    RETURNING id INTO v_id;
+    
+    RETURN v_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Record workflow completion
+CREATE OR REPLACE FUNCTION record_workflow_complete(
+    p_workflow_run_id TEXT,
+    p_status VARCHAR,
+    p_result JSONB DEFAULT '{}'::jsonb,
+    p_error_message TEXT DEFAULT NULL,
+    p_execution_time_ms INTEGER DEFAULT NULL
+)
+RETURNS VOID AS $$
+BEGIN
+    UPDATE public.upstash_workflow_runs
+    SET 
+        status = p_status,
+        result = p_result,
+        error_message = p_error_message,
+        completed_at = NOW(),
+        execution_time_ms = p_execution_time_ms,
+        updated_at = NOW()
+    WHERE workflow_run_id = p_workflow_run_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Add to DLQ
+CREATE OR REPLACE FUNCTION add_to_workflow_dlq(
+    p_workflow_run_id TEXT,
+    p_error_message TEXT,
+    p_error_stack TEXT DEFAULT NULL,
+    p_failed_step VARCHAR DEFAULT NULL
+)
+RETURNS UUID AS $$
+DECLARE
+    v_id UUID;
+BEGIN
+    INSERT INTO public.workflow_dlq (
+        workflow_run_id, error_message, error_stack, failed_step, payload_snapshot
+    )
+    SELECT 
+        p_workflow_run_id, p_error_message, p_error_stack, p_failed_step,
+        COALESCE(payload, '{}'::jsonb)
+    FROM public.upstash_workflow_runs
+    WHERE workflow_run_id = p_workflow_run_id
+    RETURNING id INTO v_id;
+    
+    UPDATE public.upstash_workflow_runs
+    SET status = 'FAILED', error_message = p_error_message, updated_at = NOW()
+    WHERE workflow_run_id = p_workflow_run_id;
+    
+    RETURN v_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ===================================
+-- PART 12: TITLE/QUESTION SYNC TRIGGER
+-- ===================================
+
+CREATE OR REPLACE FUNCTION sync_event_title_question()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.title IS DISTINCT FROM OLD.title AND NEW.question IS NULL THEN
+        NEW.question := NEW.title;
+    END IF;
+    IF NEW.question IS DISTINCT FROM OLD.question AND NEW.title IS NULL THEN
+        NEW.title := NEW.question;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_sync_event_title_question ON public.events;
+CREATE TRIGGER trigger_sync_event_title_question
+    BEFORE INSERT OR UPDATE ON public.events
+    FOR EACH ROW
+    EXECUTE FUNCTION sync_event_title_question();

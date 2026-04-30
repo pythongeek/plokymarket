@@ -1,0 +1,102 @@
+_format_version: "2.1"
+_transform: true
+
+services:
+  # PostgREST - REST API
+  - name: postgrest
+    url: http://supabase-postgrest:3000/
+    routes:
+      - name: postgrest-route
+        paths:
+          - /rest/v1
+        strip_path: true
+        plugins:
+          - name: cors
+          - name: key-auth
+
+  # GoTrue - Authentication
+  - name: gotrue
+    url: http://supabase-gotrue:9999/
+    routes:
+      - name: gotrue-route
+        paths:
+          - /auth/v1
+        strip_path: true
+        plugins:
+          - name: cors
+
+  # Storage API
+  - name: storage
+    url: http://supabase-storage-api:5000/
+    routes:
+      - name: storage-route
+        paths:
+          - /storage/v1
+        strip_path: true
+        plugins:
+          - name: cors
+          - name: key-auth
+
+  # Postgres Meta
+  - name: postgres-meta
+    url: http://supabase-postgres-meta:8080/
+    routes:
+      - name: postgres-meta-route
+        paths:
+          - /meta/v1
+        strip_path: true
+        plugins:
+          - name: cors
+
+  # Realtime
+  - name: realtime
+    url: http://supabase-realtime:4000/socket
+    routes:
+      - name: realtime-route
+        paths:
+          - /realtime/v1
+        strip_path: true
+        plugins:
+          - name: cors
+
+  # Edge Functions
+  - name: functions
+    url: http://supabase-functions:3000/
+    routes:
+      - name: functions-route
+        paths:
+          - /functions/v1
+        strip_path: true
+        plugins:
+          - name: cors
+          - name: key-auth
+
+plugins:
+  - name: cors
+    config:
+      origins:
+        - "*"
+      methods:
+        - GET
+        - POST
+        - PUT
+        - PATCH
+        - DELETE
+        - OPTIONS
+      headers:
+        - Accept
+        - Authorization
+        - Content-Type
+        - X-Client-Info
+        - X-Requested-With
+        - apikey
+      credentials: true
+      max_age: 3600
+
+  - name: key-auth
+    config:
+      key_names:
+        - x-api-key
+        - apikey
+      key_in_header: true
+      key_in_query: false

@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Demo Event - Plokymarket</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            font-weight: 600;
+            color: #444;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        input, textarea, select {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 15px;
+            transition: border-color 0.3s;
+        }
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        textarea {
+            min-height: 80px;
+            resize: vertical;
+        }
+        .row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+        .resolution-methods {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .method-card {
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 15px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-align: center;
+        }
+        .method-card:hover {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+        .method-card.selected {
+            border-color: #667eea;
+            background: #f0f2ff;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        .method-card.hybrid {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            border-color: transparent;
+        }
+        .method-card.hybrid.selected {
+            box-shadow: 0 0 0 4px rgba(245, 87, 108, 0.3);
+        }
+        .method-icon {
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+        .method-title {
+            font-weight: 600;
+            font-size: 14px;
+        }
+        .method-desc {
+            font-size: 12px;
+            opacity: 0.8;
+            margin-top: 4px;
+        }
+        .hybrid-config {
+            background: linear-gradient(135deg, #f093fb20 0%, #f5576c20 100%);
+            border: 2px solid #f5576c;
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 15px;
+        }
+        .hybrid-config h3 {
+            color: #f5576c;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .slider-container {
+            margin-bottom: 15px;
+        }
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        input[type="range"] {
+            width: 100%;
+            height: 8px;
+            border-radius: 4px;
+            background: #e0e0e0;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #f5576c;
+            cursor: pointer;
+        }
+        .preview-box {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        .preview-box h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+        .preview-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #e0e0e0;
+            font-size: 14px;
+        }
+        .preview-item:last-child {
+            border-bottom: none;
+        }
+        .btn {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-top: 20px;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+        }
+        .success-message {
+            display: none;
+            background: #d4edda;
+            color: #155724;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+            text-align: center;
+        }
+        .success-message.show {
+            display: block;
+        }
+        .outcome-tags {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .outcome-tag {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .outcome-tag.yes {
+            background: #22c55e20;
+            color: #22c55e;
+        }
+        .outcome-tag.no {
+            background: #ef444420;
+            color: #ef4444;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📝 নতুন ইভেন্ট তৈরি করুন</h1>
+        <p class="subtitle">Create New Event - Complete Demo with Hybrid Resolution</p>
+        
+        <form id="eventForm">
+            <!-- Basic Info -->
+            <div class="form-group">
+                <label>ইভেন্টের শিরোনাম (Event Title) *</label>
+                <input type="text" id="name" value="BPL 2024 ফাইনাল: কুমিল্লা ভিক্টোরিয়ান্স কি চ্যাম্পিয়ন হবে?" required>
+            </div>
+            
+            <div class="form-group">
+                <label>প্রশ্ন (Question) *</label>
+                <input type="text" id="question" value="বিপিএল ২০২৪ ফাইনালে কুমিল্লা ভিক্টোরিয়ান্স কি চ্যাম্পিয়ন হবে?" required>
+            </div>
+            
+            <div class="form-group">
+                <label>বিস্তারিত বিবরণ (Description)</label>
+                <textarea id="description">বাংলাদেশ প্রিমিয়ার লিগ (BPL) ২০২৪ এর ফাইনাল ম্যাচ। কুমিল্লা ভিক্টোরিয়ান্স বনাম ফরচুন বরিশাল। ম্যাচটি ০১ মার্চ ২০২৪ তারিখে অনুষ্ঠিত হবে। সকল ২০ ওভার শেষে বা সুপার ওভারে যে দল জিতবে তাদেরকে চ্যাম্পিয়ন ঘোষণা করা হবে।</textarea>
+            </div>
+            
+            <div class="row">
+                <div class="form-group">
+                    <label>ক্যাটাগরি (Category) *</label>
+                    <select id="category">
+                        <option value="sports" selected>🏆 স্পোর্টস (Sports)</option>
+                        <option value="politics">🏛️ রাজনীতি (Politics)</option>
+                        <option value="entertainment">🎬 বিনোদন (Entertainment)</option>
+                        <option value="crypto">₿ ক্রিপ্টো (Crypto)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>সাবক্যাটাগরি (Subcategory)</label>
+                    <input type="text" id="subcategory" value="ক্রিকেট">
+                </div>
+            </div>
+            
+            <!-- Outcomes -->
+            <div class="form-group">
+                <label>আউটকাম (Outcomes)</label>
+                <div class="outcome-tags">
+                    <span class="outcome-tag yes">✓ হ্যাঁ (Yes)</span>
+                    <span class="outcome-tag no">✗ না (No)</span>
+                </div>
+            </div>
+            
+            <!-- Resolution Method -->
+            <div class="form-group">
+                <label>রেজোলিউশন পদ্ধতি (Resolution Method) *</label>
+                <div class="resolution-methods">
+                    <div class="method-card" onclick="selectMethod('manual')">
+                        <div class="method-icon">🛡️</div>
+                        <div class="method-title">ম্যানুয়াল অ্যাডমিন</div>
+                        <div class="method-desc">Manual Admin</div>
+                    </div>
+                    <div class="method-card" onclick="selectMethod('ai')">
+                        <div class="method-icon">🤖</div>
+                        <div class="method-title">AI Oracle</div>
+                        <div class="method-desc">স্বয়ংক্রিয়</div>
+                    </div>
+                    <div class="method-card" onclick="selectMethod('expert')">
+                        <div class="method-icon">👥</div>
+                        <div class="method-title">বিশেষজ্ঞ প্যানেল</div>
+                        <div class="method-desc">Expert Panel</div>
+                    </div>
+                    <div class="method-card hybrid selected" onclick="selectMethod('hybrid')">
+                        <div class="method-icon">✨</div>
+                        <div class="method-title">হাইব্রিড (Hybrid)</div>
+                        <div class="method-desc">AI + Human</div>
+                    </div>
+                </div>
+                
+                <!-- Hybrid Configuration -->
+                <div class="hybrid-config" id="hybridConfig">
+                    <h3>⚙️ হাইব্রিড কনসেনসাস কনফিগারেশন</h3>
+                    
+                    <div class="slider-container">
+                        <div class="slider-label">
+                            <span>AI ভোটের ওজন (AI Weight)</span>
+                            <span id="aiWeightValue">30%</span>
+                        </div>
+                        <input type="range" id="aiWeight" min="10" max="50" value="30" oninput="updateWeights()">
+                        <small>মানুষের ভোটের ওজন: <span id="humanWeightValue">70%</span></small>
+                    </div>
+                    
+                    <div class="slider-container">
+                        <div class="slider-label">
+                            <span>কনসেনসাস থ্রেশহোল্ড</span>
+                            <span id="thresholdValue">75%</span>
+                        </div>
+                        <input type="range" id="consensusThreshold" min="51" max="95" value="75" oninput="document.getElementById('thresholdValue').textContent = this.value + '%'">
+                    </div>
+                    
+                    <div class="row">
+                        <div class="form-group">
+                            <label>ন্যূনতম মানুষ রিভিউয়ার</label>
+                            <input type="number" id="minReviewers" value="2" min="1" max="5">
+                        </div>
+                        <div class="form-group">
+                            <label>অটো-রেজোলিউশন</label>
+                            <select id="autoResolve">
+                                <option value="true" selected>✅ চালু (Enabled)</option>
+                                <option value="false">❌ বন্ধ (Disabled)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Financial Settings -->
+            <div class="row">
+                <div class="form-group">
+                    <label>প্রাথমিক লিকুইডিটি (৳) *</label>
+                    <select id="liquidity">
+                        <option value="500">কম (৳500)</option>
+                        <option value="1000" selected>মাঝারি (৳১,০০০)</option>
+                        <option value="5000">বেশি (৳৫,০০০)</option>
+                        <option value="10000">অনেক বেশি (৳১০,০০০)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>প্ল্যাটফর্ম ফি (%)</label>
+                    <input type="number" id="fee" value="2" min="0" max="10">
+                </div>
+            </div>
+            
+            <div class="row">
+                <div class="form-group">
+                    <label>সর্বনিম্ন বেট (৳)</label>
+                    <input type="number" id="minBet" value="10" min="5">
+                </div>
+                <div class="form-group">
+                    <label>সর্বোচ্চ বেট (৳)</label>
+                    <input type="number" id="maxBet" value="5000" min="100">
+                </div>
+            </div>
+            
+            <!-- Preview -->
+            <div class="preview-box">
+                <h3>👁️ লাইভ প্রিভিউ (Live Preview)</h3>
+                <div class="preview-item">
+                    <span>ইভেন্ট:</span>
+                    <span id="previewName">BPL 2024 ফাইনাল...</span>
+                </div>
+                <div class="preview-item">
+                    <span>ক্যাটাগরি:</span>
+                    <span>🏆 স্পোর্টস</span>
+                </div>
+                <div class="preview-item">
+                    <span>রেজোলিউশন:</span>
+                    <span style="color: #f5576c; font-weight: 600;">✨ হাইব্রিড (AI 30% + Human 70%)</span>
+                </div>
+                <div class="preview-item">
+                    <span>লিকুইডিটি:</span>
+                    <span>৳১,০০০</span>
+                </div>
+            </div>
+            
+            <button type="submit" class="btn">🚀 ইভেন্ট তৈরি করুন (Create Event)</button>
+        </form>
+        
+        <div class="success-message" id="successMessage">
+            <h2>🎉 ইভেন্ট সফলভাবে তৈরি হয়েছে!</h2>
+            <p>Event created successfully with Hybrid Resolution!</p>
+            <p style="margin-top: 10px;">
+                <a href="https://polymarket-bangladesh.vercel.app/events" style="color: #155724; text-decoration: underline;">
+                    সব ইভেন্ট দেখুন (View All Events) →
+                </a>
+            </p>
+        </div>
+    </div>
+    
+    <script>
+        let selectedMethod = 'hybrid';
+        
+        function selectMethod(method) {
+            selectedMethod = method;
+            document.querySelectorAll('.method-card').forEach(card => {
+                card.classList.remove('selected');
+            });
+            event.currentTarget.classList.add('selected');
+            
+            // Show/hide hybrid config
+            const hybridConfig = document.getElementById('hybridConfig');
+            if (method === 'hybrid') {
+                hybridConfig.style.display = 'block';
+            } else {
+                hybridConfig.style.display = 'none';
+            }
+        }
+        
+        function updateWeights() {
+            const aiWeight = document.getElementById('aiWeight').value;
+            const humanWeight = 100 - aiWeight;
+            document.getElementById('aiWeightValue').textContent = aiWeight + '%';
+            document.getElementById('humanWeightValue').textContent = humanWeight + '%';
+        }
+        
+        // Form submission
+        document.getElementById('eventForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const btn = document.querySelector('.btn');
+            btn.textContent = '⏳ প্রসেসিং হচ্ছে... (Processing...)';
+            btn.disabled = true;
+            
+            // Simulate API call
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            // Show success
+            document.getElementById('successMessage').classList.add('show');
+            document.getElementById('eventForm').style.display = 'none';
+            
+            // Log the data that would be sent
+            const eventData = {
+                name: document.getElementById('name').value,
+                question: document.getElementById('question').value,
+                description: document.getElementById('description').value,
+                category: document.getElementById('category').value,
+                subcategory: document.getElementById('subcategory').value,
+                resolution_method: selectedMethod,
+                hybrid_config: selectedMethod === 'hybrid' ? {
+                    ai_weight: parseInt(document.getElementById('aiWeight').value) / 100,
+                    human_weight: parseInt(document.getElementById('humanWeightValue').textContent) / 100,
+                    consensus_threshold: parseInt(document.getElementById('consensusThreshold').value),
+                    min_human_reviewers: parseInt(document.getElementById('minReviewers').value),
+                    auto_resolve_if_agreement: document.getElementById('autoResolve').value === 'true'
+                } : null,
+                initial_liquidity: parseInt(document.getElementById('liquidity').value),
+                fee_percentage: parseInt(document.getElementById('fee').value),
+                min_bet: parseInt(document.getElementById('minBet').value),
+                max_bet: parseInt(document.getElementById('maxBet').value),
+                outcomes: [
+                    { label: 'হ্যাঁ', color: '#22c55e' },
+                    { label: 'না', color: '#ef4444' }
+                ]
+            };
+            
+            console.log('Event Data:', eventData);
+        });
+        
+        // Live preview updates
+        document.getElementById('name').addEventListener('input', (e) => {
+            document.getElementById('previewName').textContent = e.target.value.substring(0, 30) + '...';
+        });
+    </script>
+</body>
+</html>

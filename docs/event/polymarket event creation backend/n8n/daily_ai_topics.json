@@ -1,0 +1,272 @@
+{
+    "name": "Daily AI Prediction Market Topics (Gemini HTTP + Manual Input)",
+    "nodes": [
+        {
+            "parameters": {
+                "rule": {
+                    "interval": [
+                        {
+                            "field": "hours",
+                            "triggerAtHour": 6
+                        }
+                    ]
+                }
+            },
+            "type": "n8n-nodes-base.scheduleTrigger",
+            "typeVersion": 1,
+            "position": [
+                250,
+                300
+            ],
+            "id": "schedule-trigger",
+            "name": "Schedule Trigger"
+        },
+        {
+            "parameters": {
+                "values": {
+                    "string": [
+                        {
+                            "name": "manual_urls",
+                            "value": ""
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.set",
+            "typeVersion": 1,
+            "position": [
+                450,
+                300
+            ],
+            "id": "manual-config",
+            "name": "Config: Manual URLs (Optional)"
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "string": [
+                        {
+                            "value1": "={{ $json.manual_urls }}",
+                            "operation": "isNotEmpty"
+                        }
+                    ]
+                }
+            },
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 1,
+            "position": [
+                650,
+                300
+            ],
+            "id": "check-manual-input",
+            "name": "Manual URLs Provided?"
+        },
+        {
+            "parameters": {
+                "functionCode": "const urls = items[0].json.manual_urls.split(',').map(u => u.trim());\nreturn urls.map(url => ({ json: { source_url: url } }));"
+            },
+            "type": "n8n-nodes-base.function",
+            "typeVersion": 1,
+            "position": [
+                850,
+                200
+            ],
+            "id": "format-manual-urls",
+            "name": "Format Manual URLs"
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "SELECT source_url FROM news_sources WHERE is_active = true AND is_whitelisted = true;"
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 1,
+            "position": [
+                850,
+                400
+            ],
+            "id": "fetch-sources",
+            "name": "Fetch News Sources",
+            "credentials": {
+                "postgres": {
+                    "id": "supabase-db-creds",
+                    "name": "Supabase DB"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "url": "={{ $json.source_url }}",
+                "responseFormat": "string",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 1,
+            "position": [
+                1100,
+                300
+            ],
+            "id": "http-scrape",
+            "name": "Scrape News"
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent",
+                "authentication": "queryAuth",
+                "sendBody": true,
+                "contentType": "json",
+                "body": "={\n  \"contents\": [{\n    \"parts\": [{\n      \"text\": \"Analyze the following news content and suggest 3 prediction market questions relevant to Bangladesh. \\n\\nContent: {{ $json.data.substring(0, 10000) }}\\n\\nOutput Format (JSON Array only):\\n[\\n  {\\n    \\\"suggested_title\\\": \\\"Short Title\\\",\\n    \\\"suggested_question\\\": \\\"Full Question?\\\",\\n    \\\"suggested_category\\\": \\\"Politics\\\",\\n    \\\"confidence_score\\\": 85.5,\\n    \\\"ai_reasoning\\\": \\\"Why this is a good market...\\\",\\n    \\\"trending_score\\\": 90\\n  }\\n]\"\n    }]\n  }]\n}",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 1,
+            "position": [
+                1300,
+                300
+            ],
+            "id": "gemini-api",
+            "name": "Gemini API (HTTP)",
+            "credentials": {
+                "httpQueryAuth": {
+                    "id": "gemini-api-key",
+                    "name": "Gemini API Key"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "functionCode": "const results = [];\nconst items = $input.all();\n\nfor (const item of items) {\n  // Handle Gemini API response structure\n  const candidates = item.json.candidates;\n  if (!candidates || candidates.length === 0) continue;\n  \n  const aiText = candidates[0].content?.parts?.[0]?.text;\n  if (!aiText) continue;\n\n  // Parse JSON from Gemini response\n  let cleanJson = aiText.replace(/```json|```/g, '').trim();\n  try {\n    const topics = JSON.parse(cleanJson);\n    // Ensure topic is an array\n    if (Array.isArray(topics)) {\n        topics.forEach(topic => {\n          results.push({\n            json: {\n              ...topic,\n              // Pass through source url if available in input context (requires n8n expression reference in real run, mostly manual/fetch source)\n              // For simplicity, we assume one source per execution branch item\n              status: 'pending'\n            }\n          });\n        });\n    }\n  } catch (e) {\n    console.error('Failed to parse AI response', e);\n  }\n}\nreturn results;"
+            },
+            "type": "n8n-nodes-base.function",
+            "typeVersion": 1,
+            "position": [
+                1500,
+                300
+            ],
+            "id": "parse-response",
+            "name": "Parse AI Response"
+        },
+        {
+            "parameters": {
+                "operation": "insert",
+                "schema": "public",
+                "table": "ai_daily_topics",
+                "columns": "suggested_title, suggested_question, suggested_category, confidence_score, ai_reasoning, trending_score, status",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 1,
+            "position": [
+                1700,
+                300
+            ],
+            "id": "insert-topics",
+            "name": "Insert into Supabase",
+            "credentials": {
+                "postgres": {
+                    "id": "supabase-db-creds",
+                    "name": "Supabase DB"
+                }
+            }
+        }
+    ],
+    "connections": {
+        "Schedule Trigger": {
+            "main": [
+                [
+                    {
+                        "node": "Config: Manual URLs (Optional)",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Config: Manual URLs (Optional)": {
+            "main": [
+                [
+                    {
+                        "node": "Manual URLs Provided?",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Manual URLs Provided?": {
+            "main": [
+                [
+                    {
+                        "node": "Format Manual URLs",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Fetch News Sources",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Format Manual URLs": {
+            "main": [
+                [
+                    {
+                        "node": "Scrape News",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Fetch News Sources": {
+            "main": [
+                [
+                    {
+                        "node": "Scrape News",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Scrape News": {
+            "main": [
+                [
+                    {
+                        "node": "Gemini API (HTTP)",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Gemini API (HTTP)": {
+            "main": [
+                [
+                    {
+                        "node": "Parse AI Response",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Parse AI Response": {
+            "main": [
+                [
+                    {
+                        "node": "Insert into Supabase",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    }
+}

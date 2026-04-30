@@ -1,0 +1,158 @@
+{
+    "name": "Binance P2P Scraper (Advanced)",
+    "nodes": [
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "scrape-binance-p2p",
+                "responseMode": "lastNode",
+                "responseData": "allEntries",
+                "options": {}
+            },
+            "id": "e0d0f4d3-4a1b-4c0e-9d2a-7b3c4d5e6f7a",
+            "name": "Webhook",
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 1,
+            "position": [
+                250,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "const method = $input.json().method || 'bkash';\nconst amount = parseFloat($input.json().amount) || 1000;\n\nif (!['bkash', 'nagad'].includes(method.toLowerCase())) {\n  throw new Error('Invalid method');\n}\n\nreturn {\n  method: method.toLowerCase(),\n  amount: amount,\n  url: `https://c2c.binance.com/trade/${method.toLowerCase() === 'bkash' ? 'bKash' : 'Nagad'}/USDT?fiat=BDT`,\n  timestamp: new Date().toISOString()\n};"
+            },
+            "id": "f1d1f5e4-5b2c-5d1f-ad3b-8c4d5e6f7a8b",
+            "name": "Input Validation",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 1,
+            "position": [
+                450,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "url": "={{ $json.url }}",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "User-Agent",
+                            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                        },
+                        {
+                            "name": "Accept",
+                            "value": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+                        },
+                        {
+                            "name": "Accept-Language",
+                            "value": "en-US,en;q=0.9"
+                        },
+                        {
+                            "name": "Cache-Control",
+                            "value": "no-cache"
+                        }
+                    ]
+                },
+                "options": {
+                    "timeout": 30000,
+                    "redirect": {
+                        "redirect": {}
+                    }
+                }
+            },
+            "id": "h3f3h7g6-7d4e-7f3h-cf5d-ae6f7a8b9c0d",
+            "name": "HTTP Request (Scraping)",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.1,
+            "position": [
+                650,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "const html = $input.json().data || $input.json().body;\nconst cheerio = require('cheerio');\nconst $ = cheerio.load(html);\nconst method = $('[data-method]').val() || 'bkash'; // Fallback or logic\n\nconst sellers = [];\n\n$('.css-1c82c04').each((index, element) => {\n  if (index >= 10) return;\n  \n  try {\n    const name = $(element).find('[data-testid=\"c2c-user-info\"] .css-1c82c04').text().trim();\n    const priceText = $(element).find('[data-testid=\"c2c-price\"]').text().trim();\n    const availableText = $(element).find('[data-testid=\"c2c-available\"]').text().trim();\n    const limitsText = $(element).find('[data-testid=\"c2c-limit\"]').text().trim();\n    const completionText = $(element).find('[data-testid=\"c2c-completion-rate\"]').text().trim();\n    \n    const priceMatch = priceText.match(/[\\d,]+\\.?\\d*/);\n    const price = priceMatch ? parseFloat(priceMatch[0].replace(/,/g, '')) : 0;\n    \n    const isVerified = $(element).text().includes('Verified') || \n                      $(element).text().includes('বাইন্যান্সে যাচাইকৃত');\n    \n    const sellerId = $(element).attr('data-seller-id') || `seller_${index}`;\n    \n    if (name && price > 0) {\n      sellers.push({\n        seller_id: sellerId,\n        nickname: name,\n        price_bdt: price,\n        available_usdt: availableText || 'N/A',\n        limits: limitsText || 'N/A',\n        completion_rate: completionText || 'N/A',\n        verified: isVerified,\n        payment_methods: [method.toUpperCase()]\n      });\n    }\n  } catch (e) {}\n});\n\nsellers.sort((a, b) => a.price_bdt - b.price_bdt);\n\nif (sellers.length === 0) {\n  return { sellers: generateMockData(method), is_mock: true };\n}\n\nreturn { sellers, count: sellers.length, method };\n\nfunction generateMockData(m) {\n  return [{ nickname: \"FastTrader_BD\", price_bdt: 122.50, verified: true }];\n}"
+            },
+            "id": "i4g4i8h7-8e5f-8g4i-df6e-bf7a8b9c0d1e",
+            "name": "Data Extraction",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 1,
+            "position": [
+                850,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "operation": "upsert",
+                "table": "p2p_seller_cache",
+                "columns": [
+                    "method"
+                ],
+                "data": {
+                    "method": "={{ $json.method }}",
+                    "sellers_data": "={{ $json.sellers }}",
+                    "scraped_at": "={{ new Date().toISOString() }}",
+                    "expires_at": "={{ new Date(Date.now() + 5*60000).toISOString() }}",
+                    "affiliate_link": "={{ \"https://accounts.binance.com/en/register?ref=\" + process.env.BINANCE_AFFILIATE_CODE }}"
+                }
+            },
+            "id": "j5h5j9i8-9f6g-9h5j-ef7f-cf8a9b0c1d2f",
+            "name": "Supabase Cache",
+            "type": "n8n-nodes-base.supabase",
+            "typeVersion": 1,
+            "position": [
+                1050,
+                300
+            ]
+        }
+    ],
+    "connections": {
+        "Webhook": {
+            "main": [
+                [
+                    {
+                        "node": "Input Validation",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Input Validation": {
+            "main": [
+                [
+                    {
+                        "node": "HTTP Request (Scraping)",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "HTTP Request (Scraping)": {
+            "main": [
+                [
+                    {
+                        "node": "Data Extraction",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Data Extraction": {
+            "main": [
+                [
+                    {
+                        "node": "Supabase Cache",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    }
+}

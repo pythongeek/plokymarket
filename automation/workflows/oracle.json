@@ -1,0 +1,68 @@
+{
+    "name": "AI Oracle",
+    "nodes": [
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "resolve-market",
+                "options": {}
+            },
+            "name": "Webhook",
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 1,
+            "position": [
+                250,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "url": "={{ $json.body.resolution_source }}",
+                "responseFormat": "string"
+            },
+            "name": "Fetch Source",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 1,
+            "position": [
+                450,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "functionCode": "// Mock AI Logic\nconst text = items[0].json;\nif (text.includes('won') || text.includes('victory')) {\n  return [{ json: { outcome: 'YES', confidence: 0.9 } }];\n}\nreturn [{ json: { outcome: 'NO', confidence: 0.8 } }];"
+            },
+            "name": "Mock AI Analysis",
+            "type": "n8n-nodes-base.function",
+            "typeVersion": 1,
+            "position": [
+                650,
+                300
+            ]
+        }
+    ],
+    "connections": {
+        "Webhook": {
+            "main": [
+                [
+                    {
+                        "node": "Fetch Source",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Fetch Source": {
+            "main": [
+                [
+                    {
+                        "node": "Mock AI Analysis",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    }
+}

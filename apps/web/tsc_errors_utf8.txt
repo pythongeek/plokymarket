@@ -1,0 +1,598 @@
+﻿src/App.tsx(3,36): error TS2307: Cannot find module '@tanstack/react-query-devtools' or its corresponding type declarations.
+src/App.tsx(5,22): error TS2307: Cannot find module '@/views/Home' or its corresponding type declarations.
+src/App.tsx(6,25): error TS2307: Cannot find module '@/views/Markets' or its corresponding type declarations.
+src/App.tsx(7,30): error TS2307: Cannot find module '@/views/MarketDetail' or its corresponding type declarations.
+src/App.tsx(8,23): error TS2307: Cannot find module '@/views/Login' or its corresponding type declarations.
+src/App.tsx(9,26): error TS2307: Cannot find module '@/views/Register' or its corresponding type declarations.
+src/App.tsx(10,27): error TS2307: Cannot find module '@/views/Portfolio' or its corresponding type declarations.
+src/App.tsx(11,24): error TS2307: Cannot find module '@/views/Wallet' or its corresponding type declarations.
+src/App.tsx(12,23): error TS2307: Cannot find module '@/views/Admin' or its corresponding type declarations.
+src/App.tsx(52,22): error TS2339: Property 'env' does not exist on type 'ImportMeta'.
+src/app/(dashboard)/leaderboard/page.tsx(179,13): error TS2322: Type '{ hidden: { scale: number; opacity: number; }; visible: (i: number) => { scale: number; opacity: number; transition: { delay: number; type: string; stiffness: number; }; }; }' is not assignable to type 'Variants'.
+  Property 'visible' is incompatible with index signature.
+    Type '(i: number) => { scale: number; opacity: number; transition: { delay: number; type: string; stiffness: number; }; }' is not assignable to type 'Variant'.
+      Type '(i: number) => { scale: number; opacity: number; transition: { delay: number; type: string; stiffness: number; }; }' is not assignable to type 'TargetResolver'.
+        Type '{ scale: number; opacity: number; transition: { delay: number; type: string; stiffness: number; }; }' is not assignable to type 'string | TargetAndTransition'.
+          Type '{ scale: number; opacity: number; transition: { delay: number; type: string; stiffness: number; }; }' is not assignable to type 'TargetAndTransition'.
+            Type '{ scale: number; opacity: number; transition: { delay: number; type: string; stiffness: number; }; }' is not assignable to type '{ transition?: Transition<any> | undefined; transitionEnd?: ResolvedValues$1 | undefined; }'.
+              Types of property 'transition' are incompatible.
+                Type '{ delay: number; type: string; stiffness: number; }' is not assignable to type 'Transition<any> | undefined'.
+                  Type '{ delay: number; type: string; stiffness: number; }' is not assignable to type 'TransitionWithValueOverrides<any>'.
+                    Type '{ delay: number; type: string; stiffness: number; }' is not assignable to type 'ValueAnimationTransition<any>'.
+                      Types of property 'type' are incompatible.
+                        Type 'string' is not assignable to type 'AnimationGeneratorType | undefined'.
+src/app/(dashboard)/leaderboard/page.tsx(218,13): error TS2322: Type '{ hidden: { scale: number; opacity: number; }; visible: (i: number) => { scale: number; opacity: number; transition: { delay: number; type: string; stiffness: number; }; }; }' is not assignable to type 'Variants'.
+  Property 'visible' is incompatible with index signature.
+    Type '(i: number) => { scale: number; opacity: number; transition: { delay: number; type: string; stiffness: number; }; }' is not assignable to type 'Variant'.
+      Type '(i: number) => { scale: number; opacity: number; transition: { delay: number; type: string; stiffness: number; }; }' is not assignable to type 'TargetResolver'.
+        Type '{ scale: number; opacity: number; transition: { delay: number; type: string; stiffness: number; }; }' is not assignable to type 'string | TargetAndTransition'.
+          Type '{ scale: number; opacity: number; transition: { delay: number; type: string; stiffness: number; }; }' is not assignable to type 'TargetAndTransition'.
+            Type '{ scale: number; opacity: number; transition: { delay: number; type: string; stiffness: number; }; }' is not assignable to type '{ transition?: Transition<any> | undefined; transitionEnd?: ResolvedValues$1 | undefined; }'.
+              Types of property 'transition' are incompatible.
+                Type '{ delay: number; type: string; stiffness: number; }' is not assignable to type 'Transition<any> | undefined'.
+                  Type '{ delay: number; type: string; stiffness: number; }' is not assignable to type 'TransitionWithValueOverrides<any>'.
+                    Type '{ delay: number; type: string; stiffness: number; }' is not assignable to type 'ValueAnimationTransition<any>'.
+                      Types of property 'type' are incompatible.
+                        Type 'string' is not assignable to type 'AnimationGeneratorType | undefined'.
+src/app/(dashboard)/leaderboard/page.tsx(276,13): error TS2322: Type '{ hidden: { scale: number; opacity: number; }; visible: (i: number) => { scale: number; opacity: number; transition: { delay: number; type: string; stiffness: number; }; }; }' is not assignable to type 'Variants'.
+  Property 'visible' is incompatible with index signature.
+    Type '(i: number) => { scale: number; opacity: number; transition: { delay: number; type: string; stiffness: number; }; }' is not assignable to type 'Variant'.
+      Type '(i: number) => { scale: number; opacity: number; transition: { delay: number; type: string; stiffness: number; }; }' is not assignable to type 'TargetResolver'.
+        Type '{ scale: number; opacity: number; transition: { delay: number; type: string; stiffness: number; }; }' is not assignable to type 'string | TargetAndTransition'.
+          Type '{ scale: number; opacity: number; transition: { delay: number; type: string; stiffness: number; }; }' is not assignable to type 'TargetAndTransition'.
+            Type '{ scale: number; opacity: number; transition: { delay: number; type: string; stiffness: number; }; }' is not assignable to type '{ transition?: Transition<any> | undefined; transitionEnd?: ResolvedValues$1 | undefined; }'.
+              Types of property 'transition' are incompatible.
+                Type '{ delay: number; type: string; stiffness: number; }' is not assignable to type 'Transition<any> | undefined'.
+                  Type '{ delay: number; type: string; stiffness: number; }' is not assignable to type 'TransitionWithValueOverrides<any>'.
+                    Type '{ delay: number; type: string; stiffness: number; }' is not assignable to type 'ValueAnimationTransition<any>'.
+                      Types of property 'type' are incompatible.
+                        Type 'string' is not assignable to type 'AnimationGeneratorType | undefined'.
+src/app/(dashboard)/leaderboard/page.tsx(823,23): error TS2322: Type '{ hidden: { opacity: number; y: number; }; visible: { opacity: number; y: number; transition: { type: string; stiffness: number; }; }; }' is not assignable to type 'Variants'.
+  Property 'visible' is incompatible with index signature.
+    Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'Variant'.
+      Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'TargetAndTransition'.
+        Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type '{ transition?: Transition<any> | undefined; transitionEnd?: ResolvedValues$1 | undefined; }'.
+          Types of property 'transition' are incompatible.
+            Type '{ type: string; stiffness: number; }' is not assignable to type 'Transition<any> | undefined'.
+              Type '{ type: string; stiffness: number; }' is not assignable to type 'TransitionWithValueOverrides<any>'.
+                Type '{ type: string; stiffness: number; }' is not assignable to type 'ValueAnimationTransition<any>'.
+                  Types of property 'type' are incompatible.
+                    Type 'string' is not assignable to type 'AnimationGeneratorType | undefined'.
+src/app/(dashboard)/leaderboard/page.tsx(832,21): error TS2322: Type '{ hidden: { opacity: number; y: number; }; visible: { opacity: number; y: number; transition: { type: string; stiffness: number; }; }; }' is not assignable to type 'Variants'.
+  Property 'visible' is incompatible with index signature.
+    Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'Variant'.
+      Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'TargetAndTransition'.
+        Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type '{ transition?: Transition<any> | undefined; transitionEnd?: ResolvedValues$1 | undefined; }'.
+          Types of property 'transition' are incompatible.
+            Type '{ type: string; stiffness: number; }' is not assignable to type 'Transition<any> | undefined'.
+              Type '{ type: string; stiffness: number; }' is not assignable to type 'TransitionWithValueOverrides<any>'.
+                Type '{ type: string; stiffness: number; }' is not assignable to type 'ValueAnimationTransition<any>'.
+                  Types of property 'type' are incompatible.
+                    Type 'string' is not assignable to type 'AnimationGeneratorType | undefined'.
+src/app/(dashboard)/leaderboard/page.tsx(853,23): error TS2322: Type '{ hidden: { opacity: number; y: number; }; visible: { opacity: number; y: number; transition: { type: string; stiffness: number; }; }; }' is not assignable to type 'Variants'.
+  Property 'visible' is incompatible with index signature.
+    Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'Variant'.
+      Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'TargetAndTransition'.
+        Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type '{ transition?: Transition<any> | undefined; transitionEnd?: ResolvedValues$1 | undefined; }'.
+          Types of property 'transition' are incompatible.
+            Type '{ type: string; stiffness: number; }' is not assignable to type 'Transition<any> | undefined'.
+              Type '{ type: string; stiffness: number; }' is not assignable to type 'TransitionWithValueOverrides<any>'.
+                Type '{ type: string; stiffness: number; }' is not assignable to type 'ValueAnimationTransition<any>'.
+                  Types of property 'type' are incompatible.
+                    Type 'string' is not assignable to type 'AnimationGeneratorType | undefined'.
+src/app/(dashboard)/leaderboard/page.tsx(860,23): error TS2322: Type '{ hidden: { opacity: number; y: number; }; visible: { opacity: number; y: number; transition: { type: string; stiffness: number; }; }; }' is not assignable to type 'Variants'.
+  Property 'visible' is incompatible with index signature.
+    Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'Variant'.
+      Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'TargetAndTransition'.
+        Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type '{ transition?: Transition<any> | undefined; transitionEnd?: ResolvedValues$1 | undefined; }'.
+          Types of property 'transition' are incompatible.
+            Type '{ type: string; stiffness: number; }' is not assignable to type 'Transition<any> | undefined'.
+              Type '{ type: string; stiffness: number; }' is not assignable to type 'TransitionWithValueOverrides<any>'.
+                Type '{ type: string; stiffness: number; }' is not assignable to type 'ValueAnimationTransition<any>'.
+                  Types of property 'type' are incompatible.
+                    Type 'string' is not assignable to type 'AnimationGeneratorType | undefined'.
+src/app/(dashboard)/leaderboard/page.tsx(869,21): error TS2322: Type '{ hidden: { opacity: number; y: number; }; visible: { opacity: number; y: number; transition: { type: string; stiffness: number; }; }; }' is not assignable to type 'Variants'.
+  Property 'visible' is incompatible with index signature.
+    Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'Variant'.
+      Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'TargetAndTransition'.
+        Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type '{ transition?: Transition<any> | undefined; transitionEnd?: ResolvedValues$1 | undefined; }'.
+          Types of property 'transition' are incompatible.
+            Type '{ type: string; stiffness: number; }' is not assignable to type 'Transition<any> | undefined'.
+              Type '{ type: string; stiffness: number; }' is not assignable to type 'TransitionWithValueOverrides<any>'.
+                Type '{ type: string; stiffness: number; }' is not assignable to type 'ValueAnimationTransition<any>'.
+                  Types of property 'type' are incompatible.
+                    Type 'string' is not assignable to type 'AnimationGeneratorType | undefined'.
+src/app/(dashboard)/leaderboard/page.tsx(928,21): error TS2322: Type '{ hidden: { opacity: number; y: number; }; visible: { opacity: number; y: number; transition: { type: string; stiffness: number; }; }; }' is not assignable to type 'Variants'.
+  Property 'visible' is incompatible with index signature.
+    Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'Variant'.
+      Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'TargetAndTransition'.
+        Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type '{ transition?: Transition<any> | undefined; transitionEnd?: ResolvedValues$1 | undefined; }'.
+          Types of property 'transition' are incompatible.
+            Type '{ type: string; stiffness: number; }' is not assignable to type 'Transition<any> | undefined'.
+              Type '{ type: string; stiffness: number; }' is not assignable to type 'TransitionWithValueOverrides<any>'.
+                Type '{ type: string; stiffness: number; }' is not assignable to type 'ValueAnimationTransition<any>'.
+                  Types of property 'type' are incompatible.
+                    Type 'string' is not assignable to type 'AnimationGeneratorType | undefined'.
+src/app/(dashboard)/leaderboard/page.tsx(957,23): error TS2322: Type '{ hidden: { opacity: number; y: number; }; visible: { opacity: number; y: number; transition: { type: string; stiffness: number; }; }; }' is not assignable to type 'Variants'.
+  Property 'visible' is incompatible with index signature.
+    Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'Variant'.
+      Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'TargetAndTransition'.
+        Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type '{ transition?: Transition<any> | undefined; transitionEnd?: ResolvedValues$1 | undefined; }'.
+          Types of property 'transition' are incompatible.
+            Type '{ type: string; stiffness: number; }' is not assignable to type 'Transition<any> | undefined'.
+              Type '{ type: string; stiffness: number; }' is not assignable to type 'TransitionWithValueOverrides<any>'.
+                Type '{ type: string; stiffness: number; }' is not assignable to type 'ValueAnimationTransition<any>'.
+                  Types of property 'type' are incompatible.
+                    Type 'string' is not assignable to type 'AnimationGeneratorType | undefined'.
+src/app/(dashboard)/leaderboard/page.tsx(982,23): error TS2322: Type '{ hidden: { opacity: number; y: number; }; visible: { opacity: number; y: number; transition: { type: string; stiffness: number; }; }; }' is not assignable to type 'Variants'.
+  Property 'visible' is incompatible with index signature.
+    Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'Variant'.
+      Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'TargetAndTransition'.
+        Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type '{ transition?: Transition<any> | undefined; transitionEnd?: ResolvedValues$1 | undefined; }'.
+          Types of property 'transition' are incompatible.
+            Type '{ type: string; stiffness: number; }' is not assignable to type 'Transition<any> | undefined'.
+              Type '{ type: string; stiffness: number; }' is not assignable to type 'TransitionWithValueOverrides<any>'.
+                Type '{ type: string; stiffness: number; }' is not assignable to type 'ValueAnimationTransition<any>'.
+                  Types of property 'type' are incompatible.
+                    Type 'string' is not assignable to type 'AnimationGeneratorType | undefined'.
+src/app/(dashboard)/leaderboard/page.tsx(989,23): error TS2322: Type '{ hidden: { opacity: number; y: number; }; visible: { opacity: number; y: number; transition: { type: string; stiffness: number; }; }; }' is not assignable to type 'Variants'.
+  Property 'visible' is incompatible with index signature.
+    Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'Variant'.
+      Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'TargetAndTransition'.
+        Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type '{ transition?: Transition<any> | undefined; transitionEnd?: ResolvedValues$1 | undefined; }'.
+          Types of property 'transition' are incompatible.
+            Type '{ type: string; stiffness: number; }' is not assignable to type 'Transition<any> | undefined'.
+              Type '{ type: string; stiffness: number; }' is not assignable to type 'TransitionWithValueOverrides<any>'.
+                Type '{ type: string; stiffness: number; }' is not assignable to type 'ValueAnimationTransition<any>'.
+                  Types of property 'type' are incompatible.
+                    Type 'string' is not assignable to type 'AnimationGeneratorType | undefined'.
+src/app/(dashboard)/leaderboard/page.tsx(1027,21): error TS2322: Type '{ hidden: { opacity: number; y: number; }; visible: { opacity: number; y: number; transition: { type: string; stiffness: number; }; }; }' is not assignable to type 'Variants'.
+  Property 'visible' is incompatible with index signature.
+    Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'Variant'.
+      Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'TargetAndTransition'.
+        Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type '{ transition?: Transition<any> | undefined; transitionEnd?: ResolvedValues$1 | undefined; }'.
+          Types of property 'transition' are incompatible.
+            Type '{ type: string; stiffness: number; }' is not assignable to type 'Transition<any> | undefined'.
+              Type '{ type: string; stiffness: number; }' is not assignable to type 'TransitionWithValueOverrides<any>'.
+                Type '{ type: string; stiffness: number; }' is not assignable to type 'ValueAnimationTransition<any>'.
+                  Types of property 'type' are incompatible.
+                    Type 'string' is not assignable to type 'AnimationGeneratorType | undefined'.
+src/app/(dashboard)/leaderboard/page.tsx(1080,21): error TS2322: Type '{ hidden: { opacity: number; y: number; }; visible: { opacity: number; y: number; transition: { type: string; stiffness: number; }; }; }' is not assignable to type 'Variants'.
+  Property 'visible' is incompatible with index signature.
+    Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'Variant'.
+      Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'TargetAndTransition'.
+        Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type '{ transition?: Transition<any> | undefined; transitionEnd?: ResolvedValues$1 | undefined; }'.
+          Types of property 'transition' are incompatible.
+            Type '{ type: string; stiffness: number; }' is not assignable to type 'Transition<any> | undefined'.
+              Type '{ type: string; stiffness: number; }' is not assignable to type 'TransitionWithValueOverrides<any>'.
+                Type '{ type: string; stiffness: number; }' is not assignable to type 'ValueAnimationTransition<any>'.
+                  Types of property 'type' are incompatible.
+                    Type 'string' is not assignable to type 'AnimationGeneratorType | undefined'.
+src/app/(dashboard)/leaderboard/page.tsx(1085,21): error TS2322: Type '{ hidden: { opacity: number; y: number; }; visible: { opacity: number; y: number; transition: { type: string; stiffness: number; }; }; }' is not assignable to type 'Variants'.
+  Property 'visible' is incompatible with index signature.
+    Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'Variant'.
+      Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'TargetAndTransition'.
+        Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type '{ transition?: Transition<any> | undefined; transitionEnd?: ResolvedValues$1 | undefined; }'.
+          Types of property 'transition' are incompatible.
+            Type '{ type: string; stiffness: number; }' is not assignable to type 'Transition<any> | undefined'.
+              Type '{ type: string; stiffness: number; }' is not assignable to type 'TransitionWithValueOverrides<any>'.
+                Type '{ type: string; stiffness: number; }' is not assignable to type 'ValueAnimationTransition<any>'.
+                  Types of property 'type' are incompatible.
+                    Type 'string' is not assignable to type 'AnimationGeneratorType | undefined'.
+src/app/(dashboard)/notifications/page.tsx(118,54): error TS2304: Cannot find name 't'.
+src/app/(dashboard)/portfolio/page.tsx(33,10): error TS2440: Import declaration conflicts with local declaration of 'cn'.
+src/app/(dashboard)/portfolio/page.tsx(129,9): error TS2322: Type '{ initial: { opacity: number; y: number; }; animate: { opacity: number; y: number; transition: { duration: number; ease: string; }; }; exit: { opacity: number; y: number; }; }' is not assignable to type 'Variants'.
+  Property 'animate' is incompatible with index signature.
+    Type '{ opacity: number; y: number; transition: { duration: number; ease: string; }; }' is not assignable to type 'Variant'.
+      Type '{ opacity: number; y: number; transition: { duration: number; ease: string; }; }' is not assignable to type 'TargetAndTransition'.
+        Type '{ opacity: number; y: number; transition: { duration: number; ease: string; }; }' is not assignable to type '{ transition?: Transition<any> | undefined; transitionEnd?: ResolvedValues$1 | undefined; }'.
+          Types of property 'transition' are incompatible.
+            Type '{ duration: number; ease: string; }' is not assignable to type 'Transition<any> | undefined'.
+              Type '{ duration: number; ease: string; }' is not assignable to type 'TransitionWithValueOverrides<any>'.
+                Type '{ duration: number; ease: string; }' is not assignable to type 'ValueAnimationTransition<any>'.
+                  Types of property 'ease' are incompatible.
+                    Type 'string' is not assignable to type 'Easing | Easing[] | undefined'.
+src/app/(dashboard)/portfolio/page.tsx(178,25): error TS2322: Type '{ hidden: { opacity: number; y: number; }; visible: { opacity: number; y: number; transition: { type: string; stiffness: number; }; }; }' is not assignable to type 'Variants'.
+  Property 'visible' is incompatible with index signature.
+    Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'Variant'.
+      Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'TargetAndTransition'.
+        Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type '{ transition?: Transition<any> | undefined; transitionEnd?: ResolvedValues$1 | undefined; }'.
+          Types of property 'transition' are incompatible.
+            Type '{ type: string; stiffness: number; }' is not assignable to type 'Transition<any> | undefined'.
+              Type '{ type: string; stiffness: number; }' is not assignable to type 'TransitionWithValueOverrides<any>'.
+                Type '{ type: string; stiffness: number; }' is not assignable to type 'ValueAnimationTransition<any>'.
+                  Types of property 'type' are incompatible.
+                    Type 'string' is not assignable to type 'AnimationGeneratorType | undefined'.
+src/app/(dashboard)/portfolio/page.tsx(180,27): error TS2322: Type '{ hidden: { opacity: number; y: number; }; visible: { opacity: number; y: number; transition: { type: string; stiffness: number; }; }; }' is not assignable to type 'Variants'.
+  Property 'visible' is incompatible with index signature.
+    Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'Variant'.
+      Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'TargetAndTransition'.
+        Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type '{ transition?: Transition<any> | undefined; transitionEnd?: ResolvedValues$1 | undefined; }'.
+          Types of property 'transition' are incompatible.
+            Type '{ type: string; stiffness: number; }' is not assignable to type 'Transition<any> | undefined'.
+              Type '{ type: string; stiffness: number; }' is not assignable to type 'TransitionWithValueOverrides<any>'.
+                Type '{ type: string; stiffness: number; }' is not assignable to type 'ValueAnimationTransition<any>'.
+                  Types of property 'type' are incompatible.
+                    Type 'string' is not assignable to type 'AnimationGeneratorType | undefined'.
+src/app/(dashboard)/portfolio/page.tsx(191,38): error TS2339: Property 'current_level_id' does not exist on type 'User'.
+src/app/(dashboard)/portfolio/page.tsx(198,28): error TS2304: Cannot find name 'Link'.
+src/app/(dashboard)/portfolio/page.tsx(201,38): error TS2339: Property 'current_level_name' does not exist on type 'User'.
+src/app/(dashboard)/portfolio/page.tsx(203,29): error TS2304: Cannot find name 'Link'.
+src/app/(dashboard)/portfolio/page.tsx(259,27): error TS2322: Type '{ hidden: { opacity: number; y: number; }; visible: { opacity: number; y: number; transition: { type: string; stiffness: number; }; }; }' is not assignable to type 'Variants'.
+  Property 'visible' is incompatible with index signature.
+    Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'Variant'.
+      Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'TargetAndTransition'.
+        Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type '{ transition?: Transition<any> | undefined; transitionEnd?: ResolvedValues$1 | undefined; }'.
+          Types of property 'transition' are incompatible.
+            Type '{ type: string; stiffness: number; }' is not assignable to type 'Transition<any> | undefined'.
+              Type '{ type: string; stiffness: number; }' is not assignable to type 'TransitionWithValueOverrides<any>'.
+                Type '{ type: string; stiffness: number; }' is not assignable to type 'ValueAnimationTransition<any>'.
+                  Types of property 'type' are incompatible.
+                    Type 'string' is not assignable to type 'AnimationGeneratorType | undefined'.
+src/app/(dashboard)/portfolio/page.tsx(294,25): error TS2322: Type '{ hidden: { opacity: number; y: number; }; visible: { opacity: number; y: number; transition: { type: string; stiffness: number; }; }; }' is not assignable to type 'Variants'.
+  Property 'visible' is incompatible with index signature.
+    Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'Variant'.
+      Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'TargetAndTransition'.
+        Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type '{ transition?: Transition<any> | undefined; transitionEnd?: ResolvedValues$1 | undefined; }'.
+          Types of property 'transition' are incompatible.
+            Type '{ type: string; stiffness: number; }' is not assignable to type 'Transition<any> | undefined'.
+              Type '{ type: string; stiffness: number; }' is not assignable to type 'TransitionWithValueOverrides<any>'.
+                Type '{ type: string; stiffness: number; }' is not assignable to type 'ValueAnimationTransition<any>'.
+                  Types of property 'type' are incompatible.
+                    Type 'string' is not assignable to type 'AnimationGeneratorType | undefined'.
+src/app/(dashboard)/portfolio/page.tsx(320,25): error TS2322: Type '{ hidden: { opacity: number; y: number; }; visible: { opacity: number; y: number; transition: { type: string; stiffness: number; }; }; }' is not assignable to type 'Variants'.
+  Property 'visible' is incompatible with index signature.
+    Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'Variant'.
+      Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'TargetAndTransition'.
+        Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type '{ transition?: Transition<any> | undefined; transitionEnd?: ResolvedValues$1 | undefined; }'.
+          Types of property 'transition' are incompatible.
+            Type '{ type: string; stiffness: number; }' is not assignable to type 'Transition<any> | undefined'.
+              Type '{ type: string; stiffness: number; }' is not assignable to type 'TransitionWithValueOverrides<any>'.
+                Type '{ type: string; stiffness: number; }' is not assignable to type 'ValueAnimationTransition<any>'.
+                  Types of property 'type' are incompatible.
+                    Type 'string' is not assignable to type 'AnimationGeneratorType | undefined'.
+src/app/(dashboard)/portfolio/page.tsx(370,25): error TS2322: Type '{ hidden: { opacity: number; y: number; }; visible: { opacity: number; y: number; transition: { type: string; stiffness: number; }; }; }' is not assignable to type 'Variants'.
+  Property 'visible' is incompatible with index signature.
+    Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'Variant'.
+      Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'TargetAndTransition'.
+        Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type '{ transition?: Transition<any> | undefined; transitionEnd?: ResolvedValues$1 | undefined; }'.
+          Types of property 'transition' are incompatible.
+            Type '{ type: string; stiffness: number; }' is not assignable to type 'Transition<any> | undefined'.
+              Type '{ type: string; stiffness: number; }' is not assignable to type 'TransitionWithValueOverrides<any>'.
+                Type '{ type: string; stiffness: number; }' is not assignable to type 'ValueAnimationTransition<any>'.
+                  Types of property 'type' are incompatible.
+                    Type 'string' is not assignable to type 'AnimationGeneratorType | undefined'.
+src/app/(dashboard)/portfolio/page.tsx(431,15): error TS2322: Type '{ hidden: { opacity: number; y: number; }; visible: { opacity: number; y: number; transition: { type: string; stiffness: number; }; }; }' is not assignable to type 'Variants'.
+  Property 'visible' is incompatible with index signature.
+    Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'Variant'.
+      Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'TargetAndTransition'.
+        Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type '{ transition?: Transition<any> | undefined; transitionEnd?: ResolvedValues$1 | undefined; }'.
+          Types of property 'transition' are incompatible.
+            Type '{ type: string; stiffness: number; }' is not assignable to type 'Transition<any> | undefined'.
+              Type '{ type: string; stiffness: number; }' is not assignable to type 'TransitionWithValueOverrides<any>'.
+                Type '{ type: string; stiffness: number; }' is not assignable to type 'ValueAnimationTransition<any>'.
+                  Types of property 'type' are incompatible.
+                    Type 'string' is not assignable to type 'AnimationGeneratorType | undefined'.
+src/app/api/admin/markets/[id]/fields/route.ts(76,12): error TS2551: Property 'catch' does not exist on type 'PostgrestFilterBuilder<any, any, any, any, any, any, "RPC">'. Did you mean 'match'?
+src/app/api/binance-p2p/route.ts(21,14): error TS2339: Property 'from' does not exist on type 'Promise<SupabaseClient<Database, "public", Database, any, any>>'.
+src/app/api/binance-p2p/route.ts(52,14): error TS2339: Property 'from' does not exist on type 'Promise<SupabaseClient<Database, "public", Database, any, any>>'.
+src/app/api/cron/master/route.ts(188,37): error TS2304: Cannot find name 'userMarketSpreads'.
+src/app/api/deposit/manual/route.ts(11,51): error TS2339: Property 'auth' does not exist on type 'Promise<SupabaseClient<Database, "public", Database, any, any>>'.
+src/app/api/deposit/manual/route.ts(29,14): error TS2339: Property 'from' does not exist on type 'Promise<SupabaseClient<Database, "public", Database, any, any>>'.
+src/app/api/deposit/manual/route.ts(44,14): error TS2339: Property 'from' does not exist on type 'Promise<SupabaseClient<Database, "public", Database, any, any>>'.
+src/app/api/deposit/manual/route.ts(58,14): error TS2339: Property 'from' does not exist on type 'Promise<SupabaseClient<Database, "public", Database, any, any>>'.
+src/app/api/deposits/request/route.ts(11,65): error TS2339: Property 'auth' does not exist on type 'Promise<SupabaseClient<Database, "public", Database, any, any>>'.
+src/app/api/deposits/request/route.ts(55,8): error TS2339: Property 'from' does not exist on type 'Promise<SupabaseClient<Database, "public", Database, any, any>>'.
+src/app/api/deposits/request/route.ts(75,8): error TS2339: Property 'from' does not exist on type 'Promise<SupabaseClient<Database, "public", Database, any, any>>'.
+src/app/api/deposits/request/route.ts(94,8): error TS2339: Property 'from' does not exist on type 'Promise<SupabaseClient<Database, "public", Database, any, any>>'.
+src/app/api/deposits/request/route.ts(172,65): error TS2339: Property 'auth' does not exist on type 'Promise<SupabaseClient<Database, "public", Database, any, any>>'.
+src/app/api/deposits/request/route.ts(188,8): error TS2339: Property 'from' does not exist on type 'Promise<SupabaseClient<Database, "public", Database, any, any>>'.
+src/app/api/dispute-workflow/route.ts(101,50): error TS2345: Argument of type 'any[] | null' is not assignable to parameter of type 'any[]'.
+  Type 'null' is not assignable to type 'any[]'.
+src/app/api/follows/route.ts(27,42): error TS2339: Property 'getFollowStatus' does not exist on type 'FeedService'.
+src/app/api/follows/route.ts(31,45): error TS2339: Property 'getFollowers' does not exist on type 'FeedService'.
+src/app/api/follows/route.ts(35,45): error TS2339: Property 'getFollowing' does not exist on type 'FeedService'.
+src/app/api/follows/route.ts(41,23): error TS2339: Property 'getFollowers' does not exist on type 'FeedService'.
+src/app/api/follows/route.ts(42,23): error TS2339: Property 'getFollowing' does not exist on type 'FeedService'.
+src/app/api/follows/route.ts(85,34): error TS2339: Property 'followUser' does not exist on type 'FeedService'.
+src/app/api/follows/route.ts(87,34): error TS2339: Property 'unfollowUser' does not exist on type 'FeedService'.
+src/app/api/notifications/route.ts(170,50): error TS2304: Cannot find name 'snoozeUntil'.
+src/app/api/p2p-sellers/route.ts(17,10): error TS2339: Property 'from' does not exist on type 'Promise<SupabaseClient<Database, "public", Database, any, any>>'.
+src/app/api/upstash-workflow/event-processor/route.ts(148,38): error TS2339: Property 'confidence' does not exist on type '{}'.
+src/app/api/wallet/balance/route.ts(11,65): error TS2339: Property 'auth' does not exist on type 'Promise<SupabaseClient<Database, "public", Database, any, any>>'.
+src/app/api/wallet/balance/route.ts(22,8): error TS2339: Property 'from' does not exist on type 'Promise<SupabaseClient<Database, "public", Database, any, any>>'.
+src/app/api/wallet/balance/route.ts(44,8): error TS2339: Property 'from' does not exist on type 'Promise<SupabaseClient<Database, "public", Database, any, any>>'.
+src/app/api/withdrawals/request/route.ts(11,65): error TS2339: Property 'auth' does not exist on type 'Promise<SupabaseClient<Database, "public", Database, any, any>>'.
+src/app/api/withdrawals/request/route.ts(48,8): error TS2339: Property 'from' does not exist on type 'Promise<SupabaseClient<Database, "public", Database, any, any>>'.
+src/app/api/withdrawals/request/route.ts(83,10): error TS2339: Property 'from' does not exist on type 'Promise<SupabaseClient<Database, "public", Database, any, any>>'.
+src/app/api/withdrawals/request/route.ts(98,46): error TS7006: Parameter 'sum' implicitly has an 'any' type.
+src/app/api/withdrawals/request/route.ts(98,51): error TS7006: Parameter 'tx' implicitly has an 'any' type.
+src/app/api/withdrawals/request/route.ts(110,8): error TS2339: Property 'from' does not exist on type 'Promise<SupabaseClient<Database, "public", Database, any, any>>'.
+src/app/api/withdrawals/request/route.ts(134,8): error TS2339: Property 'from' does not exist on type 'Promise<SupabaseClient<Database, "public", Database, any, any>>'.
+src/app/api/withdrawals/request/route.ts(212,65): error TS2339: Property 'auth' does not exist on type 'Promise<SupabaseClient<Database, "public", Database, any, any>>'.
+src/app/api/withdrawals/request/route.ts(228,8): error TS2339: Property 'from' does not exist on type 'Promise<SupabaseClient<Database, "public", Database, any, any>>'.
+src/app/api/withdrawals/request/route.ts(285,65): error TS2339: Property 'auth' does not exist on type 'Promise<SupabaseClient<Database, "public", Database, any, any>>'.
+src/app/api/withdrawals/request/route.ts(300,8): error TS2339: Property 'from' does not exist on type 'Promise<SupabaseClient<Database, "public", Database, any, any>>'.
+src/app/api/withdrawals/request/route.ts(323,8): error TS2339: Property 'from' does not exist on type 'Promise<SupabaseClient<Database, "public", Database, any, any>>'.
+src/app/api/withdrawals/request/route.ts(346,10): error TS2339: Property 'from' does not exist on type 'Promise<SupabaseClient<Database, "public", Database, any, any>>'.
+src/app/api/withdrawals/request/route.ts(360,10): error TS2339: Property 'from' does not exist on type 'Promise<SupabaseClient<Database, "public", Database, any, any>>'.
+src/app/api/withdrawals/request/route.ts(362,29): error TS2339: Property 'rpc' does not exist on type 'Promise<SupabaseClient<Database, "public", Database, any, any>>'.
+src/app/api/withdrawals/request/route.ts(362,50): error TS2339: Property 'raw' does not exist on type 'Promise<SupabaseClient<Database, "public", Database, any, any>>'.
+src/app/api/workflows/cleanup-expired/route.ts(10,27): error TS2554: Expected 2 arguments, but got 1.
+src/app/api/workflows/combined-analytics/route.ts(10,27): error TS2554: Expected 2 arguments, but got 1.
+src/app/api/workflows/combined-daily-ops/route.ts(10,27): error TS2554: Expected 2 arguments, but got 1.
+src/app/api/workflows/combined-market-data/route.ts(10,27): error TS2554: Expected 2 arguments, but got 1.
+src/app/api/workflows/daily-report/route.ts(212,9): error TS2345: Argument of type 'Promise<Response>' is not assignable to parameter of type 'PostgrestFilterBuilder<any, any, any, null, "notifications", unknown, "POST">'.
+  Type 'Promise<Response>' is missing the following properties from type 'PostgrestFilterBuilder<any, any, any, null, "notifications", unknown, "POST">': eq, neq, gt, gte, and 50 more.
+src/app/api/workflows/deposit/route.ts(118,9): error TS2345: Argument of type 'PostgrestFilterBuilder<any, any, any, null, "notifications", unknown, "POST">' is not assignable to parameter of type 'Promise<unknown>'.
+  Type 'PostgrestFilterBuilder<any, any, any, null, "notifications", unknown, "POST">' is missing the following properties from type 'Promise<unknown>': catch, finally, [Symbol.toStringTag]
+src/app/api/workflows/update-exchange-rate/route.ts(11,27): error TS2554: Expected 2 arguments, but got 1.
+src/app/api/workflows/withdrawal/route.ts(198,9): error TS2345: Argument of type 'Promise<Response>' is not assignable to parameter of type 'PostgrestFilterBuilder<any, any, any, null, "notifications", unknown, "POST">'.
+  Type 'Promise<Response>' is missing the following properties from type 'PostgrestFilterBuilder<any, any, any, null, "notifications", unknown, "POST">': eq, neq, gt, gte, and 50 more.
+src/app/sys-cmd-7x9k2/events/create/hybrid/page.tsx(185,24): error TS7053: Element implicitly has an 'any' type because expression of type 'keyof FormData' can't be used to index type 'SuggestionsState'.
+  Property 'image_url' does not exist on type 'SuggestionsState'.
+src/app/sys-cmd-7x9k2/events/create/hybrid/page.tsx(201,14): error TS7053: Element implicitly has an 'any' type because expression of type 'keyof FormData' can't be used to index type '{ name?: FieldSuggestion | undefined; question?: FieldSuggestion | undefined; description?: FieldSuggestion | undefined; category?: FieldSuggestion | undefined; subcategory?: FieldSuggestion | undefined; tags?: FieldSuggestion | undefined; trading_closes_at?: FieldSuggestion | undefined; }'.
+  Property 'image_url' does not exist on type '{ name?: FieldSuggestion | undefined; question?: FieldSuggestion | undefined; description?: FieldSuggestion | undefined; category?: FieldSuggestion | undefined; subcategory?: FieldSuggestion | undefined; tags?: FieldSuggestion | undefined; trading_closes_at?: FieldSuggestion | undefined; }'.
+src/app/sys-cmd-7x9k2/events/create/hybrid/page.tsx(317,24): error TS7053: Element implicitly has an 'any' type because expression of type 'keyof FormData' can't be used to index type 'SuggestionsState'.
+  Property 'image_url' does not exist on type 'SuggestionsState'.
+src/app/sys-cmd-7x9k2/events/create/hybrid/page.tsx(358,43): error TS7006: Parameter 'alt' implicitly has an 'any' type.
+src/app/sys-cmd-7x9k2/events/create/hybrid/page.tsx(358,48): error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/app/sys-cmd-7x9k2/users/detail-page/components/UserOverviewView.tsx(228,51): error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/app/sys-cmd-7x9k2/users/detail-page/components/UserOverviewView.tsx(243,62): error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/app/sys-cmd-7x9k2/users/detail-page/components/UserOverviewView.tsx(250,62): error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/app/sys-cmd-7x9k2/users/detail-page/components/UserOverviewView.tsx(257,62): error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/components/activity/ActivityItem.tsx(19,13): error TS2322: Type 'Element' is not assignable to type 'string'.
+src/components/activity/ActivityItem.tsx(28,13): error TS2322: Type 'Element' is not assignable to type 'string'.
+src/components/activity/ActivityItem.tsx(37,13): error TS2322: Type 'Element' is not assignable to type 'string'.
+src/components/activity/ActivityItem.tsx(46,13): error TS2322: Type 'Element' is not assignable to type 'string'.
+src/components/activity/ActivityItem.tsx(53,13): error TS2322: Type 'Element' is not assignable to type 'string'.
+src/components/cancellation/CancelButton.tsx(123,12): error TS2678: Type '"CANCELLING"' is not comparable to type 'OrderStatus'.
+src/components/cancellation/CancelButton.tsx(131,12): error TS2678: Type '"CANCELLED"' is not comparable to type 'OrderStatus'.
+src/components/cancellation/CancelButton.tsx(142,54): error TS2367: This comparison appears to be unintentional because the types '"cancelled" | "open" | "filled" | "partially_filled" | "expired"' and '"CANCELLING"' have no overlap.
+src/components/cancellation/CancelButton.tsx(152,68): error TS2367: This comparison appears to be unintentional because the types '"cancelled" | "open" | "filled" | "partially_filled" | "expired"' and '"CANCELLING"' have no overlap.
+src/components/deposit/ManualAgentDeposit.tsx(68,18): error TS7006: Parameter 'payload' implicitly has an 'any' type.
+src/components/error/ErrorBoundary.tsx(37,21): error TS2339: Property 'env' does not exist on type 'ImportMeta'.
+src/components/error/ErrorBoundary.tsx(75,28): error TS2339: Property 'env' does not exist on type 'ImportMeta'.
+src/components/market/MarketCard.tsx(118,20): error TS2339: Property 'is_verified' does not exist on type 'Market'.
+src/components/market/MarketInfoPanel.tsx(29,33): error TS2339: Property 'resolution_criteria' does not exist on type 'Market'.
+src/components/matching/FillNotifications.tsx(44,48): error TS2367: This comparison appears to be unintentional because the types '"sell"' and '"BUY"' have no overlap.
+src/components/matching/FillNotifications.tsx(135,60): error TS2367: This comparison appears to be unintentional because the types '"sell"' and '"BUY"' have no overlap.
+src/components/matching/FillNotifications.tsx(136,62): error TS2367: This comparison appears to be unintentional because the types '"buy"' and '"SELL"' have no overlap.
+src/components/matching/FillNotifications.tsx(141,64): error TS2367: This comparison appears to be unintentional because the types '"sell"' and '"BUY"' have no overlap.
+src/components/matching/FillNotifications.tsx(142,66): error TS2367: This comparison appears to be unintentional because the types '"buy"' and '"SELL"' have no overlap.
+src/components/portfolio/AdvancedPerformanceCharts.tsx(301,82): error TS2322: Type '{ checked: boolean; onCheckedChange: Dispatch<SetStateAction<boolean>>; size: string; }' is not assignable to type 'IntrinsicAttributes & SwitchProps & RefAttributes<HTMLButtonElement>'.
+  Property 'size' does not exist on type 'IntrinsicAttributes & SwitchProps & RefAttributes<HTMLButtonElement>'.
+src/components/portfolio/AdvancedPerformanceCharts.tsx(354,74): error TS2345: Argument of type 'string' is not assignable to parameter of type '"BDT" | "USD" | undefined'.
+src/components/portfolio/AdvancedPerformanceCharts.tsx(378,81): error TS2345: Argument of type 'string' is not assignable to parameter of type '"BDT" | "USD" | undefined'.
+src/components/portfolio/AdvancedPerformanceCharts.tsx(391,96): error TS2345: Argument of type 'string' is not assignable to parameter of type '"BDT" | "USD" | undefined'.
+src/components/portfolio/AdvancedPerformanceCharts.tsx(695,53): error TS2339: Property 'toFixed' does not exist on type 'ValueType'.
+  Property 'toFixed' does not exist on type 'string'.
+src/components/portfolio/AdvancedPerformanceCharts.tsx(1030,84): error TS2345: Argument of type 'string' is not assignable to parameter of type '"BDT" | "USD" | undefined'.
+src/components/portfolio/AdvancedPerformanceCharts.tsx(1040,95): error TS2345: Argument of type 'string' is not assignable to parameter of type '"BDT" | "USD" | undefined'.
+src/components/portfolio/AdvancedPerformanceCharts.tsx(1111,82): error TS2345: Argument of type 'string' is not assignable to parameter of type '"BDT" | "USD" | undefined'.
+src/components/portfolio/AdvancedPerformanceCharts.tsx(1129,80): error TS2345: Argument of type 'string' is not assignable to parameter of type '"BDT" | "USD" | undefined'.
+src/components/portfolio/ChartComponents.tsx(21,10): error TS2440: Import declaration conflicts with local declaration of 'cn'.
+src/components/portfolio/ChartComponents.tsx(104,76): error TS2345: Argument of type 'string' is not assignable to parameter of type '"BDT" | "USD" | undefined'.
+src/components/portfolio/ChartComponents.tsx(121,78): error TS2345: Argument of type 'string' is not assignable to parameter of type '"BDT" | "USD" | undefined'.
+src/components/portfolio/ChartComponents.tsx(128,92): error TS2345: Argument of type 'string' is not assignable to parameter of type '"BDT" | "USD" | undefined'.
+src/components/portfolio/ChartComponents.tsx(199,58): error TS2339: Property 'toFixed' does not exist on type 'ValueType'.
+  Property 'toFixed' does not exist on type 'string'.
+src/components/portfolio/ChartComponents.tsx(326,111): error TS2345: Argument of type 'string' is not assignable to parameter of type '"BDT" | "USD" | undefined'.
+src/components/portfolio/PnLDashboard.tsx(110,19): error TS2322: Type '{ hidden: { opacity: number; y: number; }; visible: { opacity: number; y: number; transition: { type: string; stiffness: number; }; }; }' is not assignable to type 'Variants'.
+  Property 'visible' is incompatible with index signature.
+    Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'Variant'.
+      Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'TargetAndTransition'.
+        Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type '{ transition?: Transition<any> | undefined; transitionEnd?: ResolvedValues$1 | undefined; }'.
+          Types of property 'transition' are incompatible.
+            Type '{ type: string; stiffness: number; }' is not assignable to type 'Transition<any> | undefined'.
+              Type '{ type: string; stiffness: number; }' is not assignable to type 'TransitionWithValueOverrides<any>'.
+                Type '{ type: string; stiffness: number; }' is not assignable to type 'ValueAnimationTransition<any>'.
+                  Types of property 'type' are incompatible.
+                    Type 'string' is not assignable to type 'AnimationGeneratorType | undefined'.
+src/components/portfolio/PnLDashboard.tsx(150,19): error TS2322: Type '{ hidden: { opacity: number; y: number; }; visible: { opacity: number; y: number; transition: { type: string; stiffness: number; }; }; }' is not assignable to type 'Variants'.
+  Property 'visible' is incompatible with index signature.
+    Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'Variant'.
+      Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'TargetAndTransition'.
+        Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type '{ transition?: Transition<any> | undefined; transitionEnd?: ResolvedValues$1 | undefined; }'.
+          Types of property 'transition' are incompatible.
+            Type '{ type: string; stiffness: number; }' is not assignable to type 'Transition<any> | undefined'.
+              Type '{ type: string; stiffness: number; }' is not assignable to type 'TransitionWithValueOverrides<any>'.
+                Type '{ type: string; stiffness: number; }' is not assignable to type 'ValueAnimationTransition<any>'.
+                  Types of property 'type' are incompatible.
+                    Type 'string' is not assignable to type 'AnimationGeneratorType | undefined'.
+src/components/portfolio/PnLDashboard.tsx(162,15): error TS2322: Type '{ scale: number[]; transition: { duration: number; repeat: number; ease: string; }; } | {}' is not assignable to type 'boolean | VariantLabels | TargetAndTransition | LegacyAnimationControls | undefined'.
+  Type '{ scale: number[]; transition: { duration: number; repeat: number; ease: string; }; }' is not assignable to type 'boolean | VariantLabels | TargetAndTransition | LegacyAnimationControls | undefined'.
+    Type '{ scale: number[]; transition: { duration: number; repeat: number; ease: string; }; }' is not assignable to type 'TargetAndTransition'.
+      Type '{ scale: number[]; transition: { duration: number; repeat: number; ease: string; }; }' is not assignable to type '{ transition?: Transition<any> | undefined; transitionEnd?: ResolvedValues$1 | undefined; }'.
+        Types of property 'transition' are incompatible.
+          Type '{ duration: number; repeat: number; ease: string; }' is not assignable to type 'Transition<any> | undefined'.
+            Type '{ duration: number; repeat: number; ease: string; }' is not assignable to type 'TransitionWithValueOverrides<any>'.
+              Type '{ duration: number; repeat: number; ease: string; }' is not assignable to type 'ValueAnimationTransition<any>'.
+                Types of property 'ease' are incompatible.
+                  Type 'string' is not assignable to type 'Easing | Easing[] | undefined'.
+src/components/portfolio/PnLDashboard.tsx(266,19): error TS2322: Type '{ hidden: { opacity: number; y: number; }; visible: { opacity: number; y: number; transition: { type: string; stiffness: number; }; }; }' is not assignable to type 'Variants'.
+  Property 'visible' is incompatible with index signature.
+    Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'Variant'.
+      Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'TargetAndTransition'.
+        Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type '{ transition?: Transition<any> | undefined; transitionEnd?: ResolvedValues$1 | undefined; }'.
+          Types of property 'transition' are incompatible.
+            Type '{ type: string; stiffness: number; }' is not assignable to type 'Transition<any> | undefined'.
+              Type '{ type: string; stiffness: number; }' is not assignable to type 'TransitionWithValueOverrides<any>'.
+                Type '{ type: string; stiffness: number; }' is not assignable to type 'ValueAnimationTransition<any>'.
+                  Types of property 'type' are incompatible.
+                    Type 'string' is not assignable to type 'AnimationGeneratorType | undefined'.
+src/components/portfolio/PnLDashboard.tsx(310,19): error TS2322: Type '{ hidden: { opacity: number; y: number; }; visible: { opacity: number; y: number; transition: { type: string; stiffness: number; }; }; }' is not assignable to type 'Variants'.
+  Property 'visible' is incompatible with index signature.
+    Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'Variant'.
+      Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'TargetAndTransition'.
+        Type '{ opacity: number; y: number; transition: { type: string; stiffness: number; }; }' is not assignable to type '{ transition?: Transition<any> | undefined; transitionEnd?: ResolvedValues$1 | undefined; }'.
+          Types of property 'transition' are incompatible.
+            Type '{ type: string; stiffness: number; }' is not assignable to type 'Transition<any> | undefined'.
+              Type '{ type: string; stiffness: number; }' is not assignable to type 'TransitionWithValueOverrides<any>'.
+                Type '{ type: string; stiffness: number; }' is not assignable to type 'ValueAnimationTransition<any>'.
+                  Types of property 'type' are incompatible.
+                    Type 'string' is not assignable to type 'AnimationGeneratorType | undefined'.
+src/components/portfolio/PositionHistory.tsx(105,19): error TS2322: Type '{ hidden: { opacity: number; x: number; }; visible: { opacity: number; x: number; transition: { type: string; stiffness: number; }; }; }' is not assignable to type 'Variants'.
+  Property 'visible' is incompatible with index signature.
+    Type '{ opacity: number; x: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'Variant'.
+      Type '{ opacity: number; x: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'TargetAndTransition'.
+        Type '{ opacity: number; x: number; transition: { type: string; stiffness: number; }; }' is not assignable to type '{ transition?: Transition<any> | undefined; transitionEnd?: ResolvedValues$1 | undefined; }'.
+          Types of property 'transition' are incompatible.
+            Type '{ type: string; stiffness: number; }' is not assignable to type 'Transition<any> | undefined'.
+              Type '{ type: string; stiffness: number; }' is not assignable to type 'TransitionWithValueOverrides<any>'.
+                Type '{ type: string; stiffness: number; }' is not assignable to type 'ValueAnimationTransition<any>'.
+                  Types of property 'type' are incompatible.
+                    Type 'string' is not assignable to type 'AnimationGeneratorType | undefined'.
+src/components/portfolio/PositionHistory.tsx(167,19): error TS2322: Type '{ hidden: { opacity: number; x: number; }; visible: { opacity: number; x: number; transition: { type: string; stiffness: number; }; }; }' is not assignable to type 'Variants'.
+  Property 'visible' is incompatible with index signature.
+    Type '{ opacity: number; x: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'Variant'.
+      Type '{ opacity: number; x: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'TargetAndTransition'.
+        Type '{ opacity: number; x: number; transition: { type: string; stiffness: number; }; }' is not assignable to type '{ transition?: Transition<any> | undefined; transitionEnd?: ResolvedValues$1 | undefined; }'.
+          Types of property 'transition' are incompatible.
+            Type '{ type: string; stiffness: number; }' is not assignable to type 'Transition<any> | undefined'.
+              Type '{ type: string; stiffness: number; }' is not assignable to type 'TransitionWithValueOverrides<any>'.
+                Type '{ type: string; stiffness: number; }' is not assignable to type 'ValueAnimationTransition<any>'.
+                  Types of property 'type' are incompatible.
+                    Type 'string' is not assignable to type 'AnimationGeneratorType | undefined'.
+src/components/portfolio/PositionHistory.tsx(240,19): error TS2322: Type '{ hidden: { opacity: number; x: number; }; visible: { opacity: number; x: number; transition: { type: string; stiffness: number; }; }; }' is not assignable to type 'Variants'.
+  Property 'visible' is incompatible with index signature.
+    Type '{ opacity: number; x: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'Variant'.
+      Type '{ opacity: number; x: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'TargetAndTransition'.
+        Type '{ opacity: number; x: number; transition: { type: string; stiffness: number; }; }' is not assignable to type '{ transition?: Transition<any> | undefined; transitionEnd?: ResolvedValues$1 | undefined; }'.
+          Types of property 'transition' are incompatible.
+            Type '{ type: string; stiffness: number; }' is not assignable to type 'Transition<any> | undefined'.
+              Type '{ type: string; stiffness: number; }' is not assignable to type 'TransitionWithValueOverrides<any>'.
+                Type '{ type: string; stiffness: number; }' is not assignable to type 'ValueAnimationTransition<any>'.
+                  Types of property 'type' are incompatible.
+                    Type 'string' is not assignable to type 'AnimationGeneratorType | undefined'.
+src/components/portfolio/PositionHistory.tsx(265,17): error TS2322: Type '{ hidden: { opacity: number; x: number; }; visible: { opacity: number; x: number; transition: { type: string; stiffness: number; }; }; }' is not assignable to type 'Variants'.
+  Property 'visible' is incompatible with index signature.
+    Type '{ opacity: number; x: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'Variant'.
+      Type '{ opacity: number; x: number; transition: { type: string; stiffness: number; }; }' is not assignable to type 'TargetAndTransition'.
+        Type '{ opacity: number; x: number; transition: { type: string; stiffness: number; }; }' is not assignable to type '{ transition?: Transition<any> | undefined; transitionEnd?: ResolvedValues$1 | undefined; }'.
+          Types of property 'transition' are incompatible.
+            Type '{ type: string; stiffness: number; }' is not assignable to type 'Transition<any> | undefined'.
+              Type '{ type: string; stiffness: number; }' is not assignable to type 'TransitionWithValueOverrides<any>'.
+                Type '{ type: string; stiffness: number; }' is not assignable to type 'ValueAnimationTransition<any>'.
+                  Types of property 'type' are incompatible.
+                    Type 'string' is not assignable to type 'AnimationGeneratorType | undefined'.
+src/components/portfolio/PositionHistory.tsx(471,78): error TS2339: Property 'taxLotMethod' does not exist on type 'PositionHistory'.
+src/components/social/ActivityFeed.tsx(221,22): error TS2352: Conversion of type 'ActivityData' to type '{ badgeId: string; badgeName: string; }' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Type 'TrendingMarketActivity' is missing the following properties from type '{ badgeId: string; badgeName: string; }': badgeId, badgeName
+src/components/social/ActivityFeed.tsx(558,43): error TS2322: Type 'void' is not assignable to type 'Promise<void>'.
+src/components/social/FollowButton.tsx(153,9): error TS2322: Type '"sm" | "md" | "lg"' is not assignable to type '"default" | "sm" | "lg" | "icon" | "icon-sm" | "icon-lg" | null | undefined'.
+  Type '"md"' is not assignable to type '"default" | "sm" | "lg" | "icon" | "icon-sm" | "icon-lg" | null | undefined'.
+src/components/social/FollowButton.tsx(168,9): error TS2322: Type '"sm" | "md" | "lg"' is not assignable to type '"default" | "sm" | "lg" | "icon" | "icon-sm" | "icon-lg" | null | undefined'.
+  Type '"md"' is not assignable to type '"default" | "sm" | "lg" | "icon" | "icon-sm" | "icon-lg" | null | undefined'.
+src/components/social/FollowButton.tsx(193,7): error TS2322: Type '"sm" | "md" | "lg"' is not assignable to type '"default" | "sm" | "lg" | "icon" | "icon-sm" | "icon-lg" | null | undefined'.
+  Type '"md"' is not assignable to type '"default" | "sm" | "lg" | "icon" | "icon-sm" | "icon-lg" | null | undefined'.
+src/components/tif/PartialFillTracker.tsx(68,5): error TS2339: Property 'isLoading' does not exist on type 'UseTIFReturn'.
+src/components/ui/aspect-ratio.tsx(3,39): error TS2307: Cannot find module '@radix-ui/react-aspect-ratio' or its corresponding type declarations.
+src/components/ui/carousel.tsx(4,8): error TS2307: Cannot find module 'embla-carousel-react' or its corresponding type declarations.
+src/components/ui/command.tsx(2,45): error TS2307: Cannot find module 'cmdk' or its corresponding type declarations.
+src/components/ui/context-menu.tsx(4,39): error TS2307: Cannot find module '@radix-ui/react-context-menu' or its corresponding type declarations.
+src/components/ui/drawer.tsx(4,43): error TS2307: Cannot find module 'vaul' or its corresponding type declarations.
+src/components/ui/hover-card.tsx(4,37): error TS2307: Cannot find module '@radix-ui/react-hover-card' or its corresponding type declarations.
+src/components/ui/input-otp.tsx(2,43): error TS2307: Cannot find module 'input-otp' or its corresponding type declarations.
+src/components/ui/input-otp.tsx(45,61): error TS2339: Property 'slots' does not exist on type 'string | number | boolean | ServerContextJSONArray | { [key: string]: ServerContextJSONValue; }'.
+  Property 'slots' does not exist on type 'string'.
+src/components/ui/menubar.tsx(2,35): error TS2307: Cannot find module '@radix-ui/react-menubar' or its corresponding type declarations.
+src/components/ui/navigation-menu.tsx(2,42): error TS2307: Cannot find module '@radix-ui/react-navigation-menu' or its corresponding type declarations.
+src/components/ui/radio-group.tsx(4,38): error TS2307: Cannot find module '@radix-ui/react-radio-group' or its corresponding type declarations.
+src/components/ui/resizable.tsx(3,37): error TS2307: Cannot find module 'react-resizable-panels' or its corresponding type declarations.
+src/components/ui/toggle-group.tsx(2,39): error TS2307: Cannot find module '@radix-ui/react-toggle-group' or its corresponding type declarations.
+src/components/ui/toggle.tsx(2,34): error TS2307: Cannot find module '@radix-ui/react-toggle' or its corresponding type declarations.
+src/components/wallet/BalanceCard.tsx(8,32): error TS2307: Cannot find module '@/i18n/client' or its corresponding type declarations.
+src/components/wallet/BalanceCard.tsx(54,17): error TS7006: Parameter 'payload' implicitly has an 'any' type.
+src/components/wallet/TransactionHistory.tsx(49,35): error TS7006: Parameter 'd' implicitly has an 'any' type.
+src/components/wallet/TransactionHistory.tsx(54,38): error TS7006: Parameter 'w' implicitly has an 'any' type.
+src/components/wallet/WalletDashboard.tsx(238,10): error TS7006: Parameter 'payload' implicitly has an 'any' type.
+src/components/workflows/WorkflowDashboard.tsx(36,3): error TS2305: Module '"@/store/workflowStore"' has no exported member 'selectStats'.
+src/hooks/useCancellation.ts(170,50): error TS2345: Argument of type 'boolean | 0 | undefined' is not assignable to parameter of type 'boolean | undefined'.
+  Type '0' is not assignable to type 'boolean | undefined'.
+src/hooks/useLeaderboard.ts(544,26): error TS7006: Parameter 'position' implicitly has an 'any' type.
+src/hooks/useLeaderboard.ts(732,13): error TS2322: Type 'RewardTier | null' is not assignable to type 'RewardTier | undefined'.
+  Type 'null' is not assignable to type 'RewardTier | undefined'.
+src/hooks/useMatchingEngine.ts(265,63): error TS2345: Argument of type 'string' is not assignable to parameter of type 'OrderQueue'.
+src/hooks/useRealtimePrice.ts(40,10): error TS7006: Parameter 'payload' implicitly has an 'any' type.
+src/hooks/useTIF.ts(185,44): error TS2367: This comparison appears to be unintentional because the types '"open" | "filled" | "partially_filled" | "cancelling" | "expired"' and '"CANCELLED"' have no overlap.
+src/lib/cancellation/service.ts(270,52): error TS2367: This comparison appears to be unintentional because the types '"cancelled" | "open" | "filled" | "partially_filled" | "expired" | undefined' and '"CANCELLING"' have no overlap.
+src/lib/clob/service.ts(219,47): error TS2339: Property 'getOrder' does not exist on type 'OrderBookEngine'.
+src/lib/clob/test-limit.ts(18,9): error TS2322: Type '"BUY" | "SELL"' is not assignable to type 'Side'.
+  Type '"BUY"' is not assignable to type 'Side'.
+src/lib/clob/test-limit.ts(19,9): error TS2322: Type 'number' is not assignable to type 'bigint'.
+src/lib/clob/test-limit.ts(23,9): error TS2820: Type '"OPEN"' is not assignable to type 'OrderStatus'. Did you mean '"open"'?
+src/lib/clob/test-limit.ts(45,9): error TS2367: This comparison appears to be unintentional because the types 'OrderStatus' and '"CANCELED"' have no overlap.
+src/lib/clob/test-limit.ts(54,9): error TS2367: This comparison appears to be unintentional because the types 'OrderStatus' and '"FILLED"' have no overlap.
+src/lib/clob/test-limit.ts(66,9): error TS2367: This comparison appears to be unintentional because the types 'OrderStatus' and '"CANCELED"' have no overlap.
+src/lib/clob/test-limit.ts(70,9): error TS2367: This comparison appears to be unintentional because the types 'OrderStatus' and '"OPEN"' have no overlap.
+src/lib/clob/test-stp.ts(16,9): error TS2322: Type '"BUY" | "SELL"' is not assignable to type 'Side'.
+  Type '"BUY"' is not assignable to type 'Side'.
+src/lib/clob/test-stp.ts(17,9): error TS2322: Type 'number' is not assignable to type 'bigint'.
+src/lib/clob/test-stp.ts(21,9): error TS2820: Type '"OPEN"' is not assignable to type 'OrderStatus'. Did you mean '"open"'?
+src/lib/clob/test-stp.ts(51,30): error TS2554: Expected 1 arguments, but got 2.
+src/lib/clob/test-stp.ts(58,9): error TS2367: This comparison appears to be unintentional because the types 'OrderStatus' and '"CANCELED"' have no overlap.
+src/lib/clob/test-stp.ts(72,9): error TS2367: This comparison appears to be unintentional because the types 'OrderStatus' and '"CANCELED"' have no overlap.
+src/lib/clob/test-stp.ts(76,40): error TS2367: This comparison appears to be unintentional because the types 'bigint' and 'number' have no overlap.
+src/lib/clob/test-stp.ts(77,19): error TS2367: This comparison appears to be unintentional because the types 'bigint' and 'number' have no overlap.
+src/lib/markets/MultiOutcomeMarkets.ts(468,8): error TS2339: Property 'group' does not exist on type 'PostgrestFilterBuilder<any, any, any, any[], "positions", any, "GET">'.
+src/lib/markets/MultiOutcomeMarkets.ts(471,47): error TS7006: Parameter 'h' implicitly has an 'any' type.
+src/lib/matching/engine.ts(66,5): error TS2322: Type 'null' is not assignable to type 'string | undefined'.
+src/lib/matching/engine.ts(88,7): error TS2322: Type 'null' is not assignable to type 'string | undefined'.
+src/lib/notifications/service.ts(54,12): error TS7006: Parameter 'payload' implicitly has an 'any' type.
+src/lib/oracle/ai/agents/DeliberationAgent.ts(58,18): error TS2339: Property 'consensusProbability' does not exist on type '{ outcome: string; probability: number; }'.
+src/lib/oracle/ai/agents/RetrievalAgent.ts(202,13): error TS2741: Property 'bangladeshContext' is missing in type '{ query: string; sources: EvidenceSource[]; totalSources: number; crossVerificationScore: number; temporalProximity: number; }' but required in type 'EvidenceCorpus'.
+src/lib/oracle/ai/AIOrchestrator.ts(117,70): error TS18048: 'pipeline.retrieval' is possibly 'undefined'.
+src/lib/oracle/ai/AIOrchestrator.ts(132,9): error TS18048: 'pipeline.retrieval' is possibly 'undefined'.
+src/lib/oracle/ai/AIOrchestrator.ts(146,9): error TS18048: 'pipeline.retrieval' is possibly 'undefined'.
+src/lib/oracle/ai/AIOrchestrator.ts(316,7): error TS2345: Argument of type '() => { success: true; data: { agentType: string; probabilisticAssessment: { outcome: string; probability: number; confidenceInterval: number[]; }; contradictions: never[]; credibilityAnalysis: never[]; modelVersion: string; executionTimeMs: number; }; latencyMs: number; modelVersion: string; }' is not assignable to parameter of type '() => AgentAPIResponse<SynthesisAgentOutput>'.
+  Call signature return types '{ success: true; data: { agentType: string; probabilisticAssessment: { outcome: string; probability: number; confidenceInterval: number[]; }; contradictions: never[]; credibilityAnalysis: never[]; modelVersion: string; executionTimeMs: number; }; latencyMs: number; modelVersion: string; }' and 'AgentAPIResponse<SynthesisAgentOutput>' are incompatible.
+    The types of 'data.agentType' are incompatible between these types.
+      Type 'string' is not assignable to type '"synthesis"'.
+src/lib/oracle/ai/AIOrchestrator.ts(462,41): error TS2683: 'this' implicitly has type 'any' because it does not have a type annotation.
+src/lib/oracle/ai/AIOrchestrator.ts(463,39): error TS2683: 'this' implicitly has type 'any' because it does not have a type annotation.
+src/lib/oracle/ai/feedback/FeedbackLoop.ts(10,3): error TS2305: Module '"../types"' has no exported member 'ABTest'.
+src/lib/oracle/ai/resilience/CircuitBreaker.ts(27,11): error TS2393: Duplicate function implementation.
+src/lib/oracle/ai/resilience/CircuitBreaker.ts(185,3): error TS2393: Duplicate function implementation.
+src/lib/oracle/ai/resilience/RateLimiter.ts(6,10): error TS2305: Module '"../types"' has no exported member 'RateLimitState'.
+src/lib/oracle/ai/verification/CrossVerificationEngine.ts(338,75): error TS18048: 'secondary.actual' is possibly 'undefined'.
+src/lib/oracle/ai/verification/SourceTiers.ts(152,3): error TS2322: Type 'boolean | undefined' is not assignable to type 'boolean'.
+  Type 'undefined' is not assignable to type 'boolean'.
+src/lib/payout/PayoutEngine.ts(6,25): error TS2307: Cannot find module 'decimal.js' or its corresponding type declarations.
+src/lib/payout/TokenBurn.ts(401,7): error TS7053: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{ logical: number; physical: number; }'.
+src/lib/realtime/balance-listener.ts(39,10): error TS7006: Parameter 'payload' implicitly has an 'any' type.
+src/lib/realtime/balance-listener.ts(55,19): error TS7006: Parameter 'status' implicitly has an 'any' type.
+src/lib/realtime/balance-listener.ts(158,10): error TS7006: Parameter 'payload' implicitly has an 'any' type.
+src/lib/settlement/service.ts(152,33): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/lib/settlement/service.ts(153,33): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/lib/settlement/service.ts(154,33): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/lib/settlement/service.ts(155,33): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/lib/settlement/service.ts(157,37): error TS7006: Parameter 'sum' implicitly has an 'any' type.
+src/lib/settlement/service.ts(157,42): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/lib/settlement/SettlementPipeline.ts(456,26): error TS2551: Property 'user_id' does not exist on type 'SettlementClaim'. Did you mean 'userId'?
+src/lib/settlement/SettlementPipeline.ts(457,25): error TS2551: Property 'payout_amount' does not exist on type 'SettlementClaim'. Did you mean 'payoutAmount'?
+src/lib/social/comments-service.ts(446,88): error TS2345: Argument of type 'Map<string, any[] | null>' is not assignable to parameter of type 'Map<string, any[]>'.
+  Type 'any[] | null' is not assignable to type 'any[]'.
+    Type 'null' is not assignable to type 'any[]'.
+src/lib/social/comments-service.ts(735,10): error TS7006: Parameter 'payload' implicitly has an 'any' type.
+src/lib/social/feed-service.ts(561,10): error TS7006: Parameter 'payload' implicitly has an 'any' type.
+src/lib/supabase/client.ts(2,31): error TS2307: Cannot find module '@/types/database.types' or its corresponding type declarations.
+src/lib/supabase/server.ts(3,31): error TS2307: Cannot find module '@/types/database.types' or its corresponding type declarations.
+src/lib/tif/service.ts(191,27): error TS7006: Parameter 'fill' implicitly has an 'any' type.
+src/lib/upstash/workflows.ts(120,5): error TS2353: Object literal may only specify known properties, and 'timezone' does not exist in type 'CreateScheduleRequest'.
+src/main.tsx(4,17): error TS5097: An import path can only end with a '.tsx' extension when 'allowImportingTsExtensions' is enabled.
+src/store/index.ts(15,3): error TS2305: Module '"./workflowStore"' has no exported member 'selectStats'.
+src/store/marketStore.ts(173,11): error TS2322: Type '(formData: any) => Promise<{ success: false; error: any; event?: undefined; } | { success: true; event: Event | undefined; error?: undefined; }>' is not assignable to type '(data: any) => Promise<{ success: boolean; event?: Event | undefined; error?: any; }>'.
+  Type 'Promise<{ success: false; error: any; event?: undefined; } | { success: true; event: Event | undefined; error?: undefined; }>' is not assignable to type 'Promise<{ success: boolean; event?: Event | undefined; error?: any; }>'.
+    Type '{ success: false; error: any; event?: undefined; } | { success: true; event: Event | undefined; error?: undefined; }' is not assignable to type '{ success: boolean; event?: Event | undefined; error?: any; }'.
+      Type '{ success: true; event: Event | undefined; error?: undefined; }' is not assignable to type '{ success: boolean; event?: Event | undefined; error?: any; }'.
+        Types of property 'event' are incompatible.
+          Type 'import("F:/My profession/Hybrid APPs/Plokymarket/apps/web/src/types/market-system").Event | undefined' is not assignable to type 'import("F:/My profession/Hybrid APPs/Plokymarket/apps/web/src/types/database").Event | undefined'.
+            Type 'Event' is missing the following properties from type 'Event': name, tags, is_verified, is_featured, and 14 more.
+src/store/marketStore.ts(211,34): error TS18048: 'result.event' is possibly 'undefined'.
+src/store/marketStore.ts(211,70): error TS2561: Object literal may only specify known properties, but 'is_pending' does not exist in type 'WritableNonArrayDraft<Event>'. Did you mean to write 'is_trending'?
+src/store/marketStore.ts(213,101): error TS18048: 'result.event' is possibly 'undefined'.
+src/store/useStore.ts(376,89): error TS7031: Binding element 'error' implicitly has an 'any' type.
+vite.config.ts(2,19): error TS2307: Cannot find module '@vitejs/plugin-react' or its corresponding type declarations.
+vite.config.ts(3,30): error TS2307: Cannot find module 'vite' or its corresponding type declarations.
+vite.config.ts(4,29): error TS2307: Cannot find module 'kimi-plugin-inspect-react' or its corresponding type declarations.

@@ -1,0 +1,1268 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plokymarket — Production Strategy</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;600;700&family=JetBrains+Mono:wght@400;700&family=Syne:wght@700;800&display=swap');
+
+  :root {
+    --bg: #06090f;
+    --surface: #0d1117;
+    --surface2: #161b22;
+    --border: #21262d;
+    --accent: #00e5a0;
+    --accent2: #ff6b35;
+    --accent3: #7c3aed;
+    --text: #e6edf3;
+    --muted: #7d8590;
+    --red: #f85149;
+    --yellow: #f0a732;
+    --green: #3fb950;
+    --blue: #58a6ff;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Noto Sans Bengali', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: 
+      linear-gradient(rgba(0,229,160,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,160,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 60px 24px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* HEADER */
+  .header {
+    text-align: center;
+    margin-bottom: 64px;
+    animation: fadeDown 0.8s ease;
+  }
+
+  .logo-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(0,229,160,0.08);
+    border: 1px solid rgba(0,229,160,0.2);
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-size: 12px;
+    color: var(--accent);
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.05em;
+    margin-bottom: 24px;
+  }
+
+  .logo-badge::before {
+    content: '';
+    width: 6px; height: 6px;
+    background: var(--accent);
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+  }
+
+  h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: clamp(32px, 5vw, 52px);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    background: linear-gradient(135deg, #fff 0%, var(--accent) 60%, var(--accent3) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .subtitle {
+    margin-top: 16px;
+    font-size: 16px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-top: 40px;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    text-align: center;
+  }
+
+  .stat-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--accent);
+  }
+
+  .stat-label {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  /* SECTIONS */
+  section {
+    margin-bottom: 48px;
+    animation: fadeUp 0.6s ease both;
+  }
+
+  section:nth-child(2) { animation-delay: 0.1s; }
+  section:nth-child(3) { animation-delay: 0.2s; }
+  section:nth-child(4) { animation-delay: 0.3s; }
+  section:nth-child(5) { animation-delay: 0.4s; }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .section-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--accent);
+    background: rgba(0,229,160,0.1);
+    border: 1px solid rgba(0,229,160,0.2);
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+
+  .section-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  /* BUG TABLE */
+  .bug-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .bug-item {
+    display: grid;
+    grid-template-columns: 36px 1fr auto auto;
+    align-items: start;
+    gap: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    transition: border-color 0.2s;
+  }
+
+  .bug-item:hover {
+    border-color: rgba(0,229,160,0.3);
+  }
+
+  .bug-icon {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+
+  .icon-red { background: rgba(248,81,73,0.15); }
+  .icon-yellow { background: rgba(240,167,50,0.15); }
+  .icon-blue { background: rgba(88,166,255,0.15); }
+
+  .bug-file {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  .bug-desc {
+    font-size: 13px;
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .bug-detail {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 3px;
+    line-height: 1.4;
+  }
+
+  .severity {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+    align-self: start;
+  }
+  .sev-critical { background: rgba(248,81,73,0.15); color: var(--red); border: 1px solid rgba(248,81,73,0.3); }
+  .sev-high { background: rgba(240,167,50,0.15); color: var(--yellow); border: 1px solid rgba(240,167,50,0.3); }
+  .sev-med { background: rgba(88,166,255,0.15); color: var(--blue); border: 1px solid rgba(88,166,255,0.3); }
+
+  .fix-tag {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+    align-self: start;
+    background: rgba(0,229,160,0.08);
+    color: var(--accent);
+    border: 1px solid rgba(0,229,160,0.2);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* CODE BLOCK */
+  .code-block {
+    background: #010409;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    line-height: 1.7;
+    overflow-x: auto;
+    position: relative;
+  }
+
+  .code-block .comment { color: #6e7681; }
+  .code-block .keyword { color: #ff7b72; }
+  .code-block .string { color: #a5d6ff; }
+  .code-block .func { color: #d2a8ff; }
+  .code-block .var { color: #ffa657; }
+  .code-block .good { color: var(--green); }
+  .code-block .bad { color: var(--red); text-decoration: line-through; opacity: 0.6; }
+
+  .code-label {
+    position: absolute;
+    top: -10px;
+    right: 12px;
+    font-size: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    padding: 2px 8px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--muted);
+  }
+
+  /* SPRINT TABLE */
+  .sprint-grid {
+    display: grid;
+    gap: 16px;
+  }
+
+  .sprint {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .sprint-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+  }
+
+  .sprint-name {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 15px;
+  }
+
+  .sprint-meta {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .sprint-duration {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .sprint-tag {
+    font-size: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+
+  .tag-now { background: rgba(248,81,73,0.15); color: var(--red); }
+  .tag-week2 { background: rgba(240,167,50,0.15); color: var(--yellow); }
+  .tag-week3 { background: rgba(88,166,255,0.15); color: var(--blue); }
+  .tag-done { background: rgba(63,185,80,0.15); color: var(--green); }
+
+  .sprint-tasks {
+    padding: 16px 20px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .task {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid transparent;
+    transition: all 0.2s;
+  }
+
+  .task:hover {
+    border-color: var(--border);
+    background: var(--surface2);
+  }
+
+  .task-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 5px;
+  }
+  .dot-red { background: var(--red); }
+  .dot-yellow { background: var(--yellow); }
+  .dot-green { background: var(--green); }
+  .dot-blue { background: var(--blue); }
+
+  /* ARCH DIAGRAM */
+  .arch-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+
+  .arch-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+
+  .arch-icon {
+    font-size: 24px;
+    margin-bottom: 10px;
+  }
+
+  .arch-title {
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+
+  .arch-list {
+    list-style: none;
+  }
+
+  .arch-list li {
+    font-size: 11px;
+    color: var(--muted);
+    padding: 3px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+
+  .arch-list li::before {
+    content: '→ ';
+    color: var(--accent);
+  }
+
+  /* ENV TABLE */
+  .env-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .env-table th {
+    background: var(--surface2);
+    padding: 10px 16px;
+    text-align: left;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .env-table td {
+    padding: 10px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    color: var(--text);
+  }
+
+  .env-table td:first-child { color: var(--accent); }
+
+  .env-status {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+  }
+  .es-req { background: var(--red); }
+  .es-opt { background: var(--yellow); }
+  .es-done { background: var(--green); }
+
+  /* CHECKLIST */
+  .checklist {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .check-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    font-size: 13px;
+  }
+
+  .check-done { border-color: rgba(63,185,80,0.2); }
+  .check-todo { border-color: rgba(248,81,73,0.15); }
+  .check-wip { border-color: rgba(240,167,50,0.2); }
+
+  .check-icon { font-size: 14px; }
+
+  /* TIMELINE */
+  .timeline {
+    position: relative;
+    padding-left: 32px;
+  }
+
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 12px;
+    top: 8px;
+    bottom: 8px;
+    width: 1px;
+    background: linear-gradient(to bottom, var(--accent), var(--accent3), transparent);
+  }
+
+  .timeline-item {
+    position: relative;
+    margin-bottom: 24px;
+  }
+
+  .timeline-dot {
+    position: absolute;
+    left: -26px;
+    top: 4px;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    border: 2px solid var(--accent);
+    background: var(--bg);
+  }
+
+  .timeline-day {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+
+  .timeline-title {
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+
+  .timeline-desc {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  /* CALLOUT */
+  .callout {
+    border-radius: 10px;
+    padding: 16px 20px;
+    border-left: 3px solid;
+    margin: 16px 0;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .callout-red { background: rgba(248,81,73,0.06); border-color: var(--red); }
+  .callout-green { background: rgba(63,185,80,0.06); border-color: var(--green); }
+  .callout-yellow { background: rgba(240,167,50,0.06); border-color: var(--yellow); }
+  .callout-blue { background: rgba(88,166,255,0.06); border-color: var(--blue); }
+
+  .callout strong { display: block; margin-bottom: 4px; font-size: 13px; }
+
+  /* ANIMATIONS */
+  @keyframes fadeDown {
+    from { opacity: 0; transform: translateY(-20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* DIVIDER */
+  .divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border) 30%, var(--border) 70%, transparent);
+    margin: 48px 0;
+  }
+
+  /* FOOTER */
+  footer {
+    text-align: center;
+    padding: 40px 24px;
+    color: var(--muted);
+    font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    border-top: 1px solid var(--border);
+    position: relative;
+    z-index: 1;
+  }
+
+  @media (max-width: 640px) {
+    .stats-row { grid-template-columns: 1fr 1fr; }
+    .arch-grid { grid-template-columns: 1fr; }
+    .sprint-tasks { grid-template-columns: 1fr; }
+    .checklist { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- HEADER -->
+  <header class="header">
+    <div class="logo-badge">PLOKYMARKET — PRODUCTION ROADMAP v1.0</div>
+    <h1>প্রোডাকশন রেডি স্ট্র্যাটেজি</h1>
+    <p class="subtitle">সকল বাগ, মিসিং ফিচার এবং শিপিং প্ল্যান — একটি কমপ্লিট গাইড<br>
+    Polymarket-এর চেয়ে ভালো, বাংলাদেশের জন্য তৈরি</p>
+
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-num">47</div>
+        <div class="stat-label">TypeScript Errors</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num">5</div>
+        <div class="stat-label">Missing API Routes</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num">~79%</div>
+        <div class="stat-label">বর্তমান সম্পূর্ণতা</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num">7-10</div>
+        <div class="stat-label">দিনে শিপ করুন</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- SECTION 1: CRITICAL BUGS -->
+  <section>
+    <div class="section-header">
+      <span class="section-num">01</span>
+      <span class="section-title">🔥 ক্রিটিক্যাল বাগ — এখনই ঠিক করুন</span>
+    </div>
+
+    <div class="bug-grid">
+
+      <div class="bug-item">
+        <div class="bug-icon icon-red">⚡</div>
+        <div>
+          <div class="bug-desc">Supabase Client await মিস</div>
+          <div class="bug-file">deposits/request/route.ts, wallet/balance/route.ts, p2p-sellers/route.ts + ১০+ ফাইল</div>
+          <div class="bug-detail">সব API route-এ <code>createClient()</code> await ছাড়া call হচ্ছে — এতে Promise-এ <code>.from()</code>, <code>.auth()</code> call করা হচ্ছে, সব কিছু fail করছে।</div>
+        </div>
+        <span class="severity sev-critical">CRITICAL</span>
+        <span class="fix-tag">30min fix</span>
+      </div>
+
+      <div class="bug-item">
+        <div class="bug-icon icon-red">🔤</div>
+        <div>
+          <div class="bug-desc">CLOB OrderStatus Case Mismatch</div>
+          <div class="bug-file">lib/clob/test-limit.ts, lib/clob/service.ts, hooks/useTIF.ts</div>
+          <div class="bug-detail">Type <code>"BUY"|"SELL"</code> কিন্তু Side type চায় lowercase। Status <code>"OPEN"</code> কিন্তু type চায় <code>"open"</code>। Matching engine সম্পূর্ণ broken।</div>
+        </div>
+        <span class="severity sev-critical">CRITICAL</span>
+        <span class="fix-tag">1hr fix</span>
+      </div>
+
+      <div class="bug-item">
+        <div class="bug-icon icon-red">❌</div>
+        <div>
+          <div class="bug-desc">FeedService মেথড নেই</div>
+          <div class="bug-file">app/api/follows/route.ts</div>
+          <div class="bug-detail"><code>getFollowStatus</code>, <code>getFollowers</code>, <code>getFollowing</code>, <code>followUser</code>, <code>unfollowUser</code> — সব মেথড FeedService-এ নেই। Social features সম্পূর্ণ broken।</div>
+        </div>
+        <span class="severity sev-critical">CRITICAL</span>
+        <span class="fix-tag">2hr fix</span>
+      </div>
+
+      <div class="bug-item">
+        <div class="bug-icon icon-red">💸</div>
+        <div>
+          <div class="bug-desc">Mock Wallet Address Production-এ</div>
+          <div class="bug-file">store/useStore.ts — generateDepositAddress()</div>
+          <div class="bug-detail"><code>Math.random().toString(36)</code> দিয়ে ফেক address তৈরি হচ্ছে। Real টাকা এই address-এ পাঠালে হারিয়ে যাবে।</div>
+        </div>
+        <span class="severity sev-critical">CRITICAL</span>
+        <span class="fix-tag">3hr fix</span>
+      </div>
+
+      <div class="bug-item">
+        <div class="bug-icon icon-yellow">🔔</div>
+        <div>
+          <div class="bug-desc">snoozeUntil ভ্যারিয়েবল undefined</div>
+          <div class="bug-file">app/api/notifications/route.ts:170</div>
+          <div class="bug-detail">Notification snooze feature-এ <code>snoozeUntil</code> variable declare না করেই use করা হচ্ছে — TS error এবং runtime crash।</div>
+        </div>
+        <span class="severity sev-high">HIGH</span>
+        <span class="fix-tag">15min fix</span>
+      </div>
+
+      <div class="bug-item">
+        <div class="bug-icon icon-yellow">📊</div>
+        <div>
+          <div class="bug-desc">workflowStore selectStats export নেই</div>
+          <div class="bug-file">components/workflows/WorkflowDashboard.tsx</div>
+          <div class="bug-detail">WorkflowDashboard <code>selectStats</code> import করছে কিন্তু workflowStore-এ এই export নেই। Dashboard দেখাবে না।</div>
+        </div>
+        <span class="severity sev-high">HIGH</span>
+        <span class="fix-tag">20min fix</span>
+      </div>
+
+      <div class="bug-item">
+        <div class="bug-icon icon-yellow">⚖️</div>
+        <div>
+          <div class="bug-desc">Cancellation Status Wrong Comparison</div>
+          <div class="bug-file">lib/cancellation/service.ts, hooks/useTIF.ts</div>
+          <div class="bug-detail">Status <code>"CANCELLING"</code> compare করছে কিন্তু DB-তে value <code>"cancelling"</code> (lowercase)। Orders কখনো cancel হবে না।</div>
+        </div>
+        <span class="severity sev-high">HIGH</span>
+        <span class="fix-tag">30min fix</span>
+      </div>
+
+      <div class="bug-item">
+        <div class="bug-icon icon-blue">🔢</div>
+        <div>
+          <div class="bug-desc">CLOB Price bigint vs number</div>
+          <div class="bug-file">lib/clob/test-limit.ts:19</div>
+          <div class="bug-detail">Price field <code>number</code> টাইপ assign করা হচ্ছে কিন্তু type চায় <code>bigint</code>। Order placement silent fail করবে।</div>
+        </div>
+        <span class="severity sev-high">HIGH</span>
+        <span class="fix-tag">1hr fix</span>
+      </div>
+
+      <div class="bug-item">
+        <div class="bug-icon icon-blue">🏷️</div>
+        <div>
+          <div class="bug-desc">dispute-workflow null array</div>
+          <div class="bug-file">app/api/dispute-workflow/route.ts:101</div>
+          <div class="bug-detail">Supabase query <code>any[] | null</code> return করে কিন্তু function <code>any[]</code> expect করে। Null check নেই।</div>
+        </div>
+        <span class="severity sev-med">MEDIUM</span>
+        <span class="fix-tag">15min fix</span>
+      </div>
+
+      <div class="bug-item">
+        <div class="bug-icon icon-blue">🪝</div>
+        <div>
+          <div class="bug-desc">useCancellation boolean | 0 error</div>
+          <div class="bug-file">hooks/useCancellation.ts:170</div>
+          <div class="bug-detail">Expression <code>boolean | 0 | undefined</code> কিন্তু type চায় <code>boolean | undefined</code>। Short-circuit evaluation ঠিকমতো হচ্ছে না।</div>
+        </div>
+        <span class="severity sev-med">MEDIUM</span>
+        <span class="fix-tag">10min fix</span>
+      </div>
+
+    </div>
+
+    <div class="callout callout-red" style="margin-top: 16px;">
+      <strong>🚨 সবচেয়ে জরুরি প্রথম কাজ:</strong>
+      একটি global search করুন: <code style="color: var(--red);">const supabase = createClient()</code> → সব জায়গায় <code style="color: var(--green);">const supabase = await createClient()</code> করুন। এটিই সবচেয়ে বড় blocking issue।
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- SECTION 2: MISSING FEATURES -->
+  <section>
+    <div class="section-header">
+      <span class="section-num">02</span>
+      <span class="section-title">🏗️ মিসিং ফিচার — বিল্ড করতে হবে</span>
+    </div>
+
+    <div class="bug-grid">
+
+      <div class="bug-item">
+        <div class="bug-icon icon-red">💰</div>
+        <div>
+          <div class="bug-desc">Admin Withdrawal Processing API</div>
+          <div class="bug-file">POST /api/admin/withdrawals/process — নেই</div>
+          <div class="bug-detail">Admin withdrawal approve/reject করতে পারছেন না। টাকা আটকে আছে। এটি ছাড়া platform launch করা unsafe।</div>
+        </div>
+        <span class="severity sev-critical">CRITICAL</span>
+        <span class="fix-tag">3hr build</span>
+      </div>
+
+      <div class="bug-item">
+        <div class="bug-icon icon-red">❌</div>
+        <div>
+          <div class="bug-desc">Admin Deposit Reject API</div>
+          <div class="bug-file">POST /api/admin/deposits/reject — নেই</div>
+          <div class="bug-detail">Admin fake/invalid deposit reject করতে পারছেন না। Fraud prevention impossible।</div>
+        </div>
+        <span class="severity sev-critical">CRITICAL</span>
+        <span class="fix-tag">2hr build</span>
+      </div>
+
+      <div class="bug-item">
+        <div class="bug-icon icon-yellow">👁️</div>
+        <div>
+          <div class="bug-desc">Admin Withdrawals List Page</div>
+          <div class="bug-file">/admin/withdrawals — পেজ নেই, WithdrawalProcessing.tsx নেই</div>
+          <div class="bug-detail">Admin pending withdrawals দেখতে পারছেন না। Manual Supabase dashboard ব্যবহার করতে হচ্ছে।</div>
+        </div>
+        <span class="severity sev-high">HIGH</span>
+        <span class="fix-tag">4hr build</span>
+      </div>
+
+      <div class="bug-item">
+        <div class="bug-icon icon-yellow">🛡️</div>
+        <div>
+          <div class="bug-desc">2FA for Withdrawals</div>
+          <div class="bug-file">ফিচার সম্পূর্ণ absent</div>
+          <div class="bug-detail">Withdrawal-এ কোনো second factor নেই। Account hijack হলে সব টাকা চলে যাবে।</div>
+        </div>
+        <span class="severity sev-high">HIGH</span>
+        <span class="fix-tag">6hr build</span>
+      </div>
+
+      <div class="bug-item">
+        <div class="bug-icon icon-blue">📱</div>
+        <div>
+          <div class="bug-desc">KYC Admin Panel</div>
+          <div class="bug-file">/admin/kyc — পেজ নেই</div>
+          <div class="bug-detail">User documents upload করছে কিন্তু admin verify করার UI নেই। Daily withdrawal limit bypass possible।</div>
+        </div>
+        <span class="severity sev-high">HIGH</span>
+        <span class="fix-tag">5hr build</span>
+      </div>
+
+      <div class="bug-item">
+        <div class="bug-icon icon-blue">📈</div>
+        <div>
+          <div class="bug-desc">Real-time USDT/BDT Rate API</div>
+          <div class="bug-file">Hardcoded 120 BDT rate ব্যবহার হচ্ছে</div>
+          <div class="bug-detail">Exchange rate hardcoded। Market fluctuation-এ users ক্ষতিগ্রস্ত হবে। Binance P2P বা CoinGecko API দরকার।</div>
+        </div>
+        <span class="severity sev-med">MEDIUM</span>
+        <span class="fix-tag">3hr build</span>
+      </div>
+
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- SECTION 3: THE FIX — CODE -->
+  <section>
+    <div class="section-header">
+      <span class="section-num">03</span>
+      <span class="section-title">🛠️ কীভাবে ঠিক করবেন — কোড উদাহরণ</span>
+    </div>
+
+    <p style="color: var(--muted); font-size: 13px; margin-bottom: 20px;">সবচেয়ে বড় সমস্যার সমাধান:</p>
+
+    <div style="margin-bottom: 20px;">
+      <p style="font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--accent);">① Supabase await fix (সব API route)</p>
+      <div class="code-block">
+        <span class="code-label">route.ts — pattern to fix everywhere</span>
+<span class="comment">// ❌ WRONG — সব route-এ এই ভুল আছে</span>
+<span class="keyword">const</span> <span class="var">supabase</span> = <span class="func">createClient</span>();
+<span class="var">supabase</span>.<span class="func">from</span>(<span class="string">'users'</span>)  <span class="comment">// TypeError: .from is not a function</span>
+
+<span class="comment">// ✅ CORRECT — await যোগ করুন</span>
+<span class="keyword">const</span> <span class="var">supabase</span> = <span class="keyword">await</span> <span class="func">createClient</span>();
+<span class="var">supabase</span>.<span class="func">from</span>(<span class="string">'users'</span>)  <span class="comment">// Works!</span>
+
+<span class="comment">// Run this bash to find all broken files:</span>
+<span class="keyword">grep</span> -r <span class="string">"= createClient()"</span> apps/web/src/app/api/
+      </div>
+    </div>
+
+    <div style="margin-bottom: 20px;">
+      <p style="font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--accent);">② CLOB Type fixes</p>
+      <div class="code-block">
+        <span class="code-label">lib/clob/types.ts</span>
+<span class="comment">// ❌ Current broken types</span>
+<span class="keyword">type</span> <span class="var">Side</span> = <span class="string">"BUY"</span> | <span class="string">"SELL"</span>
+<span class="keyword">type</span> <span class="var">OrderStatus</span> = <span class="string">"OPEN"</span> | <span class="string">"FILLED"</span> | <span class="string">"CANCELED"</span>
+
+<span class="comment">// ✅ Fix to match DB values</span>
+<span class="keyword">type</span> <span class="var">Side</span> = <span class="string">"buy"</span> | <span class="string">"sell"</span>
+<span class="keyword">type</span> <span class="var">OrderStatus</span> = <span class="string">"open"</span> | <span class="string">"filled"</span> | <span class="string">"cancelled"</span> | <span class="string">"partially_filled"</span> | <span class="string">"expired"</span>
+
+<span class="comment">// Fix cancellation service comparison</span>
+<span class="comment">// ❌ Wrong:</span> order.status === <span class="string">"CANCELLING"</span>
+<span class="comment">// ✅ Right:</span> order.status === <span class="string">"cancelling"</span>
+      </div>
+    </div>
+
+    <div style="margin-bottom: 20px;">
+      <p style="font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--accent);">③ Missing Admin APIs — তৈরি করুন</p>
+      <div class="code-block">
+        <span class="code-label">app/api/admin/withdrawals/process/route.ts</span>
+<span class="keyword">export async function</span> <span class="func">POST</span>(req) {
+  <span class="keyword">const</span> supabase = <span class="keyword">await</span> <span class="func">createClient</span>();
+  <span class="keyword">const</span> { withdrawal_id, action, note } = <span class="keyword">await</span> req.<span class="func">json</span>();
+
+  <span class="keyword">if</span> (action === <span class="string">'approve'</span>) {
+    <span class="comment">// 1. Mark withdrawal as approved</span>
+    <span class="keyword">await</span> supabase.<span class="func">from</span>(<span class="string">'withdrawal_requests'</span>)
+      .<span class="func">update</span>({ status: <span class="string">'approved'</span>, processed_at: <span class="keyword">new</span> <span class="func">Date</span>() })
+      .<span class="func">eq</span>(<span class="string">'id'</span>, withdrawal_id);
+    <span class="comment">// 2. Release balance hold</span>
+    <span class="keyword">await</span> supabase.<span class="func">rpc</span>(<span class="string">'release_balance_hold'</span>, { p_id: withdrawal_id });
+  } <span class="keyword">else</span> {
+    <span class="comment">// Reject: restore balance, notify user</span>
+    <span class="keyword">await</span> supabase.<span class="func">rpc</span>(<span class="string">'reject_withdrawal'</span>, { p_id: withdrawal_id, p_note: note });
+  }
+  <span class="keyword">return</span> <span class="func">NextResponse</span>.<span class="func">json</span>({ success: <span class="keyword">true</span> });
+}
+      </div>
+    </div>
+
+    <div>
+      <p style="font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--accent);">④ Real USDT Rate API</p>
+      <div class="code-block">
+        <span class="code-label">app/api/exchange-rate/route.ts</span>
+<span class="comment">// Replace hardcoded 120 with live rate</span>
+<span class="keyword">export async function</span> <span class="func">GET</span>() {
+  <span class="keyword">const</span> res = <span class="keyword">await</span> <span class="func">fetch</span>(
+    <span class="string">'https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=bdt'</span>,
+    { next: { revalidate: 300 } } <span class="comment">// cache 5 mins</span>
+  );
+  <span class="keyword">const</span> data = <span class="keyword">await</span> res.<span class="func">json</span>();
+  <span class="keyword">const</span> rate = data?.tether?.bdt ?? <span class="good">120</span>; <span class="comment">// fallback</span>
+  <span class="keyword">return</span> <span class="func">NextResponse</span>.<span class="func">json</span>({ rate, updated_at: <span class="keyword">new</span> <span class="func">Date</span>() });
+}
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- SECTION 4: ENV VARS -->
+  <section>
+    <div class="section-header">
+      <span class="section-num">04</span>
+      <span class="section-title">🔑 Environment Variables — সব সেট করুন</span>
+    </div>
+
+    <table class="env-table">
+      <thead>
+        <tr>
+          <th>Variable</th>
+          <th>ব্যবহার</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>NEXT_PUBLIC_SUPABASE_URL</td><td>Database connection</td><td><span class="env-status es-done"></span>Done</td></tr>
+        <tr><td>NEXT_PUBLIC_SUPABASE_ANON_KEY</td><td>Public DB access</td><td><span class="env-status es-done"></span>Done</td></tr>
+        <tr><td>SUPABASE_SERVICE_ROLE_KEY</td><td>Admin DB operations</td><td><span class="env-status es-done"></span>Done</td></tr>
+        <tr><td>QSTASH_TOKEN</td><td>Upstash workflow scheduler</td><td><span class="env-status es-req"></span>Missing!</td></tr>
+        <tr><td>QSTASH_CURRENT_SIGNING_KEY</td><td>Verify QStash requests</td><td><span class="env-status es-req"></span>Missing!</td></tr>
+        <tr><td>TELEGRAM_BOT_TOKEN</td><td>Admin notifications</td><td><span class="env-status es-req"></span>Missing!</td></tr>
+        <tr><td>TELEGRAM_CHAT_ID</td><td>Admin group ID</td><td><span class="env-status es-req"></span>Missing!</td></tr>
+        <tr><td>UPSTASH_WORKFLOW_BASE_URL</td><td>Workflow base URL</td><td><span class="env-status es-req"></span>Missing!</td></tr>
+        <tr><td>OPENAI_API_KEY</td><td>AI oracle + topic gen</td><td><span class="env-status es-opt"></span>Optional</td></tr>
+        <tr><td>NEXTAUTH_SECRET</td><td>Session security</td><td><span class="env-status es-req"></span>Missing!</td></tr>
+        <tr><td>CRON_SECRET</td><td>Protect cron endpoints</td><td><span class="env-status es-req"></span>Missing!</td></tr>
+        <tr><td>SENTRY_DSN</td><td>Error monitoring</td><td><span class="env-status es-opt"></span>Recommended</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- SECTION 5: SPRINT PLAN -->
+  <section>
+    <div class="section-header">
+      <span class="section-num">05</span>
+      <span class="section-title">⚡ ৭ দিনের শিপিং প্ল্যান</span>
+    </div>
+
+    <div class="sprint-grid">
+
+      <div class="sprint">
+        <div class="sprint-header">
+          <span class="sprint-name">🚨 Day 1-2 — সিস্টেম ঠিক করুন (Stop the Bleeding)</span>
+          <div class="sprint-meta">
+            <span class="sprint-duration">~48 hrs</span>
+            <span class="sprint-tag tag-now">এখনই</span>
+          </div>
+        </div>
+        <div class="sprint-tasks">
+          <div class="task"><div class="task-dot dot-red"></div>সব API route-এ <code>await createClient()</code> fix করুন</div>
+          <div class="task"><div class="task-dot dot-red"></div>CLOB type case মিলিয়ে দিন (BUY→buy, OPEN→open)</div>
+          <div class="task"><div class="task-dot dot-red"></div>FeedService-এ 5টি missing method যোগ করুন</div>
+          <div class="task"><div class="task-dot dot-red"></div>snoozeUntil variable declare করুন</div>
+          <div class="task"><div class="task-dot dot-yellow"></div>workflowStore selectStats export করুন</div>
+          <div class="task"><div class="task-dot dot-yellow"></div>Mock wallet address সরিয়ে placeholder দিন</div>
+          <div class="task"><div class="task-dot dot-yellow"></div>dispute-workflow null check যোগ করুন</div>
+          <div class="task"><div class="task-dot dot-yellow"></div><code>npm run build</code> — 0 error নিশ্চিত করুন</div>
+        </div>
+      </div>
+
+      <div class="sprint">
+        <div class="sprint-header">
+          <span class="sprint-name">💰 Day 3-4 — Admin Financial Controls</span>
+          <div class="sprint-meta">
+            <span class="sprint-duration">~48 hrs</span>
+            <span class="sprint-tag tag-week2">উচ্চ অগ্রাধিকার</span>
+          </div>
+        </div>
+        <div class="sprint-tasks">
+          <div class="task"><div class="task-dot dot-red"></div>POST /api/admin/withdrawals/process তৈরি</div>
+          <div class="task"><div class="task-dot dot-red"></div>POST /api/admin/deposits/reject তৈরি</div>
+          <div class="task"><div class="task-dot dot-red"></div>GET /api/admin/withdrawals list API তৈরি</div>
+          <div class="task"><div class="task-dot dot-yellow"></div>WithdrawalProcessing.tsx component বানান</div>
+          <div class="task"><div class="task-dot dot-yellow"></div>/admin/withdrawals পেজ যোগ করুন</div>
+          <div class="task"><div class="task-dot dot-yellow"></div>KYC admin panel (/admin/kyc) বানান</div>
+          <div class="task"><div class="task-dot dot-blue"></div>Real-time exchange rate API (CoinGecko)</div>
+          <div class="task"><div class="task-dot dot-blue"></div>QStash + Telegram env vars সেট করুন</div>
+        </div>
+      </div>
+
+      <div class="sprint">
+        <div class="sprint-header">
+          <span class="sprint-name">🔒 Day 5-6 — Security & BD Experience</span>
+          <div class="sprint-meta">
+            <span class="sprint-duration">~48 hrs</span>
+            <span class="sprint-tag tag-week3">মাঝারি</span>
+          </div>
+        </div>
+        <div class="sprint-tasks">
+          <div class="task"><div class="task-dot dot-red"></div>Withdrawal OTP verification (bKash SMS)</div>
+          <div class="task"><div class="task-dot dot-yellow"></div>bKash/Nagad deep link payment flow</div>
+          <div class="task"><div class="task-dot dot-yellow"></div>Daily withdrawal limit per user enforce</div>
+          <div class="task"><div class="task-dot dot-blue"></div>Bangla category names সব market-এ</div>
+          <div class="task"><div class="task-dot dot-blue"></div>BDT মুদ্রা symbol সব জায়গায় (৳)</div>
+          <div class="task"><div class="task-dot dot-blue"></div>Bangladesh timezone (UTC+6) সব date-এ</div>
+          <div class="task"><div class="task-dot dot-green"></div>Error boundary components যোগ করুন</div>
+          <div class="task"><div class="task-dot dot-green"></div>Loading skeleton সব page-এ</div>
+        </div>
+      </div>
+
+      <div class="sprint">
+        <div class="sprint-header">
+          <span class="sprint-name">🚀 Day 7 — Launch Hardening</span>
+          <div class="sprint-meta">
+            <span class="sprint-duration">~24 hrs</span>
+            <span class="sprint-tag tag-done">শিপ</span>
+          </div>
+        </div>
+        <div class="sprint-tasks">
+          <div class="task"><div class="task-dot dot-green"></div>Full E2E test: register → deposit → trade → withdraw</div>
+          <div class="task"><div class="task-dot dot-green"></div>Admin panel smoke test</div>
+          <div class="task"><div class="task-dot dot-green"></div>Sentry error tracking setup করুন</div>
+          <div class="task"><div class="task-dot dot-green"></div>Rate limiting verify করুন (API routes)</div>
+          <div class="task"><div class="task-dot dot-green"></div>RLS policies final check</div>
+          <div class="task"><div class="task-dot dot-green"></div>Vercel production deploy</div>
+          <div class="task"><div class="task-dot dot-green"></div>First test market create করুন (বিপিএল)</div>
+          <div class="task"><div class="task-dot dot-green"></div>Soft launch — বন্ধুদের invite করুন</div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- SECTION 6: BD-FIRST IMPROVEMENTS -->
+  <section>
+    <div class="section-header">
+      <span class="section-num">06</span>
+      <span class="section-title">🇧🇩 Polymarket-কে হারাতে — BD-First ফিচার</span>
+    </div>
+
+    <div class="arch-grid">
+      <div class="arch-card">
+        <div class="arch-icon">🏏</div>
+        <div class="arch-title">বাংলাদেশ কনটেন্ট</div>
+        <ul class="arch-list">
+          <li>BPL ম্যাচ prediction (real-time)</li>
+          <li>ঢাকা/চট্টগ্রাম শেয়ার বাজার</li>
+          <li>HSC/SSC result prediction</li>
+          <li>মৌসুমি বন্যা/ঘূর্ণিঝড় forecast</li>
+          <li>ইফতার/রমজান বাজার দর</li>
+        </ul>
+      </div>
+      <div class="arch-card">
+        <div class="arch-icon">💸</div>
+        <div class="arch-title">বাংলাদেশ পেমেন্ট</div>
+        <ul class="arch-list">
+          <li>bKash deep link integration</li>
+          <li>Nagad direct payment</li>
+          <li>BDT denomination সব জায়গায়</li>
+          <li>Instant deposit via P2P</li>
+          <li>Minimum ১০০ টাকা deposit</li>
+        </ul>
+      </div>
+      <div class="arch-card">
+        <div class="arch-icon">🌐</div>
+        <div class="arch-title">বাংলা UI/UX</div>
+        <ul class="arch-list">
+          <li>সম্পূর্ণ বাংলা interface default</li>
+          <li>বাংলা calendar (Bangla date)</li>
+          <li>UTC+6 timezone সব time-এ</li>
+          <li>বাংলা সংখ্যা option (১,২,৩)</li>
+          <li>মোবাইল-ফার্স্ট design</li>
+        </ul>
+      </div>
+      <div class="arch-card">
+        <div class="arch-icon">🤖</div>
+        <div class="arch-title">AI Oracle (BD)</div>
+        <ul class="arch-list">
+          <li>প্রথম আলো/Daily Star scraping</li>
+          <li>BPL scorecard auto-resolve</li>
+          <li>DSE index auto-settlement</li>
+          <li>Bangladesh Cricket Board data</li>
+          <li>Election Commission result feed</li>
+        </ul>
+      </div>
+      <div class="arch-card">
+        <div class="arch-icon">📊</div>
+        <div class="arch-title">Trading Features</div>
+        <ul class="arch-list">
+          <li>Order Book real-time (WebSocket)</li>
+          <li>Price chart (Bangla labels)</li>
+          <li>Portfolio BDT value display</li>
+          <li>P&L in টাকা</li>
+          <li>Leaderboard (সেরা trader)</li>
+        </ul>
+      </div>
+      <div class="arch-card">
+        <div class="arch-icon">🛡️</div>
+        <div class="arch-title">Trust & Safety</div>
+        <ul class="arch-list">
+          <li>NID verification (KYC)</li>
+          <li>Phone OTP withdrawal</li>
+          <li>Daily limit ৳ 50,000</li>
+          <li>Fraud detection alerts</li>
+          <li>Admin transparent audit log</div>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- SECTION 7: TIMELINE -->
+  <section>
+    <div class="section-header">
+      <span class="section-num">07</span>
+      <span class="section-title">📅 দৈনিক টাইমলাইন</span>
+    </div>
+
+    <div class="timeline">
+      <div class="timeline-item">
+        <div class="timeline-dot" style="border-color: var(--red);"></div>
+        <div class="timeline-day">DAY 1 (আজই)</div>
+        <div class="timeline-title">TypeScript Hell ঠিক করুন</div>
+        <div class="timeline-desc">await createClient() global fix। CLOB types। FeedService methods। Build করুন এবং 0 error নিশ্চিত করুন।</div>
+      </div>
+
+      <div class="timeline-item">
+        <div class="timeline-dot" style="border-color: var(--red);"></div>
+        <div class="timeline-day">DAY 2</div>
+        <div class="timeline-title">Remaining TS Errors + Integration Test</div>
+        <div class="timeline-desc">snoozeUntil, workflowStore, useCancellation fix। বাগ-মুক্ত build deploy করুন Vercel-এ এবং manually test করুন।</div>
+      </div>
+
+      <div class="timeline-item">
+        <div class="timeline-dot" style="border-color: var(--yellow);"></div>
+        <div class="timeline-day">DAY 3</div>
+        <div class="timeline-title">Admin Financial APIs Build</div>
+        <div class="timeline-desc">Withdrawal process/reject API। Deposit reject API। WithdrawalProcessing component। Exchange rate live API।</div>
+      </div>
+
+      <div class="timeline-item">
+        <div class="timeline-dot" style="border-color: var(--yellow);"></div>
+        <div class="timeline-day">DAY 4</div>
+        <div class="timeline-title">Admin UI + KYC Panel</div>
+        <div class="timeline-desc">/admin/withdrawals পেজ সম্পূর্ণ করুন। KYC verification UI। QStash + Telegram notifications configure করুন।</div>
+      </div>
+
+      <div class="timeline-item">
+        <div class="timeline-dot" style="border-color: var(--blue);"></div>
+        <div class="timeline-day">DAY 5</div>
+        <div class="timeline-title">Security Hardening</div>
+        <div class="timeline-desc">Withdrawal OTP flow। bKash deep link। Daily limit enforcement। Rate limiting verify। CRON_SECRET env var।</div>
+      </div>
+
+      <div class="timeline-item">
+        <div class="timeline-dot" style="border-color: var(--blue);"></div>
+        <div class="timeline-day">DAY 6</div>
+        <div class="timeline-title">BD Polish + Performance</div>
+        <div class="timeline-desc">সব জায়গায় ৳ symbol। UTC+6 timezone fix। Bangla category names। Error boundary। Skeleton loading। Mobile test।</div>
+      </div>
+
+      <div class="timeline-item">
+        <div class="timeline-dot" style="border-color: var(--green);"></div>
+        <div class="timeline-day">DAY 7 — 🚀 লঞ্চ</div>
+        <div class="timeline-title">Full E2E Test → Production Deploy</div>
+        <div class="timeline-desc">পুরো flow test করুন। Sentry setup। First BPL market create করুন। বন্ধুদের invite করুন। Soft launch!</div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- SECTION 8: PRODUCTION CHECKLIST -->
+  <section>
+    <div class="section-header">
+      <span class="section-num">08</span>
+      <span class="section-title">✅ প্রোডাকশন চেকলিস্ট</span>
+    </div>
+
+    <div class="checklist">
+      <div class="check-item check-done"><span class="check-icon">✅</span>Next.js App Router সেটআপ</div>
+      <div class="check-item check-done"><span class="check-icon">✅</span>Supabase + RLS policies</div>
+      <div class="check-item check-done"><span class="check-icon">✅</span>Bangla i18n default (bn)</div>
+      <div class="check-item check-done"><span class="check-icon">✅</span>Vercel deployment</div>
+      <div class="check-item check-done"><span class="check-icon">✅</span>Admin panel secured</div>
+      <div class="check-item check-done"><span class="check-icon">✅</span>74 API routes deployed</div>
+      <div class="check-item check-done"><span class="check-icon">✅</span>Order book (CLOB engine)</div>
+      <div class="check-item check-done"><span class="check-icon">✅</span>bKash/Nagad deposit flow</div>
+      <div class="check-item check-todo"><span class="check-icon">🔴</span>TypeScript 0 errors</div>
+      <div class="check-item check-todo"><span class="check-icon">🔴</span>await createClient() fixed</div>
+      <div class="check-item check-todo"><span class="check-icon">🔴</span>Admin withdrawal API</div>
+      <div class="check-item check-todo"><span class="check-icon">🔴</span>Admin deposit reject API</div>
+      <div class="check-item check-todo"><span class="check-icon">🔴</span>KYC admin panel</div>
+      <div class="check-item check-wip"><span class="check-icon">🟡</span>QStash workflows (env missing)</div>
+      <div class="check-item check-wip"><span class="check-icon">🟡</span>Telegram notifications</div>
+      <div class="check-item check-todo"><span class="check-icon">🔴</span>Withdrawal 2FA/OTP</div>
+      <div class="check-item check-todo"><span class="check-icon">🔴</span>Real USDT/BDT rate</div>
+      <div class="check-item check-todo"><span class="check-icon">🔴</span>Sentry error monitoring</div>
+    </div>
+
+    <div class="callout callout-green" style="margin-top: 24px;">
+      <strong>🎯 লঞ্চ করার আগে যা অবশ্যই দরকার:</strong>
+      ① TypeScript build 0 errors → ② Admin can approve/reject withdrawals → ③ Deposit reject API → ④ QStash env vars → ⑤ E2E test pass। এই ৫টি হলেই soft launch করা safe।
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- SECTION 9: POLYMARKET COMPARISON -->
+  <section>
+    <div class="section-header">
+      <span class="section-num">09</span>
+      <span class="section-title">⚔️ Polymarket vs Plokymarket</span>
+    </div>
+
+    <div class="bug-grid">
+      <div class="bug-item" style="grid-template-columns: 1fr 1fr; gap: 0; padding: 0; overflow: hidden;">
+        <div style="padding: 16px; border-right: 1px solid var(--border);">
+          <div style="font-size: 11px; color: var(--muted); margin-bottom: 8px; font-family: 'JetBrains Mono', monospace;">POLYMARKET.COM</div>
+          <div style="font-size: 13px; color: var(--muted); line-height: 1.8;">
+            USD/USDC only<br>
+            English only<br>
+            US-centric topics<br>
+            Crypto wallet required<br>
+            No local payment<br>
+            Bangladesh-blocked content
+          </div>
+        </div>
+        <div style="padding: 16px;">
+          <div style="font-size: 11px; color: var(--accent); margin-bottom: 8px; font-family: 'JetBrains Mono', monospace;">PLOKYMARKET ✨</div>
+          <div style="font-size: 13px; color: var(--text); line-height: 1.8;">
+            BDT + USDT দুটোই ✅<br>
+            বাংলা ডিফল্ট ✅<br>
+            BPL, DSE, নির্বাচন ✅<br>
+            bKash/Nagad দিয়ে ✅<br>
+            No crypto needed ✅<br>
+            বাংলাদেশ-ফার্স্ট ✅
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout callout-blue" style="margin-top: 16px;">
+      <strong>💡 Unfair Advantage:</strong>
+      Polymarket বাংলাদেশে accessible না, Bangladesh-specific content নেই, bKash accept করে না। আপনার কাছে home-field advantage আছে। Market-fit is already there — এখন শুধু ship করুন।
+    </div>
+  </section>
+
+</div>
+
+<footer>
+  <div>Plokymarket Production Strategy — Generated for Bangladesh's First Prediction Market</div>
+  <div style="margin-top: 8px; color: rgba(125,133,144,0.5);">7 দিনে শিপ করুন। বাংলাদেশ জিতবে। 🇧🇩</div>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,264 @@
+{
+  "name": "Plokymarket Daily AI Topics",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 6 * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [250, 300],
+      "events": [
+        {
+          "type": "scheduledTime",
+          "resetSchedule": false
+        }
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://prothomalo.com/feed",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "rss-prothom-alo",
+      "name": "RSS Prothom Alo",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [470, 100]
+    },
+    {
+      "parameters": {
+        "url": "=https://bdnews24.com/rss",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "rss-bdnews24",
+      "name": "RSS BD News 24",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [470, 250]
+    },
+    {
+      "parameters": {
+        "url": "=https://www.thedailystar.net/rss/news.xml",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "rss-daily-star",
+      "name": "RSS Daily Star",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [470, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combine all RSS feeds into trending topics\nconst feeds = [\n  ...$input.byIndex[0].json.items || [],\n  ...$input.byIndex[1].json.items || [],\n  ...$input.byIndex[2].json.items || []\n];\n\n// Extract top 10 headlines\nconst headlines = feeds\n  .slice(0, 20)\n  .map(item => ({\n    title: item.title,\n    link: item.link,\n    pubDate: item.pubDate\n  }));\n\nconst headlinesText = headlines.map((h, i) => `${i + 1}. ${h.title}`).join('\\n');\n\nreturn {\n  json: {\n    headlines,\n    headlinesText,\n    categories: ['Sports', 'Politics', 'Economy', 'Entertainment', 'Technology', 'International'],\n    today: new Date().toISOString().split('T')[0]\n  }\n};"
+      },
+      "id": "combine-feeds",
+      "name": "Combine RSS Feeds",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [690, 250]
+    },
+    {
+      "parameters": {
+        "model": "={{ $env.GEMINI_MODEL || 'gemini-1.5-flash' }}",
+        "options": {},
+        "prompt": "=আপনি একটি AI যা বাংলাদেশী ভবিষ্যদ্বাণী মার্কেটের জন্য প্রতিদিন ৫টি আকর্ষণীয় টপিক তৈরি করেন।\n\n=== আজকের তারিখ ===\n{{ $json.today }}\n\n=== বর্তমান খবর ===\n{{ $json.headlinesText }}\n\n=== বাংলাদেশ প্রেক্ষাপট (৬০%) ===\n- ক্রিকেট: BPL 2026 চলছে, বাংলাদেশ বনাম শ্রীলংকা সিরিজ\n- অর্থনীতি: USD বনাম BDT রেট ~১২০-১২৫ টাকা, মূল্যস্ফীতি\n- রাজনীতি: আসন্ন নির্বাচন, সিটি কর্পোরেশন নির্বাচন\n- সামাজিক: ঈদ, পরীক্ষার ফলাফল, আবহাওয়া\n\n=== আন্তর্জাতিক (৪০%) ===\n- ক্রিকেট: ICC টুর্নামেন্ট, IPL, FIFA বিশ্বকাপ\n- বিশ্ব: US নির্বাচন, জলবায়ু সম্মেলন\n- প্রযুক্তি: AI উন্নয়ন, ক্রিপ্টো\n\n=== প্রয়োজনীয়তা ===\n1. ৬০% বাংলাদেশ + ৪০% আন্তর্জাতিক মিশ্রণ\n2. স্পষ্ট YES/NO উত্তর\n3. ৭-৩০ দিনের মধ্যে সমাধানযোগ্য\n4. বাংলায় শিরোনাম ও বিবরণ\n5. নির্দিষ্ট তারিখ, নাম, সংখ্যা উল্লেখ করুন\n\n=== আউটপুট ফর্ম্যাট (JSON) ===\n[\n  {\n    \"title\": \"বাংলায় শিরোনাম\",\n    \"question\": \"বাংলায় স্পষ্ট YES/NO প্রশ্ন\",\n    \"description\": \"বিস্তারিত বিবরণ বাংলায়\",\n    \"category\": \"Sports/Politics/Economy/Entertainment/Technology/International\",\n    \"reasoning\": \"কেন এটি প্রাসঙ্গিক\",\n    \"confidence\": 0.85\n  }\n]\n\nঠিক ৫টি টপিক তৈরি করুন।"
+      },
+      "id": "gemini-generate",
+      "name": "Generate Topics",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [910, 250],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "gemini-api",
+          "name": "Gemini API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Gemini response to extract JSON\nconst geminiResponse = $input.first().json.response;\nlet topics = [];\n\ntry {\n  // Try to find JSON array\n  const jsonMatch = geminiResponse.match(/\\[[\\s\\S]*\\]/);\n  if (jsonMatch) {\n    topics = JSON.parse(jsonMatch[0]);\n  } else {\n    throw new Error('No JSON array found');\n  }\n} catch (e) {\n  // Fallback: return empty\n  topics = [];\n}\n\n// Validate and format topics\nconst validTopics = topics.filter(t => t.title && t.question && t.category).map((t, i) => ({\n  suggested_title: t.title,\n  suggested_question: t.question,\n  suggested_description: t.description || '',\n  suggested_category: t.category,\n  ai_reasoning: t.reasoning || '',\n  ai_confidence: Math.min(Math.max(t.confidence || 0.7, 0), 1),\n  status: 'pending',\n  generated_at: new Date().toISOString()\n}));\n\nreturn {\n  json: {\n    topics: validTopics,\n    count: validTopics.length\n  }\n};"
+      },
+      "id": "parse-topics",
+      "name": "Parse Topics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1130, 250]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/ai_daily_topics",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "sendBodyType": "json",
+        "body": "={{ $json.topics }}"
+      },
+      "id": "save-topics",
+      "name": "Save to Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1350, 250]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format Telegram notification in Bengali\nconst topics = $input.byIndex[0].json;\nconst savedTopics = topics || [];\n\nconst message = `\n🤖 <b>দৈনিক AI টপিক তৈরি হয়েছে</b>\n\n📊 <b>সংখ্যা:</b> ${savedTopics.length}টি টপিক\n🏷️ <b>ক্যাটাগরি:</b> ${savedTopics.map(t => t.suggested_category).join(', ')}\n⏱️ <b>সময়:</b> ${new Date().toLocaleString('bn-BD')}\n\n${savedTopics.map((t, i) => `${i + 1}. ${t.suggested_title}`).join('\\n')}\n\n🔗 <a href=\"https://polymarket-bangladesh.vercel.app/sys-cmd-7x9k2/daily-topics\">টপিক দেখুন</a>\n`.trim();\n\nreturn {\n  json: {\n    message,\n    topics_count: savedTopics.length\n  }\n};"
+      },
+      "id": "format-telegram",
+      "name": "Format Telegram",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1570, 250]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "chat_id",
+              "value": "={{ $env.TELEGRAM_CHAT_ID }}"
+            },
+            {
+              "name": "text",
+              "value": "={{ $json.message }}"
+            },
+            {
+              "name": "parse_mode",
+              "value": "HTML"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-telegram",
+      "name": "Send Telegram",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1790, 250]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Final result\nreturn {\n  json: {\n    success: true,\n    topics_generated: $input.byIndex[0].json.count || 0,\n    telegram_sent: true,\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "id": "final-result",
+      "name": "Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2010, 250]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          { "node": "RSS Prothom Alo", "type": "main", "index": 0 },
+          { "node": "RSS BD News 24", "type": "main", "index": 0 },
+          { "node": "RSS Daily Star", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "RSS Prothom Alo": {
+      "main": [
+        [{ "node": "Combine RSS Feeds", "type": "main", "index": 0 }]
+      ]
+    },
+    "RSS BD News 24": {
+      "main": [
+        [{ "node": "Combine RSS Feeds", "type": "main", "index": 0 }]
+      ]
+    },
+    "RSS Daily Star": {
+      "main": [
+        [{ "node": "Combine RSS Feeds", "type": "main", "index": 0 }]
+      ]
+    },
+    "Combine RSS Feeds": {
+      "main": [
+        [{ "node": "Generate Topics", "type": "main", "index": 0 }]
+      ]
+    },
+    "Generate Topics": {
+      "main": [
+        [{ "node": "Parse Topics", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Topics": {
+      "main": [
+        [{ "node": "Save to Supabase", "type": "main", "index": 0 }]
+      ]
+    },
+    "Save to Supabase": {
+      "main": [
+        [{ "node": "Format Telegram", "type": "main", "index": 0 }]
+      ]
+    },
+    "Format Telegram": {
+      "main": [
+        [{ "node": "Send Telegram", "type": "main", "index": 0 }]
+      ]
+    },
+    "Send Telegram": {
+      "main": [
+        [{ "node": "Result", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [
+    { "name": "plokymarket", "id": "tag-plokymarket" },
+    { "name": "ai-topics", "id": "tag-ai-topics" }
+  ]
+}

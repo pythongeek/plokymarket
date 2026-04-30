@@ -1,0 +1,5 @@
+# Polymarket BD - Robots.txt
+User-agent: *
+Allow: /
+
+Sitemap: https://plokymarket.vercel.app/sitemap.xml

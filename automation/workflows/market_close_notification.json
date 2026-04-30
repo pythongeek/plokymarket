@@ -1,0 +1,282 @@
+{
+  "name": "Plokymarket Market Close Notification",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "plokymarket-market-close",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "webhookId": "plokymarket-market-close"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Find markets closing within 1 hour\nconst now = new Date();\nconst in1Hour = new Date(now.getTime() + 3600000).toISOString();\nconst currentTime = now.toISOString();\n\nreturn {\n  json: {\n    query: `\n      SELECT m.id, m.name, m.name_bn, m.trading_closes_at,\n             m.question, m.category\n      FROM markets m\n      WHERE m.status = 'active'\n        AND m.trading_closes_at <= '${in1Hour}'\n        AND m.trading_closes_at > '${currentTime}'\n        AND (m.close_warned IS NULL OR m.close_warned = false)\n      ORDER BY m.trading_closes_at ASC\n      LIMIT 10\n    `,\n    now: currentTime,\n    in1Hour\n  }\n};"
+      },
+      "id": "prepare-query",
+      "name": "Prepare Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/rpc/execute_sql",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "sql",
+              "value": "={{ $json.query }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "query-markets",
+      "name": "Query Markets",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [690, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract markets and followers query\nconst response = $input.first().json;\nconst markets = Array.isArray(response) ? response : [response].filter(Boolean);\n\n// Build follower query for all markets\nconst marketIds = markets.map(m => m.id);\n\nreturn {\n  json: {\n    markets,\n    marketIds,\n    count: markets.length,\n    followersQuery: `\n      SELECT mf.user_id, mf.market_id, m.name, m.name_bn\n      FROM market_followers mf\n      JOIN markets m ON m.id = mf.market_id\n      WHERE mf.market_id = ANY(ARRAY[${marketIds.map(id => `'${id}'`).join(',')}])\n        AND mf.notify_on_resolve = true\n    `\n  }\n};"
+      },
+      "id": "extract-markets",
+      "name": "Extract Markets",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [910, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/rpc/execute_sql",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "sql",
+              "value": "={{ $json.followersQuery }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "query-followers",
+      "name": "Query Followers",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1130, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Create notification records\nconst followers = $input.first().json;\nconst followerArray = Array.isArray(followers) ? followers : [followers].filter(Boolean);\n\nconst notifications = followerArray.map(f => ({\n  user_id: f.user_id,\n  type: 'market_closing_soon',\n  title: '⏰ মার্কেট শীঘ্রই বন্ধ হবে',\n  title_bn: '⏰ মার্কেট শীঘ্রই বন্ধ হবে',\n  body: `${f.name} — ১ ঘণ্টার মধ্যে ট্রেডিং বন্ধ হবে`,\n  body_bn: `${f.name_bn || f.name} — ১ ঘণ্টার মধ্যে ট্রেডিং বন্ধ হবে`,\n  market_id: f.market_id,\n  action_url: `/markets/${f.market_id}`,\n  created_at: new Date().toISOString()\n}));\n\nreturn {\n  json: {\n    notifications,\n    count: notifications.length\n  }\n};"
+      },
+      "id": "create-notifications",
+      "name": "Create Notifications",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1350, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/notifications",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "sendBodyType": "json",
+        "body": "={{ $json.notifications }}"
+      },
+      "id": "insert-notifications",
+      "name": "Insert Notifications",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1570, 300]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/markets",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "sendBodyType": "json",
+        "body": "={{ $json.notifications.map(n => ({ id: n.market_id, close_warned: true })) }}",
+        "options": {}
+      },
+      "id": "mark-warned",
+      "name": "Mark Markets Warned",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1790, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Final result\nconst data = $input.first().json;\nreturn {\n  json: {\n    success: true,\n    markets_processed: data.count || 0,\n    notifications_sent: data.count || 0,\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "id": "final-result",
+      "name": "Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2010, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}"
+      },
+      "id": "respond-webhook",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2230, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [{ "node": "Prepare Query", "type": "main", "index": 0 }]
+      ]
+    },
+    "Prepare Query": {
+      "main": [
+        [{ "node": "Query Markets", "type": "main", "index": 0 }]
+      ]
+    },
+    "Query Markets": {
+      "main": [
+        [{ "node": "Extract Markets", "type": "main", "index": 0 }]
+      ]
+    },
+    "Extract Markets": {
+      "main": [
+        [{ "node": "Query Followers", "type": "main", "index": 0 }]
+      ]
+    },
+    "Query Followers": {
+      "main": [
+        [{ "node": "Create Notifications", "type": "main", "index": 0 }]
+      ]
+    },
+    "Create Notifications": {
+      "main": [
+        [{ "node": "Insert Notifications", "type": "main", "index": 0 }]
+      ]
+    },
+    "Insert Notifications": {
+      "main": [
+        [{ "node": "Mark Markets Warned", "type": "main", "index": 0 }]
+      ]
+    },
+    "Mark Markets Warned": {
+      "main": [
+        [{ "node": "Result", "type": "main", "index": 0 }]
+      ]
+    },
+    "Result": {
+      "main": [
+        [{ "node": "Respond", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [
+    { "name": "plokymarket", "id": "tag-plokymarket" },
+    { "name": "notification", "id": "tag-notification" }
+  ]
+}

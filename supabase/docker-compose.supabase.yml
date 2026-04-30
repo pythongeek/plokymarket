@@ -1,0 +1,442 @@
+# Supabase Local Development Stack
+# Complete Supabase configuration with all services
+#
+# Usage:
+#   cd supabase
+#   docker-compose -f docker-compose.supabase.yml up -d
+#
+# ⚠️ CONTAINER NAMING: supabase_* prefix to avoid conflicts
+# ⚠️ PERMANENT: restart: unless-stopped on all containers
+# ⚠️ ISOLATED: Does not affect existing polymarket-* containers
+
+services:
+  # ============================================
+  # CORE DATABASE
+  # ============================================
+
+  supabase-postgres:
+    container_name: supabase-postgres
+    image: postgres:15-alpine
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-supabase_secure_pass_2024}
+      POSTGRES_DB: postgres
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - supabase-db-data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - supabase-network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    labels:
+      com.supabase.project: "plokymarket"
+      com.supabase.component: "database"
+      com.supabase.protection: "critical"
+      description: "Supabase PostgreSQL 15 database"
+
+  # ============================================
+  # API & GATEWAY
+  # ============================================
+
+  supabase-kong:
+    container_name: supabase-kong
+    image: kong:2.8.1
+    restart: unless-stopped
+    ports:
+      - "8000:8000" # HTTP
+      - "8443:8443" # HTTPS
+      - "8001:8001" # Admin HTTP
+      - "8444:8444" # Admin HTTPS
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /var/lib/kong/kong.yml
+      KONG_PLUGINS: request-transformer,cors,key-auth,acl
+      KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 16k
+      KONG_NGINX_PROXY_PROXY_BUFFERS: 64
+    volumes:
+      - ./volumes/kong.yml:/var/lib/kong/kong.yml:ro
+    networks:
+      - supabase-network
+    depends_on:
+      - supabase-postgres
+    healthcheck:
+      test: [ "CMD", "kong", "health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    labels:
+      com.supabase.project: "plokymarket"
+      com.supabase.component: "api-gateway"
+      description: "Kong API Gateway"
+
+  supabase-gotrue:
+    container_name: supabase-gotrue
+    image: supabase/gotrue:latest
+    restart: unless-stopped
+    ports:
+      - "9999:9999"
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      API_EXTERNAL_URL: ${API_EXTERNAL_URL:-http://localhost:8000}
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:-supabase_secure_pass_2024}@supabase-postgres:5432/postgres?search_path=auth
+      GOTRUE_SITE_URL: ${SITE_URL:-http://localhost:3000}
+      GOTRUE_URI_ALLOW_LIST: "*"
+      GOTRUE_DISABLE_SIGNUP: "false"
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_EXP: 3600
+      GOTRUE_JWT_SECRET: ${JWT_SECRET:-your-jwt-secret-change-in-production}
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_MAILER_AUTOCONFIRM: "true"
+    volumes: []
+    networks:
+      - supabase-network
+    depends_on:
+      supabase-postgres:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:9999/health" ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    labels:
+      com.supabase.project: "plokymarket"
+      com.supabase.component: "auth"
+      description: "GoTrue Auth Server"
+
+  # ============================================
+  # POSTGRES META (Metadata API)
+  # ============================================
+
+  supabase-postgres-meta:
+    container_name: supabase-postgres-meta
+    image: supabase/postgres-meta:latest
+    restart: unless-stopped
+    ports:
+      - "8081:8080"
+    environment:
+      PG_META_PORT: 8080
+      PG_META_HOST: 0.0.0.0
+      PG_META_DB_HOST: supabase-postgres
+      PG_META_DB_PORT: 5432
+      PG_META_DB_NAME: postgres
+      PG_META_DB_USER: postgres
+      PG_META_DB_PASSWORD: ${POSTGRES_PASSWORD:-supabase_secure_pass_2024}
+    volumes: []
+    networks:
+      - supabase-network
+    depends_on:
+      supabase-postgres:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:8080/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    labels:
+      com.supabase.project: "plokymarket"
+      com.supabase.component: "meta"
+      description: "Postgres Meta REST API"
+
+  # ============================================
+  # REALTIME
+  # ============================================
+
+  supabase-realtime:
+    container_name: supabase-realtime
+    image: supabase/realtime:latest
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      DB_HOST: supabase-postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-supabase_secure_pass_2024}
+      DB_NAME: postgres
+      DB_AFTER_CONNECT: "SET search_path TO _realtime"
+      DB_ENC_KEY: ${DB_ENC_KEY:- supabaserealtime}
+      API_JWT_SECRET: ${JWT_SECRET:-your-jwt-secret-change-in-production}
+      PORT: 4000
+      SLOT_NAME: supabase_realtime_rls
+      TEMPORARY_SLOT: "true"
+      SECURE_CHANNELS: "true"
+      SLOT_PRESENCE: supabase_realtime_presence
+      TENANT_ID: 76b914c7-2b15-4c84-af46-99c85dc2eb17
+    volumes: []
+    networks:
+      - supabase-network
+    depends_on:
+      supabase-postgres:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "bash", "-c", "printf '\\0' > /dev/tcp/localhost/4000" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    labels:
+      com.supabase.project: "plokymarket"
+      com.supabase.component: "realtime"
+      description: "Supabase Realtime WebSocket server"
+
+  # ============================================
+  # STORAGE
+  # ============================================
+
+  supabase-storage-api:
+    container_name: supabase-storage-api
+    image: supabase/storage-api:latest
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      ANON_KEY: ${ANON_KEY:-your-anon-key}
+      SERVICE_KEY: ${SERVICE_KEY:-your-service-key}
+      POSTGREST_URL: http://supabase-postgrest:3000
+      PGRST_JWT_SECRET: ${JWT_SECRET:-your-jwt-secret-change-in-production}
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:-supabase_secure_pass_2024}@supabase-postgres:5432/postgres
+      FILE_SIZE_LIMIT: 52428800
+      STORAGE_BACKEND: file
+      FILE_STORAGE_BACKEND_PATH: /var/lib/storage
+      TENANT_ID: 76b914c7-2b15-4c84-af46-99c85dc2eb17
+      REGION: auto
+      GLOBAL_S3_BUCKET: supabase-storage
+    volumes:
+      - supabase-storage-data:/var/lib/storage
+    networks:
+      - supabase-network
+    depends_on:
+      supabase-postgres:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:5000/status" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    labels:
+      com.supabase.project: "plokymarket"
+      com.supabase.component: "storage"
+      description: "Supabase Storage API"
+
+  supabase-imgproxy:
+    container_name: supabase-imgproxy
+    image: darthsim/imgproxy:v3.8
+    restart: unless-stopped
+    ports:
+      - "5001:5000"
+    environment:
+      IMGPROXY_BIND: ":5000"
+      IMGPROXY_LOCAL_FILESYSTEM_ROOT: /var/lib/storage
+      IMGPROXY_USE_ETAG: "true"
+      IMGPROXY_ENABLE_WEBP_DETECTION: "true"
+    volumes:
+      - supabase-storage-data:/var/lib/storage:ro
+    networks:
+      - supabase-network
+    healthcheck:
+      test: [ "CMD", "imgproxy", "health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    labels:
+      com.supabase.project: "plokymarket"
+      com.supabase.component: "storage-image-proxy"
+      description: "Image proxy for storage transformations"
+
+  # ============================================
+  # STUDIO (Admin UI)
+  # ============================================
+
+  supabase-studio:
+    container_name: supabase-studio
+    image: supabase/studio:latest
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      STUDIO_PG_META_URL: http://supabase-postgres-meta:8080
+      SUPABASES_URL: ${API_EXTERNAL_URL:-http://localhost:8000}
+      SUPABASE_URL: ${API_EXTERNAL_URL:-http://localhost:8000}
+      SUPABASE_ANON_KEY: ${ANON_KEY:-your-anon-key}
+      SUPABASE_SERVICE_KEY: ${SERVICE_KEY:-your-service-key}
+    volumes: []
+    networks:
+      - supabase-network
+    depends_on:
+      - supabase-postgres-meta
+      - supabase-kong
+    healthcheck:
+      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:3000" ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    labels:
+      com.supabase.project: "plokymarket"
+      com.supabase.component: "studio"
+      description: "Supabase Studio Admin UI"
+
+  # ============================================
+  # FUNCTIONS & EDGE RUNTIME
+  # ============================================
+
+  supabase-functions:
+    container_name: supabase-functions
+    image: supabase/edge-runtime:latest
+    restart: unless-stopped
+    ports:
+      - "3002:3000"
+    environment:
+      SUPABASE_URL: ${API_EXTERNAL_URL:-http://localhost:8000}
+      SUPABASE_ANON_KEY: ${ANON_KEY:-your-anon-key}
+      SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_KEY:-your-service-key}
+      SUPABASE_DB_URL: postgres://postgres:${POSTGRES_PASSWORD:-supabase_secure_pass_2024}@supabase-postgres:5432/postgres
+      JWT_SECRET: ${JWT_SECRET:-your-jwt-secret-change-in-production}
+      REGION: auto
+    volumes:
+      - ./functions:/home/deno/functions:ro
+    networks:
+      - supabase-network
+    healthcheck:
+      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:3000/9991/healthy" ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    labels:
+      com.supabase.project: "plokymarket"
+      com.supabase.component: "functions"
+      description: "Supabase Edge Functions runtime"
+
+  # ============================================
+  # LOGGING
+  # ============================================
+
+  supabase-logflare:
+    container_name: supabase-logflare
+    image: supabase/logflare:latest
+    restart: unless-stopped
+    ports:
+      - "4001:4000"
+    environment:
+      LOGFLARE_API_KEY: ${LOGFLARE_API_KEY:-your-logflare-api-key}
+      LOGFLARE_SUPABASE_KEY: ${LOGFLARE_SUPABASE_KEY:-your-supabase-key}
+      LOGFLARE_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-supabase_secure_pass_2024}
+      LOGFLARE_DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:-supabase_secure_pass_2024}@supabase-postgres:5432/postgres
+      LOGFLARE_MIN_DURATION_FOR_MEASURING: 1000
+      LOGFLARE_MULTI_TENANT: "true"
+      RELEASE: v1.1.0
+    volumes:
+      - supabase-logs-data:/opt/app/erts_data
+    networks:
+      - supabase-network
+    depends_on:
+      supabase-postgres:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:4000/health" ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    labels:
+      com.supabase.project: "plokymarket"
+      com.supabase.component: "logging"
+      description: "Logflare logging service"
+
+  # ============================================
+  # POSTGREST (REST API)
+  # ============================================
+
+  supabase-postgrest:
+    container_name: supabase-postgrest
+    image: postgrest/postgrest:v11.2.0
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      PGRST_DB_URI: postgres://postgres:${POSTGRES_PASSWORD:-supabase_secure_pass_2024}@supabase-postgres:5432/postgres
+      PGRST_DB_SCHEMAS: public,storage,graphql_public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${JWT_SECRET:-your-jwt-secret-change-in-production}
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+      PGRST_DB_PREPARED_STATEMENTS: "true"
+    volumes: []
+    networks:
+      - supabase-network
+    depends_on:
+      supabase-postgres:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:3000/" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    labels:
+      com.supabase.project: "plokymarket"
+      com.supabase.component: "rest-api"
+      description: "PostgREST REST API"
+
+  # ============================================
+  # INbucket (Email Testing)
+  # ============================================
+
+  supabase-inbucket:
+    container_name: supabase-inbucket
+    image: inbucket/inbucket:latest
+    restart: unless-stopped
+    ports:
+      - "9000:9000" # Web UI
+      - "2500:2500" # SMTP
+    environment:
+      INBUCKET_WEB_ADDR: 0.0.0.0:9000
+      INBUCKET_SMTP_ADDR: 0.0.0.0:2500
+      INBUCKET_POP3_ADDR: 0.0.0.0:1110
+    volumes:
+      - supabase-inbucket-data:/var/lib/inbucket
+    networks:
+      - supabase-network
+    healthcheck:
+      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:9000/status" ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    labels:
+      com.supabase.project: "plokymarket"
+      com.supabase.component: "email"
+      description: "Inbucket email testing server"
+
+# ============================================
+# VOLUMES - Persistent data storage
+# ============================================
+volumes:
+  supabase-db-data:
+    name: supabase-postgres-data
+    driver: local
+  supabase-storage-data:
+    name: supabase-storage-data
+    driver: local
+  supabase-logs-data:
+    name: supabase-logs-data
+    driver: local
+  supabase-inbucket-data:
+    name: supabase-inbucket-data
+    driver: local
+
+# ============================================
+# NETWORKS
+# ============================================
+networks:
+  supabase-network:
+    name: supabase-network
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16

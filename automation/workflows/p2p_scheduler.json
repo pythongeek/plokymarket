@@ -1,0 +1,96 @@
+{
+    "name": "P2P Scheduler (Auto-Refresh)",
+    "nodes": [
+        {
+            "parameters": {
+                "rule": "interval",
+                "interval": 3,
+                "unit": "minutes"
+            },
+            "id": "k6i6k0j9-0g7h-0i6k-ff8g-df9b0c1d2e3f",
+            "name": "Cron (3 min)",
+            "type": "n8n-nodes-base.cron",
+            "typeVersion": 1,
+            "position": [
+                250,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "http://n8n-p2p:5678/webhook/scrape-binance-p2p",
+                "sendBody": true,
+                "contentType": "json",
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "name": "method",
+                            "value": "bkash"
+                        },
+                        {
+                            "name": "amount",
+                            "value": "1000"
+                        }
+                    ]
+                }
+            },
+            "id": "l7j7l1k0-1h8i-1j7l-gg9h-ef0c1d2e3f4g",
+            "name": "Trigger bKash Scrape",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.1,
+            "position": [
+                450,
+                200
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "http://n8n-p2p:5678/webhook/scrape-binance-p2p",
+                "sendBody": true,
+                "contentType": "json",
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "name": "method",
+                            "value": "nagad"
+                        },
+                        {
+                            "name": "amount",
+                            "value": "1000"
+                        }
+                    ]
+                }
+            },
+            "id": "m8k8m2l1-2i9j-2k8m-hh0i-fg1d2e3f4g5h",
+            "name": "Trigger Nagad Scrape",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.1,
+            "position": [
+                450,
+                400
+            ]
+        }
+    ],
+    "connections": {
+        "Cron (3 min)": {
+            "main": [
+                [
+                    {
+                        "node": "Trigger bKash Scrape",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Trigger Nagad Scrape",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    }
+}

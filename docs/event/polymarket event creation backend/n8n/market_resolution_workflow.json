@@ -1,0 +1,266 @@
+{
+  "name": "Market Resolution - AI Oracle",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "market-resolution",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "id": "webhook-trigger",
+      "name": "Webhook: Market Resolution",
+      "webhookId": "market-resolution"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.KV_REST_API_URL }}/get/processed:{{ $json.body.event_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.KV_REST_API_TOKEN }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "id": "check-cache",
+      "name": "Check Upstash Cache"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.result !== null }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [650, 300],
+      "id": "cache-exists",
+      "name": "Already Processed?"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"status\": \"already_processed\", \"event_id\": \"{{ $('Webhook: Market Resolution').item.json.body.event_id }}\"}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [850, 200],
+      "id": "respond-cached",
+      "name": "Return Cached Result"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent",
+        "authentication": "queryAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={\n  \"contents\": [{\n    \"parts\": [{\n      \"text\": \"Act as a neutral judge for a prediction market.\\n\\nEvent: {{ $('Webhook: Market Resolution').item.json.body.event_query }}\\n\\nSearch the internet for the official outcome of this event. Based on available evidence, determine the winner.\\n\\nProvide response in this exact JSON format:\\n{\\n  \\\"winner\\\": \\\"YES\\\" | \\\"NO\\\" | \\\"UNKNOWN\\\",\\n  \\\"confidence\\\": number (0.0 to 1.0),\\n  \\\"source_url\\\": \\\"primary source URL\\\",\\n  \\\"summary\\\": \\\"brief explanation of the outcome\\\"\\n}\\n\\nBe concise and factual.\"\n    }]\n  }]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [850, 400],
+      "id": "gemini-ai",
+      "name": "Gemini AI Oracle",
+      "credentials": {
+        "httpQueryAuth": {
+          "id": "gemini-api-key",
+          "name": "Gemini API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const geminiResponse = items[0].json;\n\n// Extract text from Gemini response\nlet aiText = '';\nif (geminiResponse.candidates && geminiResponse.candidates[0]) {\n  aiText = geminiResponse.candidates[0].content?.parts?.[0]?.text || '';\n}\n\n// Parse JSON from response\nlet result = { winner: 'UNKNOWN', confidence: 0, source_url: '', summary: '' };\ntry {\n  // Remove markdown code blocks if present\n  const cleanJson = aiText.replace(/```json|```/g, '').trim();\n  const parsed = JSON.parse(cleanJson);\n  result = { ...result, ...parsed };\n} catch (e) {\n  console.error('Failed to parse AI response:', e);\n  result.summary = 'Failed to parse AI response: ' + aiText.substring(0, 200);\n}\n\n// Validate confidence is between 0 and 1\nif (typeof result.confidence === 'number') {\n  result.confidence = Math.max(0, Math.min(1, result.confidence));\n} else {\n  result.confidence = 0;\n}\n\nreturn [{ json: result }];"
+      },
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1050, 400],
+      "id": "parse-ai-response",
+      "name": "Parse AI Response"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.confidence }}",
+              "operation": "lt",
+              "value2": 0.9
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1250, 400],
+      "id": "confidence-check",
+      "name": "Confidence >= 90%?"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"status\": \"disputed\", \"reason\": \"confidence_too_low\", \"confidence\": {{ $json.confidence }}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1450, 300],
+      "id": "respond-low-confidence",
+      "name": "Return Low Confidence"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.NEXT_PUBLIC_APP_URL }}/api/resolve",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={\n  \"eventId\": \"{{ $('Webhook: Market Resolution').item.json.body.event_id }}\",\n  \"result\": \"{{ $json.winner }}\",\n  \"confidence\": {{ $json.confidence }},\n  \"sourceUrl\": \"{{ $json.source_url }}\",\n  \"summary\": \"{{ $json.summary }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [1450, 500],
+      "id": "call-vercel-resolve",
+      "name": "Call Vercel /api/resolve",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "vercel-api-key",
+          "name": "Vercel API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1650, 500],
+      "id": "respond-final",
+      "name": "Return Final Result"
+    }
+  ],
+  "connections": {
+    "Webhook: Market Resolution": {
+      "main": [
+        [
+          {
+            "node": "Check Upstash Cache",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Upstash Cache": {
+      "main": [
+        [
+          {
+            "node": "Already Processed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Already Processed?": {
+      "main": [
+        [
+          {
+            "node": "Return Cached Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Gemini AI Oracle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini AI Oracle": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Confidence >= 90%?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confidence >= 90%?": {
+      "main": [
+        [
+          {
+            "node": "Return Low Confidence",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call Vercel /api/resolve",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Vercel /api/resolve": {
+      "main": [
+        [
+          {
+            "node": "Return Final Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": []
+}
