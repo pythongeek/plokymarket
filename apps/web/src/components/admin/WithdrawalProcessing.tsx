@@ -70,7 +70,7 @@ export default function WithdrawalProcessing() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           withdrawalId,
-          adminNotes: notes
+          notes
         }),
       });
 
@@ -101,8 +101,8 @@ export default function WithdrawalProcessing() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           withdrawalId,
-          adminNotes: notes,
-          transferProofUrl: proofUrl
+          notes,
+          proofUrl
         }),
       });
 
@@ -134,7 +134,7 @@ export default function WithdrawalProcessing() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           withdrawalId,
-          rejectionReason: reason
+          reason
         }),
       });
 

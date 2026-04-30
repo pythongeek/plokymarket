@@ -17,14 +17,14 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check if user has admin role
-    const { data: adminRole, error: roleError } = await supabase
-      .from('admin_roles')
-      .select('role')
-      .eq('user_id', user.id)
+    // Check if user has admin role — use user_profiles.is_admin
+    const { data: profile, error: roleError } = await supabase
+      .from('user_profiles')
+      .select('is_admin, is_super_admin')
+      .eq('id', user.id)
       .single();
 
-    if (roleError || !adminRole) {
+    if (roleError || (!profile?.is_admin && !profile?.is_super_admin)) {
       return NextResponse.json(
         { error: 'Admin access required' },
         { status: 403 }

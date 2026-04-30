@@ -17,14 +17,14 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check if user has admin role
-    const { data: adminRole, error: roleError } = await supabase
-      .from('admin_roles')
-      .select('role')
-      .eq('user_id', user.id)
+    // 2. Authorization Check (Admin Only) — use user_profiles.is_admin
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .select('is_admin, is_super_admin')
+      .eq('id', user.id)
       .single();
 
-    if (roleError || !adminRole) {
+    if (!profile?.is_admin && !profile?.is_super_admin) {
       return NextResponse.json(
         { error: 'Admin access required' },
         { status: 403 }
@@ -32,7 +32,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { withdrawalId, adminNotes, transferProofUrl } = body;
+    const { withdrawalId, notes, proofUrl } = body;
 
     if (!withdrawalId) {
       return NextResponse.json(
@@ -70,7 +70,7 @@ export async function POST(request: Request) {
         p_withdrawal_id: withdrawalId,
         p_user_id: withdrawal.user_id,
         p_approve: true,
-        p_admin_notes: adminNotes || null
+        p_admin_notes: notes || null
       });
 
     if (functionError) {
@@ -82,10 +82,10 @@ export async function POST(request: Request) {
     }
 
     // Update transfer proof if provided
-    if (transferProofUrl) {
+    if (proofUrl) {
       await service
         .from('withdrawal_requests')
-        .update({ transfer_proof_url: transferProofUrl })
+        .update({ transfer_proof_url: proofUrl })
         .eq('id', withdrawalId);
     }
 

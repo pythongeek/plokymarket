@@ -17,14 +17,14 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check if user has admin role
-    const { data: adminRole, error: roleError } = await supabase
-      .from('admin_roles')
-      .select('role')
-      .eq('user_id', user.id)
+    // 2. Authorization Check (Admin Only) — use user_profiles.is_admin
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .select('is_admin, is_super_admin')
+      .eq('id', user.id)
       .single();
 
-    if (roleError || !adminRole) {
+    if (!profile?.is_admin && !profile?.is_super_admin) {
       return NextResponse.json(
         { error: 'Admin access required' },
         { status: 403 }
@@ -32,7 +32,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { withdrawalId, rejectionReason } = body;
+    const { withdrawalId, reason } = body;
 
     if (!withdrawalId) {
       return NextResponse.json(
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!rejectionReason || rejectionReason.trim().length < 5) {
+    if (!reason || reason.trim().length < 5) {
       return NextResponse.json(
         { error: 'Rejection reason required (minimum 5 characters)' },
         { status: 400 }
@@ -77,7 +77,7 @@ export async function POST(request: Request) {
         p_withdrawal_id: withdrawalId,
         p_user_id: withdrawal.user_id,
         p_approve: false,
-        p_admin_notes: rejectionReason
+        p_admin_notes: reason
       });
 
     if (functionError) {
@@ -93,11 +93,11 @@ export async function POST(request: Request) {
       user_id: withdrawal.user_id,
       type: 'withdrawal_rejected',
       title: 'উইথড্র বাতিল হয়েছে',
-      message: `আপনার ${withdrawal.usdt_amount} USDT উইথড্র রিকোয়েস্ট বাতিল করা হয়েছে। কারণ: ${rejectionReason}`,
+      message: `আপনার ${withdrawal.usdt_amount} USDT উইথড্র রিকোয়েস্ট বাতিল করা হয়েছে। কারণ: ${reason}`,
       metadata: {
         withdrawal_id: withdrawalId,
         usdt_amount: withdrawal.usdt_amount,
-        rejection_reason: rejectionReason
+        rejection_reason: reason
       }
     });
 

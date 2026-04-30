@@ -17,14 +17,14 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check if user has admin role
-    const { data: adminRole, error: roleError } = await supabase
-      .from('admin_roles')
-      .select('role')
-      .eq('user_id', user.id)
+    // Check if user has admin role — use user_profiles.is_admin
+    const { data: profile, error: roleError } = await supabase
+      .from('user_profiles')
+      .select('is_admin, is_super_admin')
+      .eq('id', user.id)
       .single();
 
-    if (roleError || !adminRole) {
+    if (roleError || (!profile?.is_admin && !profile?.is_super_admin)) {
       return NextResponse.json(
         { error: 'Admin access required' },
         { status: 403 }
@@ -32,7 +32,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { depositId, rejectionReason } = body;
+    const { depositId, reason } = body;
 
     if (!depositId) {
       return NextResponse.json(
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!rejectionReason || rejectionReason.trim().length < 5) {
+    if (!reason || reason.trim().length < 5) {
       return NextResponse.json(
         { error: 'Rejection reason required (minimum 5 characters)' },
         { status: 400 }
@@ -76,7 +76,7 @@ export async function POST(request: Request) {
       .from('deposit_requests')
       .update({
         status: 'rejected',
-        rejection_reason: rejectionReason.trim(),
+        rejection_reason: reason.trim(),
         verified_by: user.id,
         verified_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
@@ -96,10 +96,10 @@ export async function POST(request: Request) {
       user_id: (deposit as any).user_id,
       type: 'deposit_rejected',
       title: 'ডিপোজিট বাতিল হয়েছে',
-      message: `আপনার ৳${(deposit as any).bdt_amount} ডিপোজিট রিকোয়েস্ট বাতিল করা হয়েছে। কারণ: ${rejectionReason}`,
+      message: `আপনার ৳${(deposit as any).bdt_amount} ডিপোজিট রিকোয়েস্ট বাতিল করা হয়েছে। কারণ: ${reason}`,
       metadata: {
         deposit_id: depositId,
-        rejection_reason: rejectionReason
+        rejection_reason: reason
       }
     } as any);
 
