@@ -5,6 +5,7 @@ const withNextIntl = createNextIntlPlugin();
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+    output: 'standalone',
     // TypeScript and ESLint are now enabled for production builds
     // Unified types ensure type safety across the codebase
     eslint: {
