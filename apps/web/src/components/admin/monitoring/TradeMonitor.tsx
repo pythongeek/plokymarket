@@ -1,0 +1,848 @@
+'use client';
+
+import { useState, useEffect, useCallback } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Input } from '@/components/ui/input';
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow
+} from '@/components/ui/table';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
+import {
+  Activity, BarChart3, TrendingUp, TrendingDown, AlertTriangle,
+  Shield, Users, DollarSign, Clock, RefreshCw, Search,
+  Filter, Eye, Ban, Cancel, CheckCircle, XCircle,
+  ArrowUpDown, PieChart, LineChart
+} from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { createClient } from '@/lib/supabase/client';
+import { toast } from '@/components/ui/use-toast';
+
+interface Trade {
+  id: string;
+  event_id: string;
+  user_id: string;
+  outcome: string;
+  price: number;
+  quantity: number;
+  side: 'buy' | 'sell';
+  created_at: string;
+  // Joined fields
+  user_email?: string;
+  market_question?: string;
+}
+
+interface SuspiciousActivity {
+  type: 'wash_trading' | 'market_manipulation' | 'unusual_volume';
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  userId: string;
+  userEmail?: string;
+  description: string;
+  evidence: string[];
+  detectedAt: string;
+}
+
+interface VolumeDistribution {
+  outcome: string;
+  buyVolume: number;
+  sellVolume: number;
+  buyTrades: number;
+  sellTrades: number;
+  avgBuyPrice: number;
+  avgSellPrice: number;
+}
+
+interface PriceDistribution {
+  range: string;
+  count: number;
+  percentage: number;
+}
+
+interface UserStats {
+  userId: string;
+  email: string;
+  totalTrades: number;
+  totalVolume: number;
+  buyWinRate: number;
+  avgTradeSize: number;
+  lastTrade: string;
+  isSuspicious: boolean;
+}
+
+export function TradeMonitor() {
+  const { t } = useTranslation();
+  const supabase = createClient();
+
+  const [trades, setTrades] = useState<Trade[]>([]);
+  const [suspiciousActivity, setSuspiciousActivity] = useState<SuspiciousActivity[]>([]);
+  const [userStats, setUserStats] = useState<UserStats[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [freezeDialog, setFreezeDialog] = useState<UserStats | null>(null);
+  const [cancelDialog, setCancelDialog] = useState<{ orderIds: string[] } | null>(null);
+  const [volumeDist, setVolumeDist] = useState<VolumeDistribution[]>([]);
+  const [priceDist, setPriceDist] = useState<PriceDistribution[]>([]);
+
+  // Fetch trades
+  const fetchTrades = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('trades')
+        .select(`
+          *,
+          user:user_id(email),
+          event:event_id(question)
+        `)
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      if (error) throw error;
+
+      const mappedTrades: Trade[] = (data || []).map(t => ({
+        ...t,
+        user_email: (t.user as any)?.email,
+        market_question: (t.event as any)?.question,
+      }));
+
+      setTrades(mappedTrades);
+      analyzeSuspiciousActivity(mappedTrades);
+      calculateVolumeDistribution(mappedTrades);
+      calculatePriceDistribution(mappedTrades);
+    } catch (error) {
+      console.error('Error fetching trades:', error);
+      toast({
+        title: 'ত্রুটি',
+        description: 'ট্রেডের তথ্য লোড করতে ব্যর্থ হয়েছে',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [supabase, toast]);
+
+  // Fetch user stats
+  const fetchUserStats = useCallback(async () => {
+    try {
+      // Get user trading stats
+      const { data: positions } = await supabase
+        .from('positions')
+        .select(`
+          user_id,
+          quantity,
+          entry_price,
+          event:event_id(status)
+        `);
+
+      if (!positions) return;
+
+      // Group by user
+      const userMap = new Map<string, UserStats>();
+      positions.forEach(p => {
+        const existing = userMap.get(p.user_id) || {
+          userId: p.user_id,
+          email: '',
+          totalTrades: 0,
+          totalVolume: 0,
+          buyWinRate: 0,
+          avgTradeSize: 0,
+          lastTrade: '',
+          isSuspicious: false,
+        };
+        existing.totalTrades += 1;
+        existing.totalVolume += Math.abs(Number(p.quantity) * Number(p.entry_price));
+        if (p.event && (p.event as any).status === 'resolved') {
+          existing.lastTrade = 'resolved';
+        }
+        userMap.set(p.user_id, existing);
+      });
+
+      // Get user emails
+      const userIds = Array.from(userMap.keys());
+      if (userIds.length > 0) {
+        const { data: users } = await supabase
+          .from('user_profiles')
+          .select('user_id, email')
+          .in('user_id', userIds.slice(0, 50));
+
+        (users || []).forEach(u => {
+          const stats = userMap.get(u.user_id);
+          if (stats) stats.email = u.email;
+        });
+      }
+
+      // Detect suspicious patterns
+      userMap.forEach(stats => {
+        const volume = stats.totalVolume;
+        const tradeCount = stats.totalTrades;
+        const avgSize = tradeCount > 0 ? volume / tradeCount : 0;
+
+        // Wash trading indicators
+        if (tradeCount > 100 && avgSize < 100) {
+          stats.isSuspicious = true;
+        }
+        // Very high volume for new accounts
+        if (tradeCount < 5 && volume > 100000) {
+          stats.isSuspicious = true;
+        }
+      });
+
+      setUserStats(Array.from(userMap.values()).slice(0, 50));
+    } catch (error) {
+      console.error('Error fetching user stats:', error);
+    }
+  }, [supabase]);
+
+  // Analyze suspicious activity
+  const analyzeSuspiciousActivity = useCallback((tradeData: Trade[]) => {
+    const activity: SuspiciousActivity[] = [];
+
+    // Group trades by user
+    const userTrades = new Map<string, Trade[]>();
+    tradeData.forEach(t => {
+      const existing = userTrades.get(t.user_id) || [];
+      existing.push(t);
+      userTrades.set(t.user_id, existing);
+    });
+
+    userTrades.forEach((userTradeList, userId) => {
+      // Wash trading: user trading with themselves
+      const eventGroups = new Map<string, Trade[]>();
+      userTradeList.forEach(t => {
+        const existing = eventGroups.get(t.event_id) || [];
+        existing.push(t);
+        eventGroups.set(t.event_id, existing);
+      });
+
+      eventGroups.forEach((eventTrades, eventId) => {
+        const buyVolume = eventTrades
+          .filter(t => t.side === 'buy')
+          .reduce((sum, t) => sum + Number(t.price) * Number(t.quantity), 0);
+        const sellVolume = eventTrades
+          .filter(t => t.side === 'sell')
+          .reduce((sum, t) => sum + Number(t.price) * Number(t.quantity), 0);
+
+        // Self-trading (buy and sell same market)
+        if (buyVolume > 0 && sellVolume > 0 && eventTrades.length > 5) {
+          const firstTrade = userTradeList[0];
+          activity.push({
+            type: 'wash_trading',
+            severity: buyVolume + sellVolume > 50000 ? 'high' : 'medium',
+            userId,
+            userEmail: firstTrade.user_email,
+            description: `একই ব্যবহারকারী একই বাজারে ক্রয় এবং বিক্রয় করছেন`,
+            evidence: [
+              `ক্রয় ভলিউম: ৳${(buyVolume / 1000).toFixed(1)}K`,
+              `বিক্রয় ভলিউম: ৳${(sellVolume / 1000).toFixed(1)}K`,
+              `মোট ট্রেড: ${eventTrades.length}`,
+            ],
+            detectedAt: new Date().toISOString(),
+          });
+        }
+      });
+
+      // Unusual volume spike
+      const totalVolume = userTradeList.reduce(
+        (sum, t) => sum + Number(t.price) * Number(t.quantity),
+        0
+      );
+      if (totalVolume > 100000 && userTradeList.length < 3) {
+        activity.push({
+          type: 'unusual_volume',
+          severity: 'high',
+          userId,
+          userEmail: userTradeList[0]?.user_email,
+          description: `অস্বাভাবিক উচ্চ ভলিউম (কম ট্রেড সহ)`,
+          evidence: [
+            `মোট ভলিউম: ৳${(totalVolume / 1000).toFixed(1)}K`,
+            `ট্রেড সংখ্যা: ${userTradeList.length}`,
+          ],
+          detectedAt: new Date().toISOString(),
+        });
+      }
+    });
+
+    setSuspiciousActivity(activity.slice(0, 20));
+  }, []);
+
+  // Calculate volume distribution by outcome
+  const calculateVolumeDistribution = useCallback((tradeData: Trade[]) => {
+    const distMap = new Map<string, VolumeDistribution>();
+
+    tradeData.forEach(t => {
+      const existing = distMap.get(t.outcome) || {
+        outcome: t.outcome,
+        buyVolume: 0,
+        sellVolume: 0,
+        buyTrades: 0,
+        sellTrades: 0,
+        avgBuyPrice: 0,
+        avgSellPrice: 0,
+      };
+
+      if (t.side === 'buy') {
+        existing.buyVolume += Number(t.price) * Number(t.quantity);
+        existing.buyTrades += 1;
+      } else {
+        existing.sellVolume += Number(t.price) * Number(t.quantity);
+        existing.sellTrades += 1;
+      }
+
+      distMap.set(t.outcome, existing);
+    });
+
+    setVolumeDist(Array.from(distMap.values()));
+  }, []);
+
+  // Calculate price distribution histogram
+  const calculatePriceDistribution = useCallback((tradeData: Trade[]) => {
+    const ranges = [
+      '0-10%', '10-20%', '20-30%', '30-40%', '40-50%',
+      '50-60%', '60-70%', '70-80%', '80-90%', '90-100%',
+    ];
+    const counts = new Array(10).fill(0);
+
+    tradeData.forEach(t => {
+      const price = Number(t.price) * 100;
+      const bucket = Math.min(Math.floor(price / 10), 9);
+      counts[bucket]++;
+    });
+
+    const total = tradeData.length || 1;
+    const distribution: PriceDistribution[] = ranges.map((range, i) => ({
+      range,
+      count: counts[i],
+      percentage: (counts[i] / total) * 100,
+    }));
+
+    setPriceDist(distribution);
+  }, []);
+
+  // Initial fetch
+  useEffect(() => {
+    fetchTrades();
+    fetchUserStats();
+    // Realtime subscription
+    const channel = supabase
+      .channel('trade-monitor')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'trades' },
+        () => fetchTrades()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchTrades, fetchUserStats, supabase]);
+
+  // Freeze user
+  const handleFreezeUser = async () => {
+    if (!freezeDialog) return;
+    try {
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({ is_frozen: true })
+        .eq('user_id', freezeDialog.userId);
+
+      if (error) throw error;
+
+      toast({
+        title: 'সফল',
+        description: 'ব্যবহারকারীর অ্যাকাউন্ট হিমায়িত করা হয়েছে',
+      });
+      setFreezeDialog(null);
+      fetchUserStats();
+    } catch (error) {
+      toast({
+        title: 'ত্রুটি',
+        description: 'ব্যবহারকারী হিমায়িত করতে ব্যর্থ হয়েছে',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Cancel orders
+  const handleCancelOrders = async () => {
+    if (!cancelDialog) return;
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .update({ status: 'cancelled' })
+        .in('id', cancelDialog.orderIds);
+
+      if (error) throw error;
+
+      toast({
+        title: 'সফল',
+        description: `${cancelDialog.orderIds.length}টি অর্ডার বাতিল করা হয়েছে`,
+      });
+      setCancelDialog(null);
+    } catch (error) {
+      toast({
+        title: 'ত্রুটি',
+        description: 'অর্ডার বাতিল করতে ব্যর্থ হয়েছে',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Stats
+  const totalVolume = trades.reduce(
+    (sum, t) => sum + Number(t.price) * Number(t.quantity),
+    0
+  );
+  const totalTrades = trades.length;
+  const avgTradeSize = totalTrades > 0 ? totalVolume / totalTrades : 0;
+  const suspiciousCount = suspiciousActivity.filter(a => a.severity === 'high' || a.severity === 'critical').length;
+
+  // Filter trades by search
+  const filteredTrades = trades.filter(t =>
+    (t.user_email?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+    (t.market_question?.toLowerCase() || '').includes(searchQuery.toLowerCase())
+  );
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-white">ট্রেড মনিটরিং</h2>
+          <p className="text-sm text-slate-400">
+            বাজার ট্রেড এবং সন্দেহজনক কার্যকলাপ পর্যবেক্ষণ
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => { fetchTrades(); fetchUserStats(); }}>
+          <RefreshCw className="w-4 h-4 mr-1" />
+          রিফ্রেশ
+        </Button>
+      </div>
+
+      {/* Stats Overview */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card className="bg-slate-900 border-slate-800">
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-400">মোট ট্রেড</p>
+                <p className="text-2xl font-bold text-white">{totalTrades}</p>
+              </div>
+              <BarChart3 className="w-8 h-8 text-blue-500" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-slate-900 border-slate-800">
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-400">মোট ভলিউম</p>
+                <p className="text-2xl font-bold text-white">
+                  ৳{(totalVolume / 1000).toFixed(1)}K
+                </p>
+              </div>
+              <DollarSign className="w-8 h-8 text-green-500" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-slate-900 border-slate-800">
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-400">গড় ট্রেড সাইজ</p>
+                <p className="text-2xl font-bold text-white">
+                  ৳{avgTradeSize.toFixed(0)}
+                </p>
+              </div>
+              <TrendingUp className="w-8 h-8 text-purple-500" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-slate-900 border-slate-800">
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-400">সন্দেহজনক কার্যকলাপ</p>
+                <p className="text-2xl font-bold text-red-400">{suspiciousCount}</p>
+              </div>
+              <AlertTriangle className="w-8 h-8 text-red-500" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Tabs defaultValue="trades" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="trades">সাম্প্রতিক ট্রেড</TabsTrigger>
+          <TabsTrigger value="analytics">অ্যানালিটিক্স</TabsTrigger>
+          <TabsTrigger value="users">ব্যবহারকারী</TabsTrigger>
+          <TabsTrigger value="suspicious">
+            সন্দেহজনক
+            {suspiciousCount > 0 && (
+              <Badge variant="destructive" className="ml-2">
+                {suspiciousCount}
+              </Badge>
+            )}
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Trades Tab */}
+        <TabsContent value="trades">
+          <Card className="bg-slate-900 border-slate-800">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>সাম্প্রতিক ট্রেড</CardTitle>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input
+                    placeholder="ব্যবহারকারী বা বাজার খুঁজুন..."
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    className="pl-9 w-64 bg-slate-950 border-slate-800"
+                  />
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <ScrollArea className="h-[400px]">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-slate-800">
+                      <TableHead>সময়</TableHead>
+                      <TableHead>ব্যবহারকারী</TableHead>
+                      <TableHead>বাজার</TableHead>
+                      <TableHead>দিক</TableHead>
+                      <TableHead className="text-right">দাম</TableHead>
+                      <TableHead className="text-right">পরিমাণ</TableHead>
+                      <TableHead className="text-right">মোট</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredTrades.slice(0, 50).map(trade => (
+                      <TableRow key={trade.id} className="border-slate-800">
+                        <TableCell className="text-slate-400">
+                          <div className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {new Date(trade.created_at).toLocaleTimeString('bn-BD', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm">{trade.user_email || trade.user_id.slice(0, 8)}</span>
+                        </TableCell>
+                        <TableCell className="max-w-xs truncate">
+                          <span className="text-sm truncate">{trade.market_question || trade.event_id.slice(0, 12)}</span>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={trade.side === 'buy' ? 'default' : 'destructive'}
+                            className={
+                              trade.side === 'buy'
+                                ? 'bg-green-500/20 text-green-400 border-green-500/30'
+                                : 'bg-red-500/20 text-red-400 border-red-500/30'
+                            }
+                          >
+                            {trade.side === 'buy' ? 'ক্রয়' : 'বিক্রয়'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <span className={trade.side === 'buy' ? 'text-green-400' : 'text-red-400'}>
+                            {(Number(trade.price) * 100).toFixed(1)}%
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {trade.quantity}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          ৳{(Number(trade.price) * Number(trade.quantity)).toFixed(2)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {filteredTrades.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center text-slate-500 py-8">
+                          কোনো ট্রেড পাওয়া যায়নি
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Analytics Tab */}
+        <TabsContent value="analytics">
+          <div className="grid md:grid-cols-2 gap-4">
+            {/* Volume by Outcome */}
+            <Card className="bg-slate-900 border-slate-800">
+              <CardHeader>
+                <CardTitle className="text-lg">ভলিউম বিশ্লেষণ</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {volumeDist.map(vd => (
+                    <div key={vd.outcome} className="space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="font-medium">{vd.outcome}</span>
+                        <span className="text-slate-400">
+                          ৳{((vd.buyVolume + vd.sellVolume) / 1000).toFixed(1)}K
+                        </span>
+                      </div>
+                      <div className="flex h-3 rounded-full overflow-hidden bg-slate-800">
+                        <div
+                          className="bg-green-500"
+                          style={{ width: `${(vd.buyVolume / (vd.buyVolume + vd.sellVolume + 1)) * 100}%` }}
+                        />
+                        <div
+                          className="bg-red-500"
+                          style={{ width: `${(vd.sellVolume / (vd.buyVolume + vd.sellVolume + 1)) * 100}%` }}
+                        />
+                      </div>
+                      <div className="flex justify-between text-xs text-slate-500">
+                        <span>ক্রয়: ৳{(vd.buyVolume / 1000).toFixed(1)}K</span>
+                        <span>বিক্রয়: ৳{(vd.sellVolume / 1000).toFixed(1)}K</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Price Distribution */}
+            <Card className="bg-slate-900 border-slate-800">
+              <CardHeader>
+                <CardTitle className="text-lg">দাম বিতরণ</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {priceDist.map((pd, i) => (
+                    <div key={pd.range} className="flex items-center gap-3">
+                      <span className="text-xs text-slate-400 w-16">{pd.range}</span>
+                      <div className="flex-1 h-4 bg-slate-800 rounded overflow-hidden">
+                        <div
+                          className="h-full bg-blue-500/70 rounded"
+                          style={{ width: `${pd.percentage}%` }}
+                        />
+                      </div>
+                      <span className="text-xs text-slate-400 w-12 text-right">
+                        {pd.count}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* Users Tab */}
+        <TabsContent value="users">
+          <Card className="bg-slate-900 border-slate-800">
+            <CardHeader>
+              <CardTitle>ব্যবহারকারী পরিসংখ্যান</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ScrollArea className="h-[400px]">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-slate-800">
+                      <TableHead>ব্যবহারকারী</TableHead>
+                      <TableHead className="text-right">ট্রেড</TableHead>
+                      <TableHead className="text-right">ভলিউম</TableHead>
+                      <TableHead className="text-right">গড় সাইজ</TableHead>
+                      <TableHead>স্ট্যাটাস</TableHead>
+                      <TableHead>অ্যাকশন</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {userStats.map(user => (
+                      <TableRow key={user.userId} className="border-slate-800">
+                        <TableCell>
+                          <span className="text-sm">{user.email || user.userId.slice(0, 12)}</span>
+                        </TableCell>
+                        <TableCell className="text-right">{user.totalTrades}</TableCell>
+                        <TableCell className="text-right">
+                          ৳{(user.totalVolume / 1000).toFixed(1)}K
+                        </TableCell>
+                        <TableCell className="text-right">
+                          ৳{user.avgTradeSize.toFixed(0)}
+                        </TableCell>
+                        <TableCell>
+                          {user.isSuspicious ? (
+                            <Badge variant="destructive">সন্দেহজনক</Badge>
+                          ) : (
+                            <Badge variant="default" className="bg-green-500/20 text-green-400">
+                              স্বাভাবিক
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setFreezeDialog(user)}
+                              title="হিমায়িত করুন"
+                            >
+                              <Ban className="w-4 h-4 text-blue-400" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {userStats.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center text-slate-500 py-8">
+                          কোনো ব্যবহারকারী পাওয়া যায়নি
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Suspicious Tab */}
+        <TabsContent value="suspicious">
+          <Card className="bg-slate-900 border-slate-800">
+            <CardHeader>
+              <CardTitle>সন্দেহজনক কার্যকলাপ</CardTitle>
+              <CardDescription>
+                সনাক্তকৃত সন্দেহজনক ট্রেডিং প্যাটার্ন
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ScrollArea className="h-[400px]">
+                <div className="space-y-3">
+                  {suspiciousActivity.map((activity, i) => (
+                    <div
+                      key={i}
+                      className={`p-4 rounded-lg border ${
+                        activity.severity === 'critical'
+                          ? 'bg-red-500/10 border-red-500/30'
+                          : activity.severity === 'high'
+                          ? 'bg-orange-500/10 border-orange-500/30'
+                          : 'bg-yellow-500/10 border-yellow-500/30'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-start gap-3">
+                          <AlertTriangle
+                            className={`w-5 h-5 mt-0.5 ${
+                              activity.severity === 'critical'
+                                ? 'text-red-400'
+                                : 'text-orange-400'
+                            }`}
+                          />
+                          <div>
+                            <p className="font-medium text-white">
+                              {activity.type === 'wash_trading'
+                                ? 'ওয়াশ ট্রেডিং'
+                                : activity.type === 'market_manipulation'
+                                ? 'বাজার কারসাজি'
+                                : 'অস্বাভাবিক ভলিউম'}
+                            </p>
+                            <p className="text-sm text-slate-400 mt-1">
+                              ব্যবহারকারী: {activity.userEmail || activity.userId.slice(0, 12)}
+                            </p>
+                            <p className="text-sm text-slate-500 mt-1">
+                              {activity.description}
+                            </p>
+                            <div className="mt-2 space-y-1">
+                              {activity.evidence.map((e, j) => (
+                                <p key={j} className="text-xs text-slate-500">
+                                  • {e}
+                                </p>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            variant="outline"
+                            className={
+                              activity.severity === 'critical'
+                                ? 'border-red-500/50 text-red-400'
+                                : 'border-orange-500/50 text-orange-400'
+                            }
+                          >
+                            {activity.severity === 'critical' ? 'গুরুতর' : 'উচ্চ'}
+                          </Badge>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setFreezeDialog({
+                              ...activity,
+                              email: activity.userEmail || '',
+                              totalTrades: 0,
+                              totalVolume: 0,
+                              buyWinRate: 0,
+                              avgTradeSize: 0,
+                              lastTrade: activity.detectedAt,
+                              isSuspicious: true,
+                            })}
+                          >
+                            <Ban className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {suspiciousActivity.length === 0 && (
+                    <div className="text-center py-12 text-slate-500">
+                      <CheckCircle className="w-12 h-12 mx-auto mb-3 text-green-500" />
+                      <p>কোনো সন্দেহজনক কার্যকলাপ সনাক্ত হয়নি</p>
+                    </div>
+                  )}
+                </div>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {/* Freeze User Dialog */}
+      <Dialog open={!!freezeDialog} onOpenChange={() => setFreezeDialog(null)}>
+        <DialogContent className="bg-slate-900 border-slate-800">
+          <DialogHeader>
+            <DialogTitle>ব্যবহারকারী হিমায়িত করুন</DialogTitle>
+            <DialogDescription>
+              এই ব্যবহারকারীর অ্যাকাউন্ট সাময়িকভাবে হিমায়িত করা হবে।
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-white font-medium">
+              {freezeDialog?.email || freezeDialog?.userId.slice(0, 12)}
+            </p>
+            <p className="text-sm text-yellow-400">
+              ⚠️ হিমায়িত ব্যবহারকারী ট্রেড বা জমা/উত্তোলন করতে পারবে না।
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFreezeDialog(null)}>
+              বাতিল
+            </Button>
+            <Button variant="destructive" onClick={handleFreezeUser}>
+              হিমায়িত করুন
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
