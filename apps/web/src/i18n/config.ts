@@ -37,11 +37,11 @@ export default i18nextInstance;
 
 export const i18n = {
     defaultLocale: 'bn', // Bangla is the primary/default language
-    locales: ['bn', 'en'], // All supported locales; order matters for fallback logic
+    locales: ['bn', 'en', 'hi'], // All supported locales; order matters for fallback logic
 } as const;
 
 // Derive the Locale union type directly from the config to keep them in sync.
-// This means: type Locale = 'bn' | 'en'
+// This means: type Locale = 'bn' | 'en' | 'hi'
 export type Locale = (typeof i18n)['locales'][number];
 
 // Human-readable labels for locale switcher UI components.
@@ -49,4 +49,5 @@ export type Locale = (typeof i18n)['locales'][number];
 export const localeLabels: Record<Locale, string> = {
     bn: 'বাংলা',   // Bangla label in Bangla script
     en: 'English', // English label in English
+    hi: 'हिन्दी',  // Hindi label in Hindi script
 };

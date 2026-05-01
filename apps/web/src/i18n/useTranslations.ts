@@ -8,9 +8,10 @@ import { useRouter } from 'next/router';
 import type { Locale } from './config';
 import bn from './messages/bn.json';
 import en from './messages/en.json';
+import hi from './messages/hi.json';
 
 // Map locale codes to their message objects
-const messages: Record<Locale, typeof bn> = { bn, en };
+const messages: Record<Locale, typeof bn> = { bn, en, hi };
 
 type Messages = typeof bn;
 type Namespace = keyof Messages;

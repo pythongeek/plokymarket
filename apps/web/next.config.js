@@ -17,6 +17,16 @@ const nextConfig = {
     typescript: {
         ignoreBuildErrors: true,
     },
+    // Ensure service worker is not bundled by Next.js
+    webpack: (config, { isServer }) => {
+        if (!isServer) {
+            config.resolve.fallback = {
+                ...config.resolve.fallback,
+                fs: false,
+            };
+        }
+        return config;
+    },
 };
 
 module.exports = withNextIntl(withSentryConfig(nextConfig, {

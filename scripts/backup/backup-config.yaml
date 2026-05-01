@@ -1,0 +1,78 @@
+# ============================================================
+# Plokymarket Backup Configuration
+# ============================================================
+
+backup:
+  # Cron schedule (default: 2 AM daily)
+  schedule: "0 2 * * *"
+  
+  # Retention
+  retention_days: 30
+  
+  # Compression
+  compression: true
+  compression_level: 9
+
+# Remote storage configuration
+# Option 1: Google Drive via rclone
+remote_storage:
+  type: rclone
+  remote: "gdrive:backups"
+  # Install rclone: curl https://rclone.org/install.sh | sudo bash
+  # Configure: rclone config
+  #   name: gdrive
+  #   type: drive
+  #   scope: drive.read_write
+
+# Option 2: AWS S3
+# remote_storage:
+#   type: s3
+#   bucket: plokymarket-backups
+#   region: us-east-1
+#   # Set AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY env vars
+
+# Option 3: GCS (Google Cloud Storage)
+# remote_storage:
+#   type: gcs
+#   bucket: plokymarket-backups
+#   # Set GOOGLE_APPLICATION_CREDENTIALS env var
+
+# Database connection
+database:
+  host: "${DB_HOST:-localhost}"
+  port: "${DB_PORT:-5432}"
+  user: "${DB_USER:-postgres}"
+  name: "${DB_NAME:-postgres}"
+
+# Tables to prioritize (backup first)
+tables_priority:
+  - users
+  - wallets
+  - user_profiles
+  - orders
+  - trades
+  - markets
+  - events
+  - deposits
+  - withdrawals
+  - kyc_submissions
+
+# Pre-backup checks
+pre_backup:
+  check_disk_space: true
+  min_free_gb: 5
+  check_db_connection: true
+
+# Post-backup actions
+post_backup:
+  verify_integrity: true
+  upload_remote: true
+  notify_on_failure: true
+  # Discord/Slack webhook for alerts (optional)
+  # webhook_url: "https://discord.com/api/webhooks/..."
+
+# Monitoring
+monitoring:
+  prometheus_enabled: true
+  prometheus_port: 9090
+  health_check_interval: 30s

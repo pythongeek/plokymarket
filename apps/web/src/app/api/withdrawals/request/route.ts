@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
+import { checkWithdrawalRateLimit, addRateLimitHeaders } from '@/lib/upstash/rateLimit';
 
 // POST /api/withdrawals/request
 // Create a new withdrawal request
@@ -16,6 +17,21 @@ export async function POST(request: Request) {
         { error: 'Authentication required' },
         { status: 401 }
       );
+    }
+
+    // Apply withdrawal-specific rate limiting (3 per hour max)
+    const withdrawalResult = await checkWithdrawalRateLimit(user.id);
+    
+    if (!withdrawalResult.allowed) {
+      const response = NextResponse.json(
+        {
+          error: 'Withdrawal rate limit exceeded. Maximum 3 withdrawals per hour.',
+          code: 'WITHDRAWAL_RATE_LIMITED',
+          retryAfter: withdrawalResult.retryAfter,
+        },
+        { status: 429 }
+      );
+      return addRateLimitHeaders(response, withdrawalResult);
     }
 
     const body = await request.json();

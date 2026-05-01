@@ -2,13 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { TrendingUp, Wallet, LayoutDashboard, LogOut, User, Menu, X, Shield, Languages, PiggyBank, Search, Calculator, Newspaper, Trophy, Crown } from 'lucide-react';
+import { TrendingUp, Wallet, LayoutDashboard, LogOut, User, Menu, X, Shield, PiggyBank, Search, Calculator, Newspaper, Trophy, Crown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useStore } from '@/store/useStore';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ModeToggle } from '../mode-toggle';
 import { NotificationBell } from './NotificationBell';
+import { LanguageSwitcher } from './LanguageSwitcher';
 import { useEffect } from 'react';
 import { Input } from '../ui/input';
 
@@ -24,21 +25,11 @@ export function Navbar() {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [hasHydrated, setHasHydrated] = useState(false);
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
 
   useEffect(() => {
     setHasHydrated(true);
   }, []);
-
-  const languages = [
-    { code: 'bn', label: 'বাংলা', flag: 'BD' },
-    { code: 'en', label: 'English', flag: 'US' },
-    { code: 'hi', label: 'हिन्दी', flag: 'IN' }
-  ];
-
-  const changeLanguage = (code: string) => {
-    i18n.changeLanguage(code);
-  };
 
   const navItems = [
     { label: t('common.markets'), href: '/markets', icon: TrendingUp },
@@ -95,6 +86,7 @@ export function Navbar() {
         {/* Right Side */}
         <div className="hidden md:flex items-center gap-3">
           <ModeToggle />
+          <LanguageSwitcher />
 
           {isAuthenticated ? (
             <>
@@ -151,13 +143,7 @@ export function Navbar() {
 
         {/* Mobile Menu Button */}
         <div className="md:hidden flex items-center gap-2">
-          {/* Mobile Lang Switch */}
-          <div className="flex gap-1 mr-2">
-            <ModeToggle />
-            <Button variant="ghost" size="icon" onClick={() => changeLanguage(i18n.language === 'bn' ? 'en' : 'bn')}>
-              <Languages className="h-5 w-5" />
-            </Button>
-          </div>
+          <ModeToggle />
           <button
             className="p-2"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}

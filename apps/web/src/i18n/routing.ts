@@ -5,7 +5,7 @@ export const routing = defineRouting({
     // A list of all locales that are supported
     // Note: localePrefix is set to 'never' to remove /bn/, /en/ from URLs
     // The site will always use the default locale (Bangla)
-    locales: ['bn', 'en'],
+    locales: ['bn', 'en', 'hi'],
     
     // Default locale - Bangla for Bangladesh market
     defaultLocale: 'bn',

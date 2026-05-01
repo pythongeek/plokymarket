@@ -1,9 +1,10 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { ClientProviders } from '@/components/providers/ClientProviders';
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages } from 'next-intl/server';
 import { routing } from '@/i18n/routing';
+import { PWAInstallPrompt } from '@/components/pwa';
 
 export const metadata: Metadata = {
   title: 'Plokymarket - Prediction Marketplace',
@@ -59,6 +60,16 @@ export const metadata: Metadata = {
     icon: '/favicon.ico',
     apple: '/apple-touch-icon.png',
   },
+  manifest: '/manifest.json',
+};
+
+export const viewport: Viewport = {
+  themeColor: '#8B5CF6',
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: 'cover',
 };
 
 export default async function RootLayout({
@@ -91,6 +102,7 @@ export default async function RootLayout({
             {children}
           </NextIntlClientProvider>
         </ClientProviders>
+        <PWAInstallPrompt />
       </body>
     </html>
   );

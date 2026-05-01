@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { routing } from '@/i18n/routing';
+import { Redis } from '@upstash/redis';
 
 // Secure admin path - NOT using /admin, /login etc
 // These are randomized and hard to guess
@@ -14,10 +15,68 @@ const SECURE_PATHS = {
 // IP whitelist for admin access (optional additional security)
 const ALLOWED_ADMIN_IPS: string[] = process.env.ADMIN_IP_WHITELIST?.split(',') || [];
 
-// Rate limiting for auth attempts
-const RATE_LIMIT_WINDOW = 15 * 60 * 1000; // 15 minutes
+// Rate limiting configuration for auth attempts (using Redis)
+const AUTH_RATE_LIMIT_WINDOW = 15 * 60; // 15 minutes in seconds
 const MAX_AUTH_ATTEMPTS = 5;
-const authAttempts = new Map<string, { count: number; resetTime: number }>();
+
+// Lazy Redis initialization
+let redis: Redis | undefined;
+const getRedis = (): Redis | undefined => {
+    if (!redis) {
+        const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+        const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+        if (url && token) {
+            redis = new Redis({ url, token });
+        }
+    }
+    return redis;
+};
+
+// Get client IP from request
+function getClientIp(request: NextRequest): string {
+    const forwarded = request.headers.get('x-forwarded-for');
+    return forwarded ? forwarded.split(',')[0].trim() : 
+           request.headers.get('x-real-ip') || 
+           'unknown';
+}
+
+// Check and record auth rate limit using Redis
+async function checkAuthRateLimit(ip: string): Promise<{ allowed: boolean; remaining: number; retryAfter?: number }> {
+    const redis = getRedis();
+    if (!redis) {
+        // Fail-open if Redis unavailable
+        return { allowed: true, remaining: MAX_AUTH_ATTEMPTS };
+    }
+
+    const key = `ratelimit:auth:${ip}`;
+    
+    try {
+        const pipeline = redis.pipeline();
+        pipeline.incr(key);
+        pipeline.expire(key, AUTH_RATE_LIMIT_WINDOW);
+        pipeline.ttl(key);
+        
+        const results = await pipeline.exec();
+        const count = (results[0] as number) || 0;
+        const ttl = (results[2] as number) || AUTH_RATE_LIMIT_WINDOW;
+
+        if (count > MAX_AUTH_ATTEMPTS) {
+            return { 
+                allowed: false, 
+                remaining: 0, 
+                retryAfter: ttl > 0 ? ttl : AUTH_RATE_LIMIT_WINDOW 
+            };
+        }
+
+        return { 
+            allowed: true, 
+            remaining: Math.max(0, MAX_AUTH_ATTEMPTS - count) 
+        };
+    } catch (error) {
+        console.error('[Auth RateLimit] Redis error:', error);
+        return { allowed: true, remaining: MAX_AUTH_ATTEMPTS };
+    }
+}
 
 // Create next-intl middleware
 const intlMiddleware = createMiddleware(routing);
@@ -80,7 +139,37 @@ export async function middleware(request: NextRequest) {
 
   // Auth portal only needs rate limiting and security headers, NOT auth checks
   if (isAuthPortal) {
-    // Add extra headers for auth portal
+    // Apply Redis-based auth rate limiting
+    const clientIp = getClientIp(request);
+    const rateLimitResult = await checkAuthRateLimit(clientIp);
+    
+    if (!rateLimitResult.allowed) {
+      console.warn(`[Auth RateLimit] Too many auth attempts from IP: ${clientIp}`);
+      const blockedResponse = new NextResponse(
+        JSON.stringify({ 
+          error: 'Too many authentication attempts. Please try again later.',
+          code: 'AUTH_RATE_LIMITED',
+          retryAfter: rateLimitResult.retryAfter
+        }),
+        { 
+          status: 429,
+          headers: { 
+            'Content-Type': 'application/json',
+            'Retry-After': String(rateLimitResult.retryAfter || AUTH_RATE_LIMIT_WINDOW),
+            'X-RateLimit-Limit': String(MAX_AUTH_ATTEMPTS),
+            'X-RateLimit-Remaining': '0',
+          }
+        }
+      );
+      Object.entries(securityHeaders).forEach(([key, value]) => {
+        blockedResponse.headers.set(key, value);
+      });
+      return blockedResponse;
+    }
+    
+    // Add rate limit headers to successful auth portal responses
+    response.headers.set('X-RateLimit-Limit', String(MAX_AUTH_ATTEMPTS));
+    response.headers.set('X-RateLimit-Remaining', String(rateLimitResult.remaining));
     response.headers.set('X-Robots-Tag', 'noindex, nofollow');
     return response;
   }

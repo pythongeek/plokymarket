@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
+import { checkRateLimit, addRateLimitHeaders, RateLimitTier } from '@/lib/upstash/rateLimit';
 
 // POST /api/deposits/request
 // Create a new deposit request
@@ -16,6 +17,26 @@ export async function POST(request: Request) {
         { error: 'Authentication required' },
         { status: 401 }
       );
+    }
+
+    // Apply deposit-specific rate limiting (10 deposits per hour max)
+    const depositResult = await checkRateLimit(
+      request,
+      RateLimitTier.STRICT,
+      user.id,
+      'deposit'
+    );
+    
+    if (!depositResult.allowed) {
+      const response = NextResponse.json(
+        {
+          error: 'Deposit rate limit exceeded. Please try again later.',
+          code: 'DEPOSIT_RATE_LIMITED',
+          retryAfter: depositResult.retryAfter,
+        },
+        { status: 429 }
+      );
+      return addRateLimitHeaders(response, depositResult);
     }
 
     const body = await request.json();

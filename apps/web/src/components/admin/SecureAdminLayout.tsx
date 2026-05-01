@@ -30,6 +30,7 @@ import {
   ArrowLeftRight,
   History,
   Menu,
+  Zap,
 } from 'lucide-react';
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
@@ -47,6 +48,7 @@ const SECURE_PATHS = {
   depositSettings: '/sys-cmd-7x9k2/deposit-settings',
   exchangeRateConfig: '/sys-cmd-7x9k2/exchange-rate',
   deposits: '/sys-cmd-7x9k2/deposits',
+  monitoring: '/sys-cmd-7x9k2/monitoring',
   dailyTopics: '/sys-cmd-7x9k2/daily-topics',
   aiConfigs: '/sys-cmd-7x9k2/ai-configs',
   workflows: '/sys-cmd-7x9k2/workflows',
@@ -338,10 +340,17 @@ export function SecureAdminLayout({
       requiresSuper: false,
     },
     {
+      path: SECURE_PATHS.monitoring,
+      label: 'সিস্টেম মনিটরিং',
+      labelEn: 'System Monitoring',
+      icon: Activity,
+      requiresSuper: true,
+    },
+    {
       path: SECURE_PATHS.workflows,
       label: 'সিস্টেম ক্রন জবস',
       labelEn: 'System Cron Jobs',
-      icon: Activity,
+      icon: Zap,
       requiresSuper: true,
     },
     // Money Operator Section

@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { orderBookService } from '@/lib/services/orderBookService';
 import { ActivityService } from '@/lib/activity';
 import { syncAfterMatch, initializeRealtimeEngine } from '@/lib/realtime/OrderBookBroadcast';
+import { checkTradingRateLimit, addRateLimitHeaders } from '@/lib/upstash/rateLimit';
 
 export async function POST(request: Request) {
     try {
@@ -17,6 +18,21 @@ export async function POST(request: Request) {
 
         const body = await request.json();
         const { market_id, side, outcome, price, quantity, order_type = 'limit' } = body;
+
+        // Apply trading-specific rate limiting (per market, 5 trades per 10 seconds)
+        const tradingResult = await checkTradingRateLimit(user.id, market_id);
+        
+        if (!tradingResult.allowed) {
+            const response = NextResponse.json(
+                {
+                    error: 'Trading rate limit exceeded. Please slow down.',
+                    code: 'TRADING_RATE_LIMITED',
+                    retryAfter: tradingResult.retryAfter,
+                },
+                { status: 429 }
+            );
+            return addRateLimitHeaders(response, tradingResult);
+        }
 
         // Field-level validation — all five core fields are required
         if (!market_id || !side || !outcome || !price || !quantity) {
@@ -123,7 +139,8 @@ export async function POST(request: Request) {
             console.warn('[Order API] Failed to log activity:', actError);
         }
 
-        return NextResponse.json({ success: true, orderId });
+        const response = NextResponse.json({ success: true, orderId });
+        return addRateLimitHeaders(response, tradingResult);
 
     } catch (error) {
         console.error('Order placement error:', error);
