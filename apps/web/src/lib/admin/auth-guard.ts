@@ -1,18 +1,18 @@
 /**
  * Admin Auth Guard Utility
  * Standardized auth verification for admin API routes
- * 
- * Auth flow: Supabase browser auth (JWT cookie) → verified → local PostgreSQL pool used
+ *
+ * Auth flow: Custom JWT cookie (from local auth server) → verified locally → local PostgreSQL pool used
  */
-import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
-import type { User } from '@supabase/supabase-js';
+import jwt from 'jsonwebtoken';
+import { cookies } from 'next/headers';
 import { pool } from '@/lib/admin/local-db';
 
-// Admin level types
+const JWT_SECRET = process.env.LOCAL_JWT_SECRET || 'P10kyM@rket.BD.2026.JWT.SECRET';
+
 export type AdminLevel = 'super' | 'admin' | null;
 
-// Admin user profile from database
 export interface AdminProfile {
   id: string;
   email: string | null;
@@ -21,14 +21,13 @@ export interface AdminProfile {
   full_name: string | null;
 }
 
-// Result of admin verification
 export interface AdminUser {
-  user: User;
+  id: string;
+  email: string;
   profile: AdminProfile;
   level: AdminLevel;
 }
 
-// Result with pool for local DB access
 export interface AdminResult {
   pool: typeof pool;
   error: null;
@@ -36,49 +35,36 @@ export interface AdminResult {
 
 /**
  * Verify admin and return local PostgreSQL pool for direct DB access.
- * Use this for admin API routes that need to query the local PostgreSQL.
- * 
- * @example
- * export async function GET() {
- *   const result = await admin();
- *   if (result.error) return result.error;
- *   const { rows } = await result.pool.query('SELECT * FROM markets');
- *   return NextResponse.json({ data: rows });
- * }
+ * Uses local JWT validation instead of Supabase cloud.
  */
 export async function admin(): Promise<AdminResult | { pool: null; error: NextResponse }> {
   try {
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const cookieStore = await cookies();
+    const token = cookieStore.get('sb-access-token')?.value;
 
-    if (authError || !user) {
-      return {
-        pool: null,
-        error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-      };
+    if (!token) {
+      return { pool: null, error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
     }
 
-    // Check local DB for admin flag
-    const { rows } = await pool.query(
-      `SELECT id, email, full_name, is_admin, is_super_admin
-       FROM user_profiles WHERE id = $1 AND (is_admin = true OR is_super_admin = true)`,
-      [user.id]
-    );
+    let decoded: any;
+    try {
+      decoded = jwt.verify(token, JWT_SECRET);
+    } catch {
+      return { pool: null, error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
+    }
 
-    if (!rows || rows.length === 0) {
-      return {
-        pool: null,
-        error: NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 })
-      };
+    const userId = decoded.sub as string;
+    const isAdmin = decoded.is_admin as boolean;
+    const isSuperAdmin = decoded.is_super_admin as boolean;
+
+    if (!isAdmin && !isSuperAdmin) {
+      return { pool: null, error: NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 }) };
     }
 
     return { pool, error: null };
   } catch (err) {
     console.error('[admin] Auth guard error:', err);
-    return {
-      pool: null,
-      error: NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-    };
+    return { pool: null, error: NextResponse.json({ error: 'Internal server error' }, { status: 500 }) };
   }
 }
 
@@ -87,75 +73,59 @@ export async function admin(): Promise<AdminResult | { pool: null; error: NextRe
  * Returns null if not authenticated
  */
 export async function getAdminUser(): Promise<AdminUser | null> {
-  const supabase = await createClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get('sb-access-token')?.value;
+    if (!token) return null;
 
-  if (authError || !user) return null;
+    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    if (!decoded?.sub) return null;
 
-  const { data: profile, error: profileError } = await supabase
-    .from('user_profiles')
-    .select('id, email, full_name, is_admin, is_super_admin')
-    .eq('id', user.id)
-    .single();
+    const { rows } = await pool.query(
+      `SELECT id, email, full_name, is_admin, is_super_admin
+       FROM user_profiles WHERE id = $1 AND (is_admin = true OR is_super_admin = true)`,
+      [decoded.sub]
+    );
 
-  if (profileError || !profile) return null;
+    if (!rows || rows.length === 0) return null;
 
-  const isAdmin = profile.is_admin || profile.is_super_admin;
-  if (!isAdmin) return null;
-
-  const level: AdminLevel = profile.is_super_admin ? 'super' : 'admin';
-  return { user, profile, level };
+    const profile = rows[0] as AdminProfile;
+    return {
+      id: profile.id,
+      email: profile.email || (decoded.email as string) || '',
+      profile,
+      level: profile.is_super_admin ? 'super' : 'admin',
+    };
+  } catch (err) {
+    console.error('[getAdminUser] error:', err);
+    return null;
+  }
 }
 
-/**
- * Verify the current user is an admin (or super admin)
- * Returns 401/403 response if not authorized, or the AdminUser if authorized
- */
 export async function verifyAdmin(): Promise<AdminUser | NextResponse> {
   const adminUser = await getAdminUser();
   if (!adminUser) {
-    return NextResponse.json(
-      { error: 'Unauthorized - Admin access required' },
-      { status: 401 }
-    );
+    return NextResponse.json({ error: 'Unauthorized - Admin access required' }, { status: 401 });
   }
   return adminUser;
 }
 
-/**
- * Verify the current user is a SUPER admin specifically
- * Returns 401/403 response if not authorized
- */
 export async function verifySuperAdmin(): Promise<AdminUser | NextResponse> {
   const adminUser = await getAdminUser();
   if (!adminUser) {
-    return NextResponse.json(
-      { error: 'Unauthorized - Admin access required' },
-      { status: 401 }
-    );
+    return NextResponse.json({ error: 'Unauthorized - Admin access required' }, { status: 401 });
   }
   if (adminUser.level !== 'super') {
-    return NextResponse.json(
-      { error: 'Forbidden - Super admin access required' },
-      { status: 403 }
-    );
+    return NextResponse.json({ error: 'Forbidden - Super admin access required' }, { status: 403 });
   }
   return adminUser;
 }
 
-/**
- * Check if user has specific admin level or higher
- * Super admins pass all level checks
- */
 export function hasAdminLevel(adminUser: AdminUser, requiredLevel: 'admin' | 'super'): boolean {
   if (requiredLevel === 'super') return adminUser.level === 'super';
   return adminUser.level !== null;
 }
 
-/**
- * Convenience wrapper for API route handlers
- * Use this instead of manually checking auth in every route
- */
 export async function requireAdmin(): Promise<AdminUser | NextResponse> {
   return verifyAdmin();
 }

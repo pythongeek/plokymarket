@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -53,9 +52,6 @@ export default function SecureAuthPortal() {
   const [securityCheck, setSecurityCheck] = useState(false);
   const [sessionId, setSessionId] = useState('--------');
 
-  // Use shared Supabase client
-  const [supabase] = useState(() => createClient());
-
   // Generate session ID client-side only to prevent hydration mismatch
   useEffect(() => {
     setSessionId(Math.random().toString(36).substring(2, 10).toUpperCase());
@@ -65,55 +61,24 @@ export default function SecureAuthPortal() {
   useEffect(() => {
     const checkSession = async () => {
       try {
-        const { data: { user }, error: sessionError } = await supabase.auth.getUser();
+        const resp = await fetchWithTimeout('/api/auth/session', {
+          credentials: 'include',
+        }, 8000);
 
-        if (sessionError) {
-          console.log('No existing session:', sessionError.message);
-          return;
-        }
-
-        if (user) {
-          console.log('Existing session found, verifying admin...');
-
-          try {
-            // Call server-side API route that queries local PostgREST directly
-            const response = await fetchWithTimeout(
-              '/api/auth/admin-check',
-              {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId: user.id }),
-              },
-              8000
-            );
-
-            if (!response.ok) {
-              throw new Error(`HTTP ${response.status}`);
-            }
-
-            const data = await response.json();
-
-            if (data.is_admin || data.is_super_admin) {
-              console.log('Admin verified, redirecting...');
-              router.replace(redirectTo);
-            } else {
-              console.log('User is not admin, staying on login page');
-              await supabase.auth.signOut();
-            }
-          } catch (fetchErr) {
-            console.error('Profile fetch error:', fetchErr);
-            // Don't redirect on fetch error, let user try login
+        if (resp.status === 200) {
+          const data = await resp.json();
+          if (data.user && (data.user.is_admin || data.user.is_super_admin)) {
+            router.replace(redirectTo);
           }
         }
       } catch (err: any) {
         if (err?.name !== 'AbortError' && !err?.message?.includes('aborted')) {
           console.error('Session check error:', err);
         }
-        // Don't redirect on session check error, let user try login
       }
     };
     checkSession();
-  }, [router, redirectTo, supabase]);
+  }, [router, redirectTo]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -132,82 +97,60 @@ export default function SecureAuthPortal() {
     setError('');
 
     try {
-      // Validate credentials before attempting login
       if (!email || !password) {
         throw new Error('Email and password are required');
       }
 
       console.log('Attempting login for:', email);
 
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email: email.trim().toLowerCase(),
-        password: password,
-      });
+      // Call local auth API instead of Supabase cloud
+      const loginResp = await fetchWithTimeout('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
+        credentials: 'include',
+      }, 12000);
 
-      if (authError) {
-        console.error('Auth error:', authError);
-        throw new Error(authError.message || 'Authentication failed');
+      const loginData = await loginResp.json();
+
+      if (!loginResp.ok) {
+        throw new Error(loginData.error || 'Authentication failed');
       }
 
-      if (!authData?.user) {
+      if (!loginData.user) {
         throw new Error('No user returned from authentication');
       }
 
-      const user = authData.user;
+      const user = loginData.user;
       console.log('Login successful, user ID:', user.id);
 
-      // Verify admin status via server API which uses server-side credentials
+      // Verify admin via server-side session
       let profile: any = null;
 
       try {
         console.log('Verifying admin via server API...');
-        const resp = await fetchWithTimeout('/api/admin/verify', { method: 'GET', credentials: 'include' }, 12000);
+        const resp = await fetchWithTimeout('/api/auth/session', {
+          credentials: 'include',
+        }, 12000);
 
         if (resp.status === 401) {
-          await supabase.auth.signOut();
           throw new Error('Unauthorized. Please login again.');
         }
 
-        if (resp.status === 403) {
-          // If forbidden, attempt an ensure-admin flow for the special admin email
-          if (user.email === 'admin@plokymarket.bd') {
-            try {
-              const ensure = await fetchWithTimeout('/api/admin/ensure-admin', { method: 'POST', credentials: 'include' }, 12000);
-              if (ensure.ok) {
-                profile = await ensure.json();
-                console.log('Ensure-admin created profile:', profile);
-              } else {
-                const body = await ensure.text().catch(() => '');
-                console.error('Ensure-admin failed', ensure.status, body);
-              }
-            } catch (e) {
-              console.error('Ensure-admin error:', e);
-            }
+        if (resp.status === 200) {
+          const sessionData = await resp.json();
+          if (sessionData.user?.is_admin || sessionData.user?.is_super_admin) {
+            profile = {
+              is_admin: sessionData.user.is_admin,
+              is_super_admin: sessionData.user.is_super_admin,
+              full_name: sessionData.user.full_name,
+              email: sessionData.user.email,
+            };
           }
+        }
 
-          // Re-check verification if ensure-admin attempted
-          if (!profile) {
-            const retry = await fetchWithTimeout('/api/admin/verify', { method: 'GET', credentials: 'include' }, 12000);
-            if (retry.ok) {
-              const payload = await retry.json();
-              profile = { is_admin: payload.isAdmin, is_super_admin: payload.isSeniorCounsel ?? false, full_name: payload.fullName, email: payload.email };
-            }
-          }
-
-          if (!profile) {
-            throw new Error('Access denied. Admin privileges required.');
-          }
-        } else if (!resp.ok) {
-          const body = await resp.text().catch(() => '');
-          throw new Error(`Admin verify failed: ${resp.status} ${body}`);
-        } else {
-          const payload = await resp.json();
-          if (payload?.isAdmin) {
-            profile = { is_admin: true, is_super_admin: payload.isSeniorCounsel ?? false, full_name: payload.fullName, email: payload.email };
-          } else {
-            await supabase.auth.signOut();
-            throw new Error('Access denied. Admin privileges required.');
-          }
+        if (!profile) {
+          throw new Error('Access denied. Admin privileges required.');
         }
       } catch (err: any) {
         console.error('Profile verification error:', err);
@@ -220,42 +163,11 @@ export default function SecureAuthPortal() {
       }
 
       if (!profile.is_admin && !profile.is_super_admin) {
-        console.warn('Non-admin user attempted access:', user.id, 'Profile:', profile);
-
-        // Log unauthorized attempt
-        try {
-          await supabase.from('admin_audit_log').insert({
-            action: 'admin_login_denied',
-            user_id: user.id,
-            resource: 'auth-portal',
-            details: { reason: 'not_admin', profile },
-          });
-        } catch (e) {
-          console.error('Audit log error:', e);
-        }
-
-        await supabase.auth.signOut();
+        await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
         throw new Error('Access denied. Admin privileges required.');
       }
 
       console.log('Admin verified, level:', profile.is_super_admin ? 'super' : 'admin');
-
-      // Log successful login
-      try {
-        await supabase.from('admin_audit_log').insert({
-          action: 'admin_login_success',
-          user_id: user.id,
-          resource: 'auth-portal',
-          details: {
-            admin_level: profile.is_super_admin ? 'super' : 'admin',
-            redirect_to: redirectTo,
-          },
-        });
-      } catch (e) {
-        console.error('Audit log error:', e);
-      }
-
-      // Redirect to requested page or admin dashboard
       console.log('Redirecting to:', redirectTo);
       router.replace(redirectTo);
 
