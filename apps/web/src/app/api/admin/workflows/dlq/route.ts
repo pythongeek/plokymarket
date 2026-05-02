@@ -5,36 +5,48 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createServiceClient } from '@/lib/supabase/server';
+import { pool } from '@/lib/admin/local-db';
+
+async function getUserFromToken(token: string): Promise<string | null> {
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    if (!cloudRes.ok) return null;
+    const userData = await cloudRes.json();
+    return userData?.id || null;
+}
 
 export const runtime = 'edge';
 
 // Verify admin access
-async function verifyAdmin(supabase: any, request: NextRequest): Promise<boolean> {
+async function verifyAdmin(request: NextRequest): Promise<{ isAdmin: boolean; userId?: string }> {
   const authHeader = request.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) return false;
+  if (!authHeader?.startsWith('Bearer ')) return { isAdmin: false };
 
   const token = authHeader.split(' ')[1];
-  const { data: { user } } = await supabase.auth.getUser(token);
+  const userId = await getUserFromToken(token);
   
-  if (!user) return false;
+  if (!userId) return { isAdmin: false };
 
-  const { data: profile } = await supabase
-    .from('user_profiles')
-    .select('is_admin, is_super_admin')
-    .eq('id', user.id)
-    .single();
+  const profileResult = await pool.query(
+    'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
+    [userId]
+  );
+  const profile = profileResult.rows[0];
 
-  return !!(profile?.is_admin || profile?.is_super_admin);
+  return { isAdmin: !!(profile?.is_admin || profile?.is_super_admin), userId };
 }
 
 /**
  * GET: List DLQ items
  */
 export async function GET(request: NextRequest) {
-  const supabase = await createServiceClient();
-
-  if (!await verifyAdmin(supabase, request)) {
+  const auth = await verifyAdmin(request);
+  if (!auth.isAdmin) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -44,34 +56,40 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
 
-    let query = supabase
-      .from('workflow_dlq')
-      .select(`
-        *,
-        upstash_workflow_runs:workflow_run_id (
-          workflow_type,
-          event_id,
-          market_id,
-          payload
-        )
-      `, { count: 'exact' });
+    let whereClause = '';
+    const params: any[] = [];
+    let paramIndex = 1;
 
     if (status === 'pending') {
-      query = query.is('resolved_at', null);
+      whereClause += `${whereClause ? ' AND ' : ''}resolved_at IS NULL`;
     } else if (status === 'resolved') {
-      query = query.not('resolved_at', 'is', null);
+      whereClause += `${whereClause ? ' AND ' : ''}resolved_at IS NOT NULL`;
     }
 
-    const { data, error, count } = await query
-      .order('failed_at', { ascending: false })
-      .range(offset, offset + limit - 1);
+    const whereStr = whereClause ? `WHERE ${whereClause}` : '';
 
-    if (error) throw error;
+    const countResult = await pool.query(
+      `SELECT COUNT(*) as total FROM workflow_dlq ${whereStr}`,
+      params
+    );
+    const count = parseInt(countResult.rows[0]?.total || '0');
+
+    params.push(limit, offset);
+    const dataResult = await pool.query(
+      `SELECT dlq.*, 
+              uwr.workflow_type, uwr.event_id, uwr.market_id, uwr.payload
+       FROM workflow_dlq dlq
+       LEFT JOIN upstash_workflow_runs uwr ON uwr.id = dlq.workflow_run_id
+       ${whereStr}
+       ORDER BY dlq.failed_at DESC
+       LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
+      params
+    );
 
     return NextResponse.json({
       success: true,
-      items: data || [],
-      total: count || 0,
+      items: dataResult.rows || [],
+      total: count,
       limit,
       offset,
     });
@@ -89,9 +107,8 @@ export async function GET(request: NextRequest) {
  * POST: Resolve or retry DLQ item
  */
 export async function POST(request: NextRequest) {
-  const supabase = await createServiceClient();
-
-  if (!await verifyAdmin(supabase, request)) {
+  const auth = await verifyAdmin(request);
+  if (!auth.isAdmin) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -114,27 +131,20 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Get current user for resolved_by
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.split(' ')[1];
-    const { data: { user } } = await supabase.auth.getUser(token || '');
-
     // Update DLQ item
-    const { data: dlqItem, error: updateError } = await supabase
-      .from('workflow_dlq')
-      .update({
-        resolved_at: new Date().toISOString(),
-        resolved_by: user?.id,
-        resolution_action: action,
-        resolution_notes: notes,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', dlq_id)
-      .is('resolved_at', null)
-      .select()
-      .single();
+    const updateResult = await pool.query(
+      `UPDATE workflow_dlq 
+       SET resolved_at = NOW(),
+           resolved_by = $1,
+           resolution_action = $2,
+           resolution_notes = $3,
+           updated_at = NOW()
+       WHERE id = $4 AND resolved_at IS NULL
+       RETURNING *`,
+      [auth.userId, action, notes, dlq_id]
+    );
 
-    if (updateError) throw updateError;
+    const dlqItem = updateResult.rows[0];
 
     if (!dlqItem) {
       return NextResponse.json({
@@ -146,28 +156,21 @@ export async function POST(request: NextRequest) {
     // Handle action-specific logic
     if (action === 'retry') {
       // Update workflow run status to RETRYING
-      await supabase
-        .from('upstash_workflow_runs')
-        .update({
-          status: 'RETRYING',
-          retry_count: supabase.rpc('increment', { row_id: dlqItem.workflow_run_id }),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('workflow_run_id', dlqItem.workflow_run_id);
-
-      // Here you could trigger a retry via QStash
-      // This is a simplified version - actual retry would republish to QStash
+      await pool.query(
+        `UPDATE upstash_workflow_runs 
+         SET status = 'RETRYING',
+             retry_count = COALESCE(retry_count, 0) + 1,
+             updated_at = NOW()
+         WHERE id = $1`,
+        [dlqItem.workflow_run_id]
+      );
     }
 
     // Log admin action
-    await supabase.rpc('log_admin_action', {
-      p_admin_id: user?.id,
-      p_action_type: 'dlq_resolve',
-      p_resource_type: 'workflow_dlq',
-      p_resource_id: dlq_id,
-      p_new_values: { action, notes },
-      p_reason: `DLQ item ${action}`,
-    });
+    await pool.query(
+      `SELECT * FROM log_admin_action($1, 'dlq_resolve', 'workflow_dlq', $2, $3, $4)`,
+      [auth.userId, dlq_id, { action, notes }, `DLQ item ${action}`]
+    );
 
     return NextResponse.json({
       success: true,

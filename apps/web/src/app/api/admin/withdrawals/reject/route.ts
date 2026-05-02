@@ -1,16 +1,36 @@
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { pool, query } from '@/lib/admin/local-db';
 import { NextResponse } from 'next/server';
+
+async function getUserFromToken(token: string): Promise<string | null> {
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    if (!cloudRes.ok) return null;
+    const userData = await cloudRes.json();
+    return userData?.id || null;
+}
 
 // POST /api/admin/withdrawals/reject
 // Reject a withdrawal (refund balance to user)
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient();
+    // Get Bearer token from auth header
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
 
-    // Get user session
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const token = authHeader.split(' ')[1];
+    const userId = await getUserFromToken(token);
 
-    if (authError || !user) {
+    if (!userId) {
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
@@ -18,13 +38,12 @@ export async function POST(request: Request) {
     }
 
     // 2. Authorization Check (Admin Only) — use user_profiles.is_admin
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('is_admin, is_super_admin')
-      .eq('id', user.id)
-      .single();
+    const profiles = await query<{ is_admin: boolean; is_super_admin: boolean }>(
+      'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
+      [userId]
+    );
 
-    if (!profile?.is_admin && !profile?.is_super_admin) {
+    if (!profiles[0]?.is_admin && !profiles[0]?.is_super_admin) {
       return NextResponse.json(
         { error: 'Admin access required' },
         { status: 403 }
@@ -48,16 +67,15 @@ export async function POST(request: Request) {
       );
     }
 
-    const service = await createServiceClient();
-
     // Get withdrawal request
-    const { data: withdrawal, error: withdrawalError } = await service
-      .from('withdrawal_requests')
-      .select('*')
-      .eq('id', withdrawalId)
-      .single();
+    const withdrawals = await query<any>(
+      'SELECT * FROM withdrawal_requests WHERE id = $1',
+      [withdrawalId]
+    );
 
-    if (withdrawalError || !withdrawal) {
+    const withdrawal = withdrawals[0];
+
+    if (!withdrawal) {
       return NextResponse.json(
         { error: 'Withdrawal request not found' },
         { status: 404 }
@@ -72,34 +90,35 @@ export async function POST(request: Request) {
     }
 
     // Use the database function to reject withdrawal
-    const { data: result, error: functionError } = await service
-      .rpc('process_withdrawal', {
-        p_withdrawal_id: withdrawalId,
-        p_user_id: withdrawal.user_id,
-        p_approve: false,
-        p_admin_notes: reason
-      });
+    const result = await pool.query(
+      'SELECT * FROM process_withdrawal($1, $2, $3, $4)',
+      [withdrawalId, withdrawal.user_id, false, reason]
+    );
 
-    if (functionError) {
-      console.error('Failed to reject withdrawal:', functionError);
+    if (result.error) {
+      console.error('Failed to reject withdrawal:', result.error);
       return NextResponse.json(
-        { error: 'Failed to reject withdrawal: ' + functionError.message },
+        { error: 'Failed to reject withdrawal: ' + result.error.message },
         { status: 500 }
       );
     }
 
     // Create notification for user
-    await service.from('notifications').insert({
-      user_id: withdrawal.user_id,
-      type: 'withdrawal_rejected',
-      title: 'উইথড্র বাতিল হয়েছে',
-      message: `আপনার ${withdrawal.usdt_amount} USDT উইথড্র রিকোয়েস্ট বাতিল করা হয়েছে। কারণ: ${reason}`,
-      metadata: {
-        withdrawal_id: withdrawalId,
-        usdt_amount: withdrawal.usdt_amount,
-        rejection_reason: reason
-      }
-    });
+    await pool.query(
+      `INSERT INTO notifications (user_id, type, title, message, metadata) 
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        withdrawal.user_id,
+        'withdrawal_rejected',
+        'উইথড্র বাতিল হয়েছে',
+        `আপনার ${withdrawal.usdt_amount} USDT উইথড্র রিকোয়েস্ট বাতিল করা হয়েছে। কারণ: ${reason}`,
+        JSON.stringify({
+          withdrawal_id: withdrawalId,
+          usdt_amount: withdrawal.usdt_amount,
+          rejection_reason: reason
+        })
+      ]
+    );
 
     return NextResponse.json({
       success: true,

@@ -29,7 +29,6 @@ import {
   Search,
   RefreshCw
 } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
 
 interface ResolutionSystem {
   id: string;
@@ -71,20 +70,9 @@ export function ResolutionPanel() {
     setError(null);
     
     try {
-      const { data, error: fetchError } = await supabase
-        .from('resolution_systems')
-        .select(`
-          *,
-          markets:event_id (
-            question,
-            category,
-            trading_closes_at,
-            status
-          )
-        `)
-        .order('updated_at', { ascending: false });
-
-      if (fetchError) throw fetchError;
+      const result = await adminFetch("/api/admin/resolutions?tab=systems");
+      const data = result.data || [];
+      setResolutions(data);
       
       setResolutions(data || []);
     } catch (err: any) {
@@ -97,19 +85,10 @@ export function ResolutionPanel() {
   useEffect(() => {
     fetchResolutions();
     
-    // Subscribe to real-time updates
-    const subscription = supabase
-      .channel('resolution_updates')
-      .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'resolution_systems' },
-        () => fetchResolutions()
-      )
-      .subscribe();
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, []);
+    // Polling instead of realtime
+    const interval = setInterval(fetchResolutions, 30000);
+    return () => clearInterval(interval);
+  }, [fetchResolutions]);
 
   const handleResolve = async () => {
     if (!selectedResolution || !resolvingOutcome) return;
@@ -121,55 +100,19 @@ export function ResolutionPanel() {
       const finalOutcome = resolvingOutcome === 'YES' ? 1 : 2;
       const now = new Date().toISOString();
       
-      // Update resolution system
-      const { error: resolutionError } = await supabase
-        .from('resolution_systems')
-        .update({
-          resolution_status: 'resolved',
-          proposed_outcome: finalOutcome,
-          resolved_at: now,
-          updated_at: now,
-          evidence: [
-            ...(selectedResolution.evidence || []),
-            {
-              type: 'manual_admin',
-              outcome: resolvingOutcome,
-              reasoning: adminReasoning,
-              timestamp: now,
-            }
-          ]
+      // Update resolution via API
+      const resolveRes = await adminFetch('/api/admin/resolutions', {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'manual_resolve',
+          resolution_id: selectedResolution.id,
+          event_id: selectedResolution.event_id,
+          outcome: resolvingOutcome,
+          reasoning: adminReasoning,
         })
-        .eq('id', selectedResolution.id);
-
-      if (resolutionError) throw resolutionError;
-
-      // Update market
-      const { error: marketError } = await supabase
-        .from('markets')
-        .update({
-          status: 'resolved',
-          outcome: finalOutcome,
-          resolved_at: now,
-          resolution_source_type: 'MANUAL',
-          resolution_details: {
-            admin_reasoning: adminReasoning,
-            resolved_by: 'admin',
-          },
-          updated_at: now,
-        })
-        .eq('id', selectedResolution.event_id);
-
-      if (marketError) throw marketError;
-
-      // Trigger settlement using settle_market_v2
-      const winningOutcome = resolvingOutcome === 'YES' ? 'YES' : 'NO';
-      const { error: settlementError } = await supabase.rpc('settle_market_v2', {
-        p_market_id: selectedResolution.event_id,
-        p_winning_outcome: winningOutcome,
       });
 
-      if (settlementError) {
-        console.error('Settlement error:', settlementError);
+      if (!resolveRes.success) throw new Error(resolveRes.error || 'Resolution failed');
         throw new Error(`Settlement failed: ${settlementError.message}`);
       }
 

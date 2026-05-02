@@ -1,24 +1,41 @@
-import { createClient } from '@/lib/supabase/server';
-import { NextResponse } from 'next/server';
+// @ts-nocheck
+import { pool } from '@/lib/admin/local-db';
+import { NextRequest, NextResponse } from 'next/server';
+
+async function getUserFromToken(token: string): Promise<string | null> {
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    if (!cloudRes.ok) return null;
+    const userData = await cloudRes.json();
+    return userData?.id || null;
+}
 
 // POST /api/admin/workflows/trigger
 // Manually trigger workflows from admin panel
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient();
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const token = authHeader.split(' ')[1];
 
-    // Verify admin authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
+    const userId = await getUserFromToken(token);
+    if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Check if user is admin
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('is_admin')
-      .eq('id', user.id)
-      .single();
+    const profileResult = await pool.query(
+      'SELECT is_admin FROM user_profiles WHERE id = $1',
+      [userId]
+    );
+    const profile = profileResult.rows[0];
 
     if (!profile?.is_admin) {
       return NextResponse.json({ error: 'Forbidden - Admin only' }, { status: 403 });
@@ -68,7 +85,6 @@ export async function POST(request: Request) {
         method: 'POST',
         description: 'Run combined leaderboard + AI topics + cleanup'
       },
-      // Scheduled-only workflows (can also be triggered manually)
       'price-snapshot': {
         endpoint: '/api/upstash-workflow/price-snapshot',
         method: 'POST',
@@ -91,7 +107,7 @@ export async function POST(request: Request) {
     const config = workflowEndpoints[workflow];
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://polymarket-bangladesh.vercel.app';
 
-    console.log(`Admin ${user.id} triggering workflow: ${workflow}`);
+    console.log(`Admin ${userId} triggering workflow: ${workflow}`);
 
     // Trigger the workflow
     const response = await fetch(`${appUrl}${config.endpoint}`, {
@@ -99,21 +115,19 @@ export async function POST(request: Request) {
       headers: {
         'Content-Type': 'application/json',
         'X-Admin-Trigger': 'true',
-        'X-Admin-Id': user.id
+        'X-Admin-Id': userId
       }
     });
 
     const result = await response.json().catch(() => ({ message: 'No response body' }));
 
     // Log the trigger
-    await supabase.from('admin_workflow_triggers').insert({
-      admin_id: user.id,
-      workflow_name: workflow,
-      endpoint: config.endpoint,
-      status: response.ok ? 'success' : 'failed',
-      response: result,
-      created_at: new Date().toISOString()
-    });
+    await pool.query(
+      `INSERT INTO admin_workflow_triggers 
+       (admin_id, workflow_name, endpoint, status, response, created_at)
+       VALUES ($1, $2, $3, $4, $5, NOW())`,
+      [userId, workflow, config.endpoint, response.ok ? 'success' : 'failed', JSON.stringify(result)]
+    );
 
     if (!response.ok) {
       return NextResponse.json({

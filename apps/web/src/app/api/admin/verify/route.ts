@@ -1,55 +1,72 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { pool } from '@/lib/admin/local-db';
+
+async function getUserFromToken(token: string): Promise<string | null> {
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    if (!cloudRes.ok) return null;
+    const userData = await cloudRes.json();
+    return userData?.id || null;
+}
 
 /**
  * GET /api/admin/verify
- * * ইউজার অ্যাডমিন কি না তা যাচাই করে।
- * RLS সমস্যা এড়াতে এখানে Service Client ব্যবহার করা হয়েছে।
+ * ইউজার অ্যাডমিন কি না তা যাচাই করে।
+ * Local DB ব্যবহার করে যাতে cloud Supabase-এর JWT mismatch সমস্যা না হয়।
  */
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const service = await createServiceClient(); // RLS বাইপাস করার জন্য
-
-    // ১. বর্তমান ইউজার সেশন চেক করা
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json(
-        { error: 'Unauthorized', message: 'দয়া করে অ্যাডমিন অ্যাক্সেসের জন্য লগইন করুন' },
+        { error: 'Unauthorized', message: 'দয়া করে অ্যাডমিন অ্যাক্সেসের জন্য লগইন করুন' },
+        { status: 401 }
+      );
+    }
+    const token = authHeader.split(' ')[1];
+
+    const userId = await getUserFromToken(token);
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'Unauthorized', message: 'দয়া করে অ্যাডমিন অ্যাক্সেসের জন্য লগইন করুন' },
         { status: 401 }
       );
     }
 
-    // ২. ডাটাবেজ থেকে অ্যাডমিন স্ট্যাটাস চেক করা (Service Client ব্যবহার করে)
-    const { data: profile, error: profileError } = await service
-      .from('user_profiles')
-      .select('is_admin, is_super_admin, can_create_events, full_name, email')
-      .eq('id', user.id)
-      .maybeSingle();
+    // লোকাল ডাটাবেস থেকে অ্যাডমিন স্ট্যাটাস চেক করা
+    const profileResult = await pool.query(
+      'SELECT is_admin, is_super_admin, full_name FROM user_profiles WHERE id = $1',
+      [userId]
+    );
+    const profile = profileResult.rows[0];
 
-    if (profileError) {
-      console.error('Error fetching admin status:', profileError);
-      return NextResponse.json(
-        { error: 'Server error', message: 'অ্যাডমিন স্ট্যাটাস যাচাই করা সম্ভব হয়নি' },
-        { status: 500 }
-      );
-    }
-
-    // ৩. বুটস্ট্র্যাপ অ্যাডমিন ইমেইল চেক (একটি অতিরিক্ত নিরাপত্তা স্তর)
-    const isBootstrapAdmin = user.email === 'admin@plokymarket.bd';
+    // বুটস্ট্র্যাপ অ্যাডমিন ইমেইল চেক (একটি অতিরিক্ত নিরাপত্তা স্তর)
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    const userData = cloudRes.ok ? await cloudRes.json() : null;
+    const userEmail = userData?.email || '';
+    const isBootstrapAdmin = userEmail === 'admin@plokymarket.bd';
+    
     const hasAdminAccess = profile?.is_admin || profile?.is_super_admin || isBootstrapAdmin;
 
     if (!hasAdminAccess) {
       // ব্যর্থ প্রচেষ্টার লগ (Optional RPC)
       try {
-        await service.rpc('log_admin_action', {
-          p_admin_id: user.id,
-          p_action_type: 'verify_access_denied',
-          p_resource_type: 'system',
-          p_reason: 'User is not an admin'
-        });
+        await pool.query(
+          `SELECT * FROM log_admin_action($1, 'verify_access_denied', 'system', NULL, NULL, 'User is not an admin')`,
+          [userId]
+        );
       } catch (e) { /* লগ ফেইল করলে প্রসেস থামবে না */ }
 
       return NextResponse.json(
@@ -58,23 +75,14 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // ৪. সফল ভেরিফিকেশন লগ করা
-    try {
-      await service.rpc('log_admin_action', {
-        p_admin_id: user.id,
-        p_action_type: 'login_success',
-        p_resource_type: 'system',
-        p_resource_id: user.id
-      });
-    } catch (e) { /* logging error handled silently */ }
-
-    // ৫. ফ্রন্টএন্ডের জন্য অ্যাডমিন ডিটেইলস রিটার্ন করা
+    // সফল ভেরিফিকেশন লগ করা
+    // ফ্রন্টএন্ডের জন্য অ্যাডমিন ডিটেইলস রিটার্ন করা
     return NextResponse.json({
       isAdmin: true,
       isSuperAdmin: profile?.is_super_admin || isBootstrapAdmin,
       canCreateEvents: profile?.can_create_events || isBootstrapAdmin,
       fullName: profile?.full_name || 'System Admin',
-      email: user.email,
+      email: userEmail,
       level: (profile?.is_super_admin || isBootstrapAdmin) ? 'super_admin' : 'admin'
     });
 

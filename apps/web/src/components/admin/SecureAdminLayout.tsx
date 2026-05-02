@@ -4,8 +4,17 @@
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { createClient } from '@/lib/supabase/client';
+import { supabase } from '@/lib/supabase';
 import { isAbortError } from '@/lib/utils';
+
+async function adminFetch(path: string, options?: RequestInit) {
+  const res = await fetch(path, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...(options?.headers || {}) }
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/components/ui/use-toast';
@@ -81,7 +90,7 @@ export function SecureAdminLayout({
   const [pendingAlerts, setPendingAlerts] = useState(0);
   const [mounted, setMounted] = useState(false);
 
-  const supabase = createClient();
+  // Keep Supabase browser client for auth methods only
 
   useEffect(() => {
     setMounted(true);
@@ -144,11 +153,9 @@ export function SecureAdminLayout({
       }
 
       // SECOND: Check user_profiles table for admin flags
-      const { data: profile, error: profileError } = await supabase
-        .from('user_profiles')
-        .select('id, email, full_name, is_admin, is_super_admin')
-        .eq('id', user.id)
-        .maybeSingle();
+      const profileRes = await fetch(`/api/admin/users/me?user_id=${user.id}`);
+      const profileData = profileRes.ok ? await profileRes.json() : { data: null };
+      const profile = profileData.data;
 
       const isAdmin = profile?.is_admin || profile?.is_super_admin;
 
@@ -193,10 +200,9 @@ export function SecureAdminLayout({
       // Check market_creation_drafts - use correct field name legal_review_status
       // This query may fail if table doesn't exist or RLS blocks access - handle gracefully
       try {
-        const { count, error } = await supabase
-          .from('market_creation_drafts')
-          .select('*', { count: 'exact', head: true })
-          .eq('legal_review_status', 'pending');
+        const statusRes = await fetch('/api/admin/system-status');
+        const statusData = statusRes.ok ? await statusRes.json() : { pending_markets: 0 };
+        pendingMarkets = statusData.pending_markets || 0;
 
         if (error) {
           // Log but don't fail - RLS might block unauthenticated requests
@@ -232,10 +238,9 @@ export function SecureAdminLayout({
   const handleLogout = async () => {
     try {
       if (admin) {
-        await supabase.from('admin_audit_log').insert({
-          action: 'admin_logout',
-          user_id: admin.id,
-          resource: 'system',
+        await adminFetch('/api/admin/users/me', {
+          method: 'POST',
+          body: JSON.stringify({ action: 'logout', user_id: admin.id })
         });
       }
 

@@ -1,14 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { MarketCreationService } from '@/lib/market-creation/service';
+import { pool, query } from '@/lib/admin/local-db';
+
+async function getUserFromToken(token: string): Promise<string | null> {
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    if (!cloudRes.ok) return null;
+    const userData = await cloudRes.json();
+    return userData?.id || null;
+}
 
 // GET /api/admin/market-creation - List drafts or get single draft
 export async function GET(req: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
+    const authHeader = req.headers.get('Authorization');
+    const token = authHeader?.split(' ')[1] || '';
+    const userId = await getUserFromToken(token);
+    if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -17,12 +29,34 @@ export async function GET(req: NextRequest) {
     const status = searchParams.get('status');
 
     if (draftId) {
-      const { data: profile } = await supabase.from('user_profiles').select('is_admin').eq('id', user.id).single();
-      const draft = await MarketCreationService.getDraft(supabase, user.id, draftId, profile?.is_admin);
+      const profileResult = await pool.query(
+        'SELECT is_admin FROM user_profiles WHERE id = $1',
+        [userId]
+      );
+      const isAdmin = profileResult.rows[0]?.is_admin || false;
+
+      const draftResult = await pool.query(
+        'SELECT * FROM market_creation_drafts WHERE id = $1',
+        [draftId]
+      );
+      const draft = draftResult.rows[0];
+      if (!draft) {
+        return NextResponse.json({ error: 'Draft not found' }, { status: 404 });
+      }
+      if (draft.creator_id !== userId && !isAdmin) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
       return NextResponse.json({ data: draft });
     }
 
-    const drafts = await MarketCreationService.getDrafts(supabase, user.id, status || undefined);
+    let sql = 'SELECT * FROM market_creation_drafts WHERE creator_id = $1';
+    const params: any[] = [userId];
+    if (status) {
+      sql += ' AND status = $2';
+      params.push(status);
+    }
+    sql += ' ORDER BY updated_at DESC';
+    const drafts = await query(sql, params);
     return NextResponse.json({ data: drafts });
   } catch (error: any) {
     console.error('Error fetching market drafts:', error);
@@ -37,32 +71,28 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
+    const authHeader = req.headers.get('Authorization');
+    const token = authHeader?.split(' ')[1] || '';
+    const userId = await getUserFromToken(token);
+    if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Check if user is admin
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('is_admin')
-      .eq('id', user.id)
-      .single();
-
-    if (!profile?.is_admin) {
+    const profileResult = await pool.query(
+      'SELECT is_admin FROM user_profiles WHERE id = $1',
+      [userId]
+    );
+    if (!profileResult.rows[0]?.is_admin) {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
     }
 
     const { market_type, template_id, event_id } = body;
 
-    const draftId = await MarketCreationService.createDraft(supabase, {
-      user_id: user.id,
-      market_type,
-      template_id,
-      event_id
-    });
+    const result = await pool.query(
+      `SELECT * FROM create_market_draft($1, $2, $3, $4)`,
+      [userId, market_type, template_id || null, event_id || null]
+    );
+    const draftId = result.rows[0]?.create_market_draft;
 
     return NextResponse.json({ data: draftId });
   } catch (error: any) {
@@ -78,10 +108,10 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
+    const authHeader = req.headers.get('Authorization');
+    const token = authHeader?.split(' ')[1] || '';
+    const userId = await getUserFromToken(token);
+    if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -91,13 +121,12 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    const success = await MarketCreationService.updateDraftStage(supabase, {
-      draft_id,
-      stage,
-      stage_data
-    });
+    await pool.query(
+      `SELECT * FROM update_draft_stage($1, $2, $3)`,
+      [draft_id, stage, stage_data || {}]
+    );
 
-    return NextResponse.json({ success });
+    return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error('Error updating draft stage:', error);
     return NextResponse.json(
@@ -117,18 +146,34 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'Draft ID required' }, { status: 400 });
     }
 
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
+    const authHeader = req.headers.get('Authorization');
+    const token = authHeader?.split(' ')[1] || '';
+    const userId = await getUserFromToken(token);
+    if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { data: profile } = await supabase.from('user_profiles').select('is_admin').eq('id', user.id).single();
+    const profileResult = await pool.query(
+      'SELECT is_admin FROM user_profiles WHERE id = $1',
+      [userId]
+    );
+    const isAdmin = profileResult.rows[0]?.is_admin || false;
 
-    const success = await MarketCreationService.deleteDraft(supabase, draftId, user.id, profile?.is_admin);
+    const draftResult = await pool.query(
+      'SELECT creator_id FROM market_creation_drafts WHERE id = $1',
+      [draftId]
+    );
+    const draft = draftResult.rows[0];
+    if (!draft) {
+      return NextResponse.json({ error: 'Draft not found' }, { status: 404 });
+    }
+    if (draft.creator_id !== userId && !isAdmin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
-    return NextResponse.json({ success });
+    await pool.query('DELETE FROM market_creation_drafts WHERE id = $1', [draftId]);
+
+    return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error('Error deleting draft:', error);
     return NextResponse.json(

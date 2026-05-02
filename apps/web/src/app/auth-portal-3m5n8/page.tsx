@@ -75,27 +75,16 @@ export default function SecureAuthPortal() {
         if (user) {
           console.log('Existing session found, verifying admin...');
 
-          // Use direct REST API to avoid Supabase client AbortSignal issues
-          const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-          const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-          const session = await supabase.auth.getSession();
-          const accessToken = session.data.session?.access_token;
-
-          if (!supabaseUrl || !anonKey || !accessToken) {
-            console.error('Missing credentials for profile fetch');
-            return;
-          }
-
           try {
+            // Call server-side API route that queries local PostgREST directly
             const response = await fetchWithTimeout(
-              `${supabaseUrl}/rest/v1/user_profiles?id=eq.${user.id}&select=is_admin,is_super_admin`,
+              '/api/auth/admin-check',
               {
-                headers: {
-                  'apikey': anonKey,
-                  'Authorization': `Bearer ${accessToken}`,
-                },
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: user.id }),
               },
-              8000  // Increased timeout to 8 seconds
+              8000
             );
 
             if (!response.ok) {
@@ -103,9 +92,8 @@ export default function SecureAuthPortal() {
             }
 
             const data = await response.json();
-            const profile = data[0];
 
-            if (profile?.is_admin || profile?.is_super_admin) {
+            if (data.is_admin || data.is_super_admin) {
               console.log('Admin verified, redirecting...');
               router.replace(redirectTo);
             } else {

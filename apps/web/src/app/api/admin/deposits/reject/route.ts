@@ -1,16 +1,36 @@
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { pool, query } from '@/lib/admin/local-db';
 import { NextResponse } from 'next/server';
+
+async function getUserFromToken(token: string): Promise<string | null> {
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    if (!cloudRes.ok) return null;
+    const userData = await cloudRes.json();
+    return userData?.id || null;
+}
 
 // POST /api/admin/deposits/reject
 // Reject a deposit request
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient();
+    // Get Bearer token from auth header
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
 
-    // Get user session
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const token = authHeader.split(' ')[1];
+    const userId = await getUserFromToken(token);
 
-    if (authError || !user) {
+    if (!userId) {
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
@@ -18,13 +38,12 @@ export async function POST(request: Request) {
     }
 
     // Check if user has admin role — use user_profiles.is_admin
-    const { data: profile, error: roleError } = await supabase
-      .from('user_profiles')
-      .select('is_admin, is_super_admin')
-      .eq('id', user.id)
-      .single();
+    const profiles = await query<{ is_admin: boolean; is_super_admin: boolean }>(
+      'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
+      [userId]
+    );
 
-    if (roleError || (!profile?.is_admin && !profile?.is_super_admin)) {
+    if (!profiles[0]?.is_admin && !profiles[0]?.is_super_admin) {
       return NextResponse.json(
         { error: 'Admin access required' },
         { status: 403 }
@@ -48,23 +67,22 @@ export async function POST(request: Request) {
       );
     }
 
-    const service = await createServiceClient() as any;
-
     // Get deposit request
-    const { data: deposit, error: depositError } = await service
-      .from('deposit_requests')
-      .select('*')
-      .eq('id', depositId)
-      .single();
+    const deposits = await query<any>(
+      'SELECT * FROM deposit_requests WHERE id = $1',
+      [depositId]
+    );
 
-    if (depositError || !deposit) {
+    const deposit = deposits[0];
+
+    if (!deposit) {
       return NextResponse.json(
         { error: 'Deposit request not found' },
         { status: 404 }
       );
     }
 
-    if ((deposit as any).status !== 'pending') {
+    if (deposit.status !== 'pending') {
       return NextResponse.json(
         { error: 'Deposit already processed' },
         { status: 400 }
@@ -72,19 +90,19 @@ export async function POST(request: Request) {
     }
 
     // Update deposit request as rejected
-    const { error: updateError } = await service
-      .from('deposit_requests')
-      .update({
-        status: 'rejected',
-        rejection_reason: reason.trim(),
-        verified_by: user.id,
-        verified_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', depositId);
+    const updateResult = await pool.query(
+      `UPDATE deposit_requests SET 
+        status = 'rejected', 
+        rejection_reason = $1, 
+        verified_by = $2, 
+        verified_at = $3, 
+        updated_at = $4 
+      WHERE id = $5`,
+      [reason.trim(), userId, new Date().toISOString(), new Date().toISOString(), depositId]
+    );
 
-    if (updateError) {
-      console.error('Failed to reject deposit:', updateError);
+    if (updateResult.error) {
+      console.error('Failed to reject deposit:', updateResult.error);
       return NextResponse.json(
         { error: 'Failed to reject deposit' },
         { status: 500 }
@@ -92,16 +110,17 @@ export async function POST(request: Request) {
     }
 
     // Create notification for user
-    await service.from('notifications').insert({
-      user_id: (deposit as any).user_id,
-      type: 'deposit_rejected',
-      title: 'ডিপোজিট বাতিল হয়েছে',
-      message: `আপনার ৳${(deposit as any).bdt_amount} ডিপোজিট রিকোয়েস্ট বাতিল করা হয়েছে। কারণ: ${reason}`,
-      metadata: {
-        deposit_id: depositId,
-        rejection_reason: reason
-      }
-    } as any);
+    await pool.query(
+      `INSERT INTO notifications (user_id, type, title, message, metadata) 
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        deposit.user_id,
+        'deposit_rejected',
+        'ডিপোজিট বাতিল হয়েছে',
+        `আপনার ৳${deposit.bdt_amount} ডিপোজিট রিকোয়েস্ট বাতিল করা হয়েছে। কারণ: ${reason}`,
+        JSON.stringify({ deposit_id: depositId, rejection_reason: reason })
+      ]
+    );
 
     return NextResponse.json({
       success: true,

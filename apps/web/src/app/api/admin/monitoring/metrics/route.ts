@@ -1,92 +1,122 @@
-import { requireAdmin } from '@/lib/admin/auth-guard';
-import { createClient } from '@/lib/supabase/server';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { pool } from '@/lib/admin/local-db';
+
+async function getUserFromToken(token: string): Promise<string | null> {
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    if (!cloudRes.ok) return null;
+    const userData = await cloudRes.json();
+    return userData?.id || null;
+}
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
-  const admin = await requireAdmin();
-  if (!admin) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+export async function GET(req: NextRequest) {
+    const authHeader = req.headers.get('Authorization');
+    const token = authHeader?.split(' ')[1] || '';
+    const userId = await getUserFromToken(token);
+    if (!userId) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
-  const supabase = await createClient();
+    const profileResult = await pool.query(
+        'SELECT is_admin FROM user_profiles WHERE id = $1',
+        [userId]
+    );
+    if (!profileResult.rows[0]?.is_admin) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
-  try {
+    try {
     // Platform-wide metrics
     const [
-      { count: totalUsers, error: uErr },
-      { count: activeUsers, aErr },
-      { count: totalMarkets, mErr },
-      { count: activeMarkets, amErr },
-      { count: totalTrades, tErr },
-      { count: totalOrders, oErr },
+        totalUsersResult,
+        activeUsersResult,
+        totalMarketsResult,
+        activeMarketsResult,
+        totalTradesResult,
+        totalOrdersResult,
     ] = await Promise.all([
-      supabase.from('user_profiles').select('*', { count: 'exact', head: true }),
-      supabase.from('activity_feed').select('*', { count: 'exact', head: true }).gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()),
-      supabase.from('markets').select('*', { count: 'exact', head: true }),
-      supabase.from('markets').select('*', { count: 'exact', head: true }).eq('status', 'active'),
-      supabase.from('trades').select('*', { count: 'exact', head: true }),
-      supabase.from('orders').select('*', { count: 'exact', head: true }),
+        pool.query('SELECT COUNT(*) as count FROM user_profiles'),
+        pool.query('SELECT COUNT(*) as count FROM activity_feed WHERE created_at >= $1', [new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()]),
+        pool.query('SELECT COUNT(*) as count FROM markets'),
+        pool.query('SELECT COUNT(*) as count FROM markets WHERE status = $1', ['active']),
+        pool.query('SELECT COUNT(*) as count FROM trades'),
+        pool.query('SELECT COUNT(*) as count FROM orders'),
     ]);
 
-    // Recent volume
-    const { data: volumeData } = await supabase
-      .from('trades')
-      .select('price, quantity')
-      .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+    const totalUsers = parseInt(totalUsersResult.rows[0]?.count || '0');
+    const activeUsers = parseInt(activeUsersResult.rows[0]?.count || '0');
+    const totalMarkets = parseInt(totalMarketsResult.rows[0]?.count || '0');
+    const activeMarkets = parseInt(activeMarketsResult.rows[0]?.count || '0');
+    const totalTrades = parseInt(totalTradesResult.rows[0]?.count || '0');
+    const totalOrders = parseInt(totalOrdersResult.rows[0]?.count || '0');
 
-    const totalVolume = volumeData?.reduce(
-      (sum, t) => sum + parseFloat(t.price) * parseFloat(t.quantity),
-      0
+    // Recent volume
+    const volumeResult = await pool.query(
+        'SELECT price, quantity FROM trades WHERE created_at >= $1',
+        [new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()]
+    );
+
+    const totalVolume = volumeResult.rows?.reduce(
+        (sum: number, t: any) => sum + parseFloat(t.price) * parseFloat(t.quantity),
+        0
     ) || 0;
 
     // Active conditional orders
-    const { count: activeConditions } = await supabase
-      .from('conditional_orders')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'active');
+    const activeConditionsResult = await pool.query(
+        'SELECT COUNT(*) as count FROM conditional_orders WHERE status = $1',
+        ['active']
+    );
+    const activeConditions = parseInt(activeConditionsResult.rows[0]?.count || '0');
 
     // Pending deposits/withdrawals
-    const { count: pendingDeposits } = await supabase
-      .from('deposits')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'pending');
+    const pendingDepositsResult = await pool.query(
+        'SELECT COUNT(*) as count FROM deposits WHERE status = $1',
+        ['pending']
+    );
+    const pendingDeposits = parseInt(pendingDepositsResult.rows[0]?.count || '0');
 
-    const { count: pendingWithdrawals } = await supabase
-      .from('withdrawals')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'pending');
+    const pendingWithdrawalsResult = await pool.query(
+        'SELECT COUNT(*) as count FROM withdrawals WHERE status = $1',
+        ['pending']
+    );
+    const pendingWithdrawals = parseInt(pendingWithdrawalsResult.rows[0]?.count || '0');
 
     // Error rate (from admin_audit_log)
-    const { count: recentErrors } = await supabase
-      .from('admin_audit_log')
-      .select('*', { count: 'exact', head: true })
-      .eq('action', 'error')
-      .gte('created_at', new Date(Date.now() - 60 * 60 * 1000).toISOString());
+    const recentErrorsResult = await pool.query(
+        'SELECT COUNT(*) as count FROM admin_audit_log WHERE action = $1 AND created_at >= $2',
+        ['error', new Date(Date.now() - 60 * 60 * 1000).toISOString()]
+    );
+    const recentErrors = parseInt(recentErrorsResult.rows[0]?.count || '0');
 
     return NextResponse.json({
       metrics: {
         users: {
-          total: totalUsers || 0,
-          active_24h: activeUsers || 0,
+          total: totalUsers,
+          active_24h: activeUsers,
         },
         markets: {
-          total: totalMarkets || 0,
-          active: activeMarkets || 0,
+          total: totalMarkets,
+          active: activeMarkets,
         },
         trading: {
-          total_trades: totalTrades || 0,
-          total_orders: totalOrders || 0,
+          total_trades: totalTrades,
+          total_orders: totalOrders,
           volume_24h: totalVolume,
         },
         operations: {
-          active_conditional_orders: activeConditions || 0,
-          pending_deposits: pendingDeposits || 0,
-          pending_withdrawals: pendingWithdrawals || 0,
+          active_conditional_orders: activeConditions,
+          pending_deposits: pendingDeposits,
+          pending_withdrawals: pendingWithdrawals,
         },
         health: {
-          errors_last_hour: recentErrors || 0,
+          errors_last_hour: recentErrors,
         },
       },
       timestamp: new Date().toISOString(),

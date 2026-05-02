@@ -1,0 +1,24 @@
+[DEFAULT]
+bantime = 3600
+findtime = 600
+maxretry = 5
+destemail = admin@plokymarket.com
+sender = fail2ban@plokymarket.com
+action = %(action_mwl)s
+
+[sshd]
+enabled = true
+port = 22
+filter = sshd
+logpath = /var/log/auth.log
+maxretry = 3
+bantime = 86400
+findtime = 3600
+
+[nginx-http-auth]
+enabled = true
+port = http,443
+filter = nginx-http-auth
+logpath = /var/log/nginx/error.log
+maxretry = 5
+bantime = 3600

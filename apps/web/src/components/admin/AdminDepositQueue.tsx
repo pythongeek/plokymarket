@@ -12,7 +12,6 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/use-toast';
-import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 
@@ -42,6 +41,15 @@ const METHOD_LABELS: Record<string, { label: string; color: string; icon: string
     usdt_bep20: { label: 'USDT BEP20', color: 'text-yellow-400 bg-yellow-500/20', icon: '💎' },
     agent: { label: 'Agent', color: 'text-slate-400 bg-slate-700', icon: '👤' },
 };
+
+async function adminFetch(path: string, options?: RequestInit) {
+  const res = await fetch(path, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...(options?.headers || {}) }
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
 
 function DepositCard({ deposit, onAction }: { deposit: DepositRequest; onAction: () => void }) {
     const [expanded, setExpanded] = useState(false);
@@ -191,12 +199,14 @@ function DepositCard({ deposit, onAction }: { deposit: DepositRequest; onAction:
                                         onChange={e => setNotes(e.target.value)}
                                         placeholder="কারণ বা নোট লিখুন..."
                                         className="bg-slate-950 border-slate-700 text-white text-sm resize-none h-20"
+
                                     />
                                     <div className="flex gap-2">
                                         <Button
                                             onClick={handleApprove}
                                             disabled={processing}
                                             className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+
                                             size="sm"
                                         >
                                             {processing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5 mr-1" />}
@@ -206,7 +216,9 @@ function DepositCard({ deposit, onAction }: { deposit: DepositRequest; onAction:
                                             onClick={handleReject}
                                             disabled={processing}
                                             variant="outline"
+
                                             className="flex-1 border-red-500/30 text-red-400 hover:bg-red-500/10"
+
                                             size="sm"
                                         >
                                             {processing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <XCircle className="w-3.5 h-3.5 mr-1" />}
@@ -235,25 +247,15 @@ export function AdminDepositQueue() {
     const [loading, setLoading] = useState(true);
     const [statusFilter, setStatusFilter] = useState<'pending' | 'approved' | 'rejected' | 'all'>('pending');
     const [methodFilter, setMethodFilter] = useState('all');
-    const supabase = createClient();
 
     const loadDeposits = useCallback(async () => {
         setLoading(true);
         try {
-            let query = supabase
-                .from('deposit_requests')
-                .select(`
-          *,
-          user_profiles(full_name, email)
-        `)
-                .order('created_at', { ascending: false })
-                .limit(100);
-
-            if (statusFilter !== 'all') query = query.eq('status', statusFilter);
-            if (methodFilter !== 'all') query = query.eq('payment_method', methodFilter);
-
-            const { data, error } = await query;
-            if (error) throw error;
+            const params = new URLSearchParams();
+            if (statusFilter !== 'all') params.append('status', statusFilter);
+            if (methodFilter !== 'all') params.append('method', methodFilter);
+            
+            const { data } = await adminFetch(`/api/admin/deposits?${params.toString()}`);
             setDeposits(data || []);
         } catch (err) {
             console.error('Error loading deposits:', err);

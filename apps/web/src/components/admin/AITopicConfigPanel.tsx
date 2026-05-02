@@ -12,7 +12,6 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from '@/components/ui/use-toast';
-import { createClient } from '@/lib/supabase/client';
 import {
   Save,
   Loader2,
@@ -47,7 +46,6 @@ export function AITopicConfigPanel() {
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
 
-  const supabase = createClient();
 
   useEffect(() => {
     fetchConfigs();
@@ -56,7 +54,8 @@ export function AITopicConfigPanel() {
   const fetchConfigs = async () => {
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const sessionRes = await fetch('/api/auth/session', { credentials: 'include' });
+      const { data: { session } } = await sessionRes.json();
       const response = await fetch('/api/admin/ai-config', {
         headers: {
           'Authorization': `Bearer ${session?.access_token}`
@@ -90,8 +89,8 @@ export function AITopicConfigPanel() {
   const handleSaveProvider = async (provider: AIProvider) => {
     setSavingId(provider.id);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-
+      const sessionRes = await fetch('/api/auth/session', { credentials: 'include' });
+      const { data: { session } } = await sessionRes.json();
       const response = await fetch('/api/admin/ai-config', {
         method: 'POST',
         headers: {
@@ -121,8 +120,8 @@ export function AITopicConfigPanel() {
   const handleSavePrompt = async (prompt: AIPrompt) => {
     setSavingId(prompt.id);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-
+      const sessionRes = await fetch('/api/auth/session', { credentials: 'include' });
+      const { data: { session } } = await sessionRes.json();
       const response = await fetch('/api/admin/ai-config', {
         method: 'POST',
         headers: {

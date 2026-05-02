@@ -1,6 +1,19 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { pool, query } from '@/lib/admin/local-db';
+
+async function getUserFromToken(token: string): Promise<string | null> {
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    if (!cloudRes.ok) return null;
+    const userData = await cloudRes.json();
+    return userData?.id || null;
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -11,47 +24,47 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: NextRequest) {
     try {
-        const supabase = await createClient();
-
         // 1. Authenticate and Admin Check
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        const authHeader = request.headers.get('authorization');
+        if (!authHeader?.startsWith('Bearer ')) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        const token = authHeader.split(' ')[1];
 
-        const { data: profile } = await supabase
-            .from('user_profiles')
-            .select('is_admin, is_super_admin')
-            .eq('id', user.id)
-            .single();
+        const userId = await getUserFromToken(token);
+        if (!userId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const profileResult = await pool.query(
+            'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
+            [userId]
+        );
+        const profile = profileResult.rows[0];
 
         if (!profile?.is_admin && !profile?.is_super_admin) {
             return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
         }
 
-        const service = await createServiceClient();
-
         // 2. Fetch resolvable events from the new view
-        const { data, error } = await service
-            .from('view_resolvable_events')
-            .select('*')
-            .order('ends_at', { ascending: true });
-
-        if (error) {
-            console.error('[Resolution API] Fetch error:', error);
-            throw error;
-        }
+        const dataResult = await pool.query(
+            'SELECT * FROM view_resolvable_events ORDER BY ends_at ASC'
+        );
+        const data = dataResult.rows;
 
         // 3. Enrich with UMA/Oracle status if available
-        // We'll fetch from oracle_requests to see if a proposal exists
         const marketIds = data?.map(e => e.id) || [];
 
         if (marketIds.length > 0) {
-            const { data: oracleReqs } = await service
-                .from('oracle_requests')
-                .select('market_id, status, proposed_outcome, confidence_score')
-                .in('market_id', marketIds);
+            const oracleResult = await pool.query(
+                `SELECT market_id, status, proposed_outcome, confidence_score 
+                 FROM oracle_requests 
+                 WHERE market_id = ANY($1)`,
+                [marketIds]
+            );
 
             const oracleMap = new Map();
-            oracleReqs?.forEach(req => {
+            oracleResult.rows?.forEach(req => {
                 oracleMap.set(req.market_id, req);
             });
 

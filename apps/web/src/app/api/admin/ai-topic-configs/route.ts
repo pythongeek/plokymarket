@@ -2,45 +2,51 @@
  * Admin API for AI Topic Configurations
  * Manage news sources, prompts, and generation settings
  */
+import { NextRequest, NextResponse } from 'next/server';
+import { pool, query, insert, update, remove } from '@/lib/admin/local-db';
 
-import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 
 // Verify admin authentication
 async function verifyAdmin(request: Request): Promise<{ isAdmin: boolean; userId?: string; error?: string }> {
-  const authHeader = request.headers.get('authorization');
+    const authHeader = request.headers.get('authorization');
 
-  if (!authHeader?.startsWith('Bearer ')) {
-    return { isAdmin: false, error: 'Missing authorization header' };
-  }
+    if (!authHeader?.startsWith('Bearer ')) {
+        return { isAdmin: false, error: 'Missing authorization header' };
+    }
 
-  const token = authHeader.split(' ')[1];
+    const token = authHeader.split(' ')[1];
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { persistSession: false, autoRefreshToken: false } }
-  );
+    // Validate token against cloud Supabase
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
 
-  const { data: { user }, error } = await supabase.auth.getUser(token);
+    if (!cloudRes.ok) {
+        return { isAdmin: false, error: 'Invalid token' };
+    }
 
-  if (error || !user) {
-    return { isAdmin: false, error: 'Invalid token' };
-  }
+    const userData = await cloudRes.json();
+    const userId = userData?.id;
 
-  const { data: profile } = await supabase
-    .from('user_profiles')
-    .select('is_admin')
-    .eq('id', user.id)
-    .single();
+    if (!userId) {
+        return { isAdmin: false, error: 'Invalid token payload' };
+    }
 
-  if (!profile?.is_admin) {
-    return { isAdmin: false, error: 'Not an admin' };
-  }
+    const profiles = await query<{ is_admin: boolean }>(
+        'SELECT is_admin FROM user_profiles WHERE id = $1',
+        [userId]
+    );
 
-  return { isAdmin: true, userId: user.id };
+    if (!profiles[0]?.is_admin) {
+        return { isAdmin: false, error: 'Not an admin' };
+    }
+
+    return { isAdmin: true, userId };
 }
 
 /**
@@ -48,49 +54,43 @@ async function verifyAdmin(request: Request): Promise<{ isAdmin: boolean; userId
  * List all configurations
  */
 export async function GET(request: Request) {
-  const adminCheck = await verifyAdmin(request);
+    const adminCheck = await verifyAdmin(request);
 
-  if (!adminCheck.isAdmin) {
-    return NextResponse.json({ error: adminCheck.error || 'Unauthorized' }, { status: 401 });
-  }
-
-  try {
-    const { searchParams } = new URL(request.url);
-    const contextType = searchParams.get('context_type');
-    const isActive = searchParams.get('is_active');
-
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      { auth: { persistSession: false, autoRefreshToken: false } }
-    );
-
-    let query = supabase
-      .from('ai_topic_configs')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (contextType) {
-      query = query.eq('context_type', contextType);
+    if (!adminCheck.isAdmin) {
+        return NextResponse.json({ error: adminCheck.error || 'Unauthorized' }, { status: 401 });
     }
 
-    if (isActive !== null) {
-      query = query.eq('is_active', isActive === 'true');
+    try {
+        const { searchParams } = new URL(request.url);
+        const contextType = searchParams.get('context_type');
+        const isActive = searchParams.get('is_active');
+
+        let sql = 'SELECT * FROM ai_topic_configs WHERE 1=1';
+        const params: any[] = [];
+        let i = 1;
+
+        if (contextType) {
+            sql += ` AND context_type = $${i++}`;
+            params.push(contextType);
+        }
+        if (isActive !== null) {
+            sql += ` AND is_active = $${i++}`;
+            params.push(isActive === 'true');
+        }
+
+        sql += ' ORDER BY created_at DESC';
+
+        const rows = await query(sql, params);
+
+        return NextResponse.json({
+            success: true,
+            configs: rows
+        });
+
+    } catch (error: any) {
+        console.error('[AI Topic Configs] Error:', error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
     }
-
-    const { data, error } = await query;
-
-    if (error) throw error;
-
-    return NextResponse.json({
-      success: true,
-      configs: data || []
-    });
-
-  } catch (error: any) {
-    console.error('[AI Topic Configs] Error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
 }
 
 /**
@@ -98,56 +98,46 @@ export async function GET(request: Request) {
  * Create or update configuration
  */
 export async function POST(request: Request) {
-  const adminCheck = await verifyAdmin(request);
+    const adminCheck = await verifyAdmin(request);
 
-  if (!adminCheck.isAdmin || !adminCheck.userId) {
-    return NextResponse.json({ error: adminCheck.error || 'Unauthorized' }, { status: 401 });
-  }
-
-  try {
-    const body = await request.json();
-    const { id, ...configData } = body;
-
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      { auth: { persistSession: false, autoRefreshToken: false } }
-    );
-
-    let result;
-
-    if (id) {
-      // Update existing
-      const { data, error } = await supabase
-        .from('ai_topic_configs')
-        .update({ ...configData, updated_at: new Date().toISOString() })
-        .eq('id', id)
-        .select()
-        .single();
-
-      if (error) throw error;
-      result = data;
-    } else {
-      // Create new
-      const { data, error } = await supabase
-        .from('ai_topic_configs')
-        .insert({ ...configData, created_by: adminCheck.userId })
-        .select()
-        .single();
-
-      if (error) throw error;
-      result = data;
+    if (!adminCheck.isAdmin || !adminCheck.userId) {
+        return NextResponse.json({ error: adminCheck.error || 'Unauthorized' }, { status: 401 });
     }
 
-    return NextResponse.json({
-      success: true,
-      config: result
-    });
+    try {
+        const body = await request.json();
+        const { id, ...configData } = body;
 
-  } catch (error: any) {
-    console.error('[AI Topic Configs] Error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
+        let result;
+
+        if (id) {
+            // Update existing
+            const updated = await update('ai_topic_configs',
+                { ...configData, updated_at: new Date().toISOString() },
+                { id },
+                '*'
+            );
+            result = updated[0];
+        } else {
+            // Create new
+            const inserted = await insert('ai_topic_configs', {
+                ...configData,
+                created_by: adminCheck.userId,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            }, '*');
+            result = inserted[0];
+        }
+
+        return NextResponse.json({
+            success: true,
+            config: result
+        });
+
+    } catch (error: any) {
+        console.error('[AI Topic Configs] Error:', error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
 }
 
 /**
@@ -155,40 +145,29 @@ export async function POST(request: Request) {
  * Delete a configuration
  */
 export async function DELETE(request: Request) {
-  const adminCheck = await verifyAdmin(request);
+    const adminCheck = await verifyAdmin(request);
 
-  if (!adminCheck.isAdmin) {
-    return NextResponse.json({ error: adminCheck.error || 'Unauthorized' }, { status: 401 });
-  }
-
-  try {
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
-
-    if (!id) {
-      return NextResponse.json({ error: 'Missing config ID' }, { status: 400 });
+    if (!adminCheck.isAdmin) {
+        return NextResponse.json({ error: adminCheck.error || 'Unauthorized' }, { status: 401 });
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      { auth: { persistSession: false, autoRefreshToken: false } }
-    );
+    try {
+        const { searchParams } = new URL(request.url);
+        const id = searchParams.get('id');
 
-    const { error } = await supabase
-      .from('ai_topic_configs')
-      .delete()
-      .eq('id', id);
+        if (!id) {
+            return NextResponse.json({ error: 'Missing config ID' }, { status: 400 });
+        }
 
-    if (error) throw error;
+        await remove('ai_topic_configs', { id });
 
-    return NextResponse.json({
-      success: true,
-      message: 'Configuration deleted'
-    });
+        return NextResponse.json({
+            success: true,
+            message: 'Configuration deleted'
+        });
 
-  } catch (error: any) {
-    console.error('[AI Topic Configs] Error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
+    } catch (error: any) {
+        console.error('[AI Topic Configs] Error:', error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
 }

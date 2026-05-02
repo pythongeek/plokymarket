@@ -15,7 +15,6 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuTrigger, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
-import { supabase } from '@/lib/supabase';
 import { toast }    from 'sonner';
 
 interface MarketActionsProps {
@@ -35,38 +34,23 @@ export function MarketActions({ market }: MarketActionsProps) {
   const [userId,         setUserId]         = useState<string | null>(null);
 
   // ── Auth ───────────────────────────────────────────────────────────────────
+  // Get user from API (uses httpOnly cookie auth)
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
+    fetch('/api/auth/session', { credentials: 'include' })
+      .catch(() => setUserId(null));
   }, []);
 
-  // ── Load state ─────────────────────────────────────────────────────────────
+  // ── Load state via API ────────────────────────────────────────────────────
   useEffect(() => {
     if (!userId) return;
-
     // Bookmark status
-    supabase
-      .from('user_bookmarks')
-      .select('market_id')
-      .eq('user_id', userId)
-      .eq('market_id', market.id)
-      .maybeSingle()
-      .then(({ data }) => setIsBookmarked(!!data));
-
+    fetch(`/api/markets/${market.id}/bookmark`, { credentials: 'include' })
+      .then(r => r.ok ? r.json() : { bookmarked: false })
+      .then(d => setIsBookmarked(d.bookmarked || false));
     // Follow status
-    supabase
-      .from('market_followers')
-      .select('market_id')
-      .eq('user_id', userId)
-      .eq('market_id', market.id)
-      .maybeSingle()
-      .then(({ data }) => setIsFollowing(!!data));
-
-    // Follower count
-    supabase
-      .from('market_followers')
-      .select('market_id', { count: 'exact', head: true })
-      .eq('market_id', market.id)
-      .then(({ count }) => setFollowerCount(count ?? 0));
+    fetch(`/api/markets/${market.id}/follow`, { credentials: 'include' })
+      .then(r => r.ok ? r.json() : { following: false })
+      .then(d => setIsFollowing(d.following || false));
   }, [userId, market.id]);
 
   // ── Bookmark toggle ────────────────────────────────────────────────────────
@@ -84,12 +68,16 @@ export function MarketActions({ market }: MarketActionsProps) {
     } catch {
       // Fallback: direct Supabase call
       if (isBookmarked) {
-        await supabase.from('user_bookmarks').delete()
-          .eq('user_id', userId).eq('market_id', market.id);
+        await fetch(`/api/markets/${market.id}/bookmark`, { method: 'DELETE', credentials: 'include' });
         setIsBookmarked(false);
         toast.success('বুকমার্ক সরানো হয়েছে');
       } else {
-        await supabase.from('user_bookmarks').insert({ user_id: userId, market_id: market.id });
+        await fetch(`/api/markets/${market.id}/bookmark`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ market_id: market.id })
+        });
         setIsBookmarked(true);
         toast.success('🔖 বুকমার্ক করা হয়েছে');
       }
@@ -101,15 +89,17 @@ export function MarketActions({ market }: MarketActionsProps) {
     if (!userId) { toast.error('ফলো করতে লগইন করুন'); return; }
 
     if (isFollowing) {
-      await supabase.from('market_followers').delete()
-        .eq('user_id', userId).eq('market_id', market.id);
+      await fetch(`/api/markets/${market.id}/follow`, {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ market_id: market.id })
+      });
       setIsFollowing(false);
       setFollowerCount(c => Math.max(0, c - 1));
       toast.success('আনফলো করা হয়েছে');
     } else {
-      await supabase.from('market_followers').insert({
         user_id: userId, market_id: market.id,
-        notify_on_resolve: true, notify_on_trade: false,
       });
       setIsFollowing(true);
       setFollowerCount(c => c + 1);

@@ -2,8 +2,16 @@
 
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { createClient } from '@/lib/supabase/client';
 import { toast } from 'sonner';
+
+async function adminFetch(path: string, options?: RequestInit) {
+  const res = await fetch(path, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...(options?.headers || {}) }
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
 
 interface PendingDeposit {
   id: string;
@@ -24,24 +32,15 @@ export default function DepositVerification() {
   const [adminNotes, setAdminNotes] = useState('');
   const [rejectionReason, setRejectionReason] = useState('');
   
-  const supabase = createClient();
   const queryClient = useQueryClient();
 
   // Get pending deposits
   const { data: pendingDeposits, isLoading } = useQuery({
     queryKey: ['adminPendingDeposits'],
     queryFn: async (): Promise<PendingDeposit[]> => {
-      const { data, error } = await supabase
-        .from('deposit_requests')
-        .select(`
-          *,
-          user_email:auth.users!inner(email)
-        `)
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false });
-        
-      if (error) throw error;
-      return data as PendingDeposit[];
+      const result = await adminFetch('/api/admin/deposits?status=pending');
+      if (result.error) throw new Error(result.error);
+      return result.data as PendingDeposit[];
     },
     refetchInterval: 10000, // Auto-refresh every 10s
   });

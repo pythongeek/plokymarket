@@ -22,7 +22,6 @@ import {
   ArrowUpDown, PieChart, LineChart
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { createClient } from '@/lib/supabase/client';
 import { toast } from '@/components/ui/use-toast';
 
 interface Trade {
@@ -78,7 +77,6 @@ interface UserStats {
 
 export function TradeMonitor() {
   const { t } = useTranslation();
-  const supabase = createClient();
 
   const [trades, setTrades] = useState<Trade[]>([]);
   const [suspiciousActivity, setSuspiciousActivity] = useState<SuspiciousActivity[]>([]);
@@ -90,114 +88,52 @@ export function TradeMonitor() {
   const [volumeDist, setVolumeDist] = useState<VolumeDistribution[]>([]);
   const [priceDist, setPriceDist] = useState<PriceDistribution[]>([]);
 
-  // Fetch trades
+  // Fetch trades via API route (uses local PostgreSQL)
   const fetchTrades = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('trades')
-        .select(`
-          *,
-          user:user_id(email),
-          event:event_id(question)
-        `)
-        .order('created_at', { ascending: false })
-        .limit(100);
-
-      if (error) throw error;
-
-      const mappedTrades: Trade[] = (data || []).map(t => ({
+      const res = await fetch('/api/admin/monitoring/trades');
+      if (!res.ok) throw new Error('Failed to fetch trades');
+      const result = await res.json();
+      const mappedTrades: Trade[] = (result.data || []).map((t: any) => ({
         ...t,
-        user_email: (t.user as any)?.email,
-        market_question: (t.event as any)?.question,
+        user_email: t.user_email,
+        market_question: t.market_question,
       }));
-
       setTrades(mappedTrades);
       analyzeSuspiciousActivity(mappedTrades);
       calculateVolumeDistribution(mappedTrades);
       calculatePriceDistribution(mappedTrades);
     } catch (error) {
       console.error('Error fetching trades:', error);
-      toast({
-        title: 'ত্রুটি',
-        description: 'ট্রেডের তথ্য লোড করতে ব্যর্থ হয়েছে',
-        variant: 'destructive',
-      });
+      toast({ title: 'ত্রুটি', description: 'ট্রেডের তথ্য লোড করতে ব্যর্থ হয়েছে', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
-  }, [supabase, toast]);
+  }, [toast]);
 
-  // Fetch user stats
+  // Fetch user stats via API (uses local PostgreSQL)
   const fetchUserStats = useCallback(async () => {
     try {
-      // Get user trading stats
-      const { data: positions } = await supabase
-        .from('positions')
-        .select(`
-          user_id,
-          quantity,
-          entry_price,
-          event:event_id(status)
-        `);
-
-      if (!positions) return;
-
-      // Group by user
-      const userMap = new Map<string, UserStats>();
-      positions.forEach(p => {
-        const existing = userMap.get(p.user_id) || {
-          userId: p.user_id,
-          email: '',
-          totalTrades: 0,
-          totalVolume: 0,
-          buyWinRate: 0,
-          avgTradeSize: 0,
-          lastTrade: '',
-          isSuspicious: false,
-        };
-        existing.totalTrades += 1;
-        existing.totalVolume += Math.abs(Number(p.quantity) * Number(p.entry_price));
-        if (p.event && (p.event as any).status === 'resolved') {
-          existing.lastTrade = 'resolved';
-        }
-        userMap.set(p.user_id, existing);
-      });
-
-      // Get user emails
-      const userIds = Array.from(userMap.keys());
-      if (userIds.length > 0) {
-        const { data: users } = await supabase
-          .from('user_profiles')
-          .select('user_id, email')
-          .in('user_id', userIds.slice(0, 50));
-
-        (users || []).forEach(u => {
-          const stats = userMap.get(u.user_id);
-          if (stats) stats.email = u.email;
-        });
-      }
-
-      // Detect suspicious patterns
-      userMap.forEach(stats => {
-        const volume = stats.totalVolume;
-        const tradeCount = stats.totalTrades;
-        const avgSize = tradeCount > 0 ? volume / tradeCount : 0;
-
-        // Wash trading indicators
-        if (tradeCount > 100 && avgSize < 100) {
-          stats.isSuspicious = true;
-        }
-        // Very high volume for new accounts
-        if (tradeCount < 5 && volume > 100000) {
-          stats.isSuspicious = true;
-        }
-      });
-
-      setUserStats(Array.from(userMap.values()).slice(0, 50));
+      const res = await fetch('/api/admin/monitoring/trades?tab=users');
+      if (!res.ok) throw new Error('Failed to fetch user stats');
+      const result = await res.json();
+      const stats: UserStats[] = (result.data || []).map((r: any) => ({
+        userId: r.user_id,
+        email: r.email || '',
+        totalTrades: Number(r.trade_count) || 0,
+        totalVolume: Number(r.total_volume) || 0,
+        buyWinRate: 0,
+        avgTradeSize: Number(r.total_volume) / Math.max(Number(r.trade_count), 1),
+        lastTrade: r.last_trade || '',
+        isSuspicious: r.risk_level === 'high_risk',
+        // positions from joined query
+        positions: [],
+      }));
+      setUserStats(stats.slice(0, 50));
     } catch (error) {
       console.error('Error fetching user stats:', error);
     }
-  }, [supabase]);
+  }, []);
 
   // Analyze suspicious activity
   const analyzeSuspiciousActivity = useCallback((tradeData: Trade[]) => {
@@ -324,35 +260,22 @@ export function TradeMonitor() {
     setPriceDist(distribution);
   }, []);
 
-  // Initial fetch
+  // Initial fetch (no realtime - uses API polling)
   useEffect(() => {
     fetchTrades();
     fetchUserStats();
-    // Realtime subscription
-    const channel = supabase
-      .channel('trade-monitor')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'trades' },
-        () => fetchTrades()
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [fetchTrades, fetchUserStats, supabase]);
+  }, [fetchTrades, fetchUserStats]);
 
   // Freeze user
   const handleFreezeUser = async () => {
     if (!freezeDialog) return;
     try {
-      const { error } = await supabase
-        .from('user_profiles')
-        .update({ is_frozen: true })
-        .eq('user_id', freezeDialog.userId);
-
-      if (error) throw error;
+      const freezeRes = await fetch('/api/admin/monitoring/trades', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'freeze_user', userId: freezeDialog.userId })
+      });
+      if (!freezeRes.ok) throw new Error('Failed to freeze user');
 
       toast({
         title: 'সফল',
@@ -373,12 +296,12 @@ export function TradeMonitor() {
   const handleCancelOrders = async () => {
     if (!cancelDialog) return;
     try {
-      const { error } = await supabase
-        .from('orders')
-        .update({ status: 'cancelled' })
-        .in('id', cancelDialog.orderIds);
-
-      if (error) throw error;
+      const cancelRes = await fetch('/api/admin/monitoring/trades', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'cancel_orders', orderIds: cancelDialog.orderIds })
+      });
+      if (!cancelRes.ok) throw new Error('Failed to cancel orders');
 
       toast({
         title: 'সফল',

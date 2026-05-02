@@ -1,24 +1,41 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { pool } from '@/lib/admin/local-db';
+
+async function getUserFromToken(token: string): Promise<string | null> {
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    if (!cloudRes.ok) return null;
+    const userData = await cloudRes.json();
+    return userData?.id || null;
+}
 
 // POST /api/admin/users/interventions - Perform position intervention
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    if (authError || !user) {
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const token = authHeader.split(' ')[1];
+
+    const userId = await getUserFromToken(token);
+    if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Check admin status
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('is_admin')
-      .eq('id', user.id)
-      .single();
+    const profileResult = await pool.query(
+      'SELECT is_admin FROM user_profiles WHERE id = $1',
+      [userId]
+    );
+    const profile = profileResult.rows[0];
 
     if (!profile?.is_admin) {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
@@ -44,44 +61,40 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Perform intervention
-    const { data: interventionId, error } = await supabase.rpc(
-      'perform_position_intervention',
-      {
-        p_admin_id: user.id,
-        p_user_id: user_id,
-        p_position_id: position_id,
-        p_intervention_type: intervention_type,
-        p_reason: reason,
-        p_send_notification: send_notification !== false
-      }
+    // Perform intervention via RPC
+    const rpcResult = await pool.query(
+      'SELECT * FROM perform_position_intervention($1, $2, $3, $4, $5)',
+      [userId, user_id, position_id, intervention_type, reason, send_notification !== false]
     );
+    const interventionId = rpcResult.rows[0]?.id || rpcResult.rows[0];
 
-    if (error) throw error;
+    if (rpcResult.rows[0]?.error) {
+      throw new Error(rpcResult.rows[0].error);
+    }
 
     // Update with additional details if provided
-    if (position_value !== undefined) {
-      await supabase
-        .from('position_interventions')
-        .update({
-          position_value,
-          pnl,
-          liquidation_price,
-          exit_price,
-          risk_level_at_time: risk_level
-        })
-        .eq('id', interventionId);
+    if (position_value !== undefined && interventionId) {
+      await pool.query(
+        `UPDATE position_interventions 
+         SET position_value = $1, pnl = $2, liquidation_price = $3, exit_price = $4, risk_level_at_time = $5
+         WHERE id = $6`,
+        [position_value, pnl, liquidation_price, exit_price, risk_level, interventionId]
+      );
     }
 
     // Send real-time notification to user
-    if (send_notification !== false) {
-      await supabase.from('notifications').insert({
-        user_id: user_id,
-        type: 'position_intervention',
-        title: `Position ${intervention_type === 'liquidation' ? 'Liquidated' : 'Closed'}`,
-        body: `Your position has been ${intervention_type} by admin. Reason: ${reason}`,
-        data: { intervention_id: interventionId, intervention_type }
-      });
+    if (send_notification !== false && user_id) {
+      await pool.query(
+        `INSERT INTO notifications 
+         (user_id, type, title, body, data, created_at)
+         VALUES ($1, 'position_intervention', $2, $3, $4, NOW())`,
+        [
+          user_id, 
+          `Position ${intervention_type === 'liquidation' ? 'Liquidated' : 'Closed'}`,
+          `Your position has been ${intervention_type} by admin. Reason: ${reason}`,
+          { intervention_id: interventionId, intervention_type }
+        ]
+      );
     }
 
     return NextResponse.json({ 
@@ -100,47 +113,58 @@ export async function POST(req: NextRequest) {
 // GET /api/admin/users/interventions - List interventions
 export async function GET(req: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    if (authError || !user) {
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const token = authHeader.split(' ')[1];
+
+    const userId = await getUserFromToken(token);
+    if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Check admin status
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('is_admin')
-      .eq('id', user.id)
-      .single();
+    const profileResult = await pool.query(
+      'SELECT is_admin FROM user_profiles WHERE id = $1',
+      [userId]
+    );
+    const profile = profileResult.rows[0];
 
     if (!profile?.is_admin) {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
     }
 
     const { searchParams } = new URL(req.url);
-    const userId = searchParams.get('user_id');
+    const targetUserId = searchParams.get('user_id');
     const limit = parseInt(searchParams.get('limit') || '50');
 
-    let query = supabase
-      .from('position_interventions')
-      .select(`
-        *,
-        user:user_id(email, full_name),
-        performed_by:performed_by(full_name)
-      `)
-      .order('performed_at', { ascending: false })
-      .limit(limit);
+    let whereClause = '';
+    const params: any[] = [];
+    let paramIndex = 1;
 
-    if (userId) {
-      query = query.eq('user_id', userId);
+    if (targetUserId) {
+      whereClause += `${whereClause ? ' AND ' : ''}pi.user_id = $${paramIndex++}`;
+      params.push(targetUserId);
     }
 
-    const { data, error } = await query;
+    const whereStr = whereClause ? `WHERE ${whereClause}` : '';
 
-    if (error) throw error;
+    params.push(limit);
+    const dataResult = await pool.query(
+      `SELECT pi.*, 
+              up.email as user_email, up.full_name as user_full_name,
+              pap.full_name as performed_by_full_name
+       FROM position_interventions pi
+       LEFT JOIN user_profiles up ON up.id = pi.user_id
+       LEFT JOIN user_profiles pap ON pap.id = pi.performed_by
+       ${whereStr}
+       ORDER BY pi.performed_at DESC
+       LIMIT $${paramIndex++}`,
+      params
+    );
 
-    return NextResponse.json({ data: data || [] });
+    return NextResponse.json({ data: dataResult.rows || [] });
   } catch (error: any) {
     console.error('Error fetching interventions:', error);
     return NextResponse.json(

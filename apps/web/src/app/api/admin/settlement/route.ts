@@ -1,9 +1,22 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { pool } from '@/lib/admin/local-db';
 import { SettlementEngine } from '@/lib/settlement/SettlementEngine';
 
 const settlementEngine = new SettlementEngine();
+
+async function getUserFromToken(token: string): Promise<string | null> {
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    if (!cloudRes.ok) return null;
+    const userData = await cloudRes.json();
+    return userData?.id || null;
+}
 
 /**
  * GET /api/admin/settlement - List settlement claims and batches
@@ -11,44 +24,88 @@ const settlementEngine = new SettlementEngine();
  */
 export async function GET(request: Request) {
     try {
-        const supabase = await createClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        const authHeader = request.headers.get('authorization');
+        if (!authHeader?.startsWith('Bearer ')) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        const token = authHeader.split(' ')[1];
+
+        const userId = await getUserFromToken(token);
+        if (!userId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
 
         const { searchParams } = new URL(request.url);
         const marketId = searchParams.get('market_id');
 
         // Fetch claims
-        let claimsQuery = supabase
-            .from('settlement_claims')
-            .select('*, markets!market_id(question, status)')
-            .order('created_at', { ascending: false })
-            .limit(100);
+        let claimsQuery = `
+            SELECT sc.*, 
+                   m.question as markets_question, 
+                   m.status as markets_status
+            FROM settlement_claims sc
+            LEFT JOIN markets m ON m.id = sc.market_id
+            ORDER BY sc.created_at DESC
+            LIMIT 100
+        `;
+        
+        if (marketId) {
+            claimsQuery = `
+                SELECT sc.*, 
+                       m.question as markets_question, 
+                       m.status as markets_status
+                FROM settlement_claims sc
+                LEFT JOIN markets m ON m.id = sc.market_id
+                WHERE sc.market_id = $1
+                ORDER BY sc.created_at DESC
+                LIMIT 100
+            `;
+        }
 
-        if (marketId) claimsQuery = claimsQuery.eq('market_id', marketId);
-        const { data: claims, error: claimsError } = await claimsQuery;
+        const claimsResult = await pool.query(
+            marketId ? claimsQuery : claimsQuery.replace('$1', 'NULL'),
+            marketId ? [marketId] : []
+        );
 
         // Fetch batches
-        let batchesQuery = supabase
-            .from('settlement_batches')
-            .select('*, markets!market_id(question, status)')
-            .order('created_at', { ascending: false })
-            .limit(50);
+        let batchesQuery = `
+            SELECT sb.*, 
+                   m.question as markets_question, 
+                   m.status as markets_status
+            FROM settlement_batches sb
+            LEFT JOIN markets m ON m.id = sb.market_id
+            ORDER BY sb.created_at DESC
+            LIMIT 50
+        `;
+        
+        if (marketId) {
+            batchesQuery = `
+                SELECT sb.*, 
+                       m.question as markets_question, 
+                       m.status as markets_status
+                FROM settlement_batches sb
+                LEFT JOIN markets m ON m.id = sb.market_id
+                WHERE sb.market_id = $1
+                ORDER BY sb.created_at DESC
+                LIMIT 50
+            `;
+        }
 
-        if (marketId) batchesQuery = batchesQuery.eq('market_id', marketId);
-        const { data: batches, error: batchesError } = await batchesQuery;
+        const batchesResult = await pool.query(
+            marketId ? batchesQuery : batchesQuery.replace('$1', 'NULL'),
+            marketId ? [marketId] : []
+        );
 
         // Fetch stats
-        const { data: claimStats } = await supabase
-            .from('settlement_statistics')
-            .select('*')
-            .single();
+        const statsResult = await pool.query(
+            'SELECT * FROM settlement_statistics LIMIT 1'
+        );
 
         return NextResponse.json({
             data: {
-                claims: claims || [],
-                batches: batches || [],
-                stats: claimStats || null,
+                claims: claimsResult.rows || [],
+                batches: batchesResult.rows || [],
+                stats: statsResult.rows[0] || null,
             },
         });
     } catch (error: any) {
@@ -62,16 +119,24 @@ export async function GET(request: Request) {
  */
 export async function POST(req: NextRequest) {
     try {
-        const supabase = await createClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        const authHeader = req.headers.get('authorization');
+        if (!authHeader?.startsWith('Bearer ')) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        const token = authHeader.split(' ')[1];
+
+        const userId = await getUserFromToken(token);
+        if (!userId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
 
         // Admin check
-        const { data: profile } = await supabase
-            .from('user_profiles')
-            .select('is_admin, is_super_admin')
-            .eq('id', user.id)
-            .single();
+        const profileResult = await pool.query(
+            'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
+            [userId]
+        );
+        const profile = profileResult.rows[0];
+
         if (!profile?.is_admin && !profile?.is_super_admin) {
             return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
         }
@@ -84,11 +149,11 @@ export async function POST(req: NextRequest) {
         }
 
         // Verify market is resolved
-        const { data: market } = await supabase
-            .from('markets')
-            .select('status, winning_outcome')
-            .eq('id', market_id)
-            .single();
+        const marketResult = await pool.query(
+            'SELECT status, winning_outcome FROM markets WHERE id = $1',
+            [market_id]
+        );
+        const market = marketResult.rows[0];
 
         if (!market) {
             return NextResponse.json({ error: 'Market not found' }, { status: 404 });

@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
-import { createClient } from '@/lib/supabase/client';
 import {
   Plus,
   Calendar,
@@ -52,14 +51,14 @@ const ORACLE_TYPES = [
     id: 'manual_admin',
     name: 'ম্যানুয়াল (অ্যাডমিন)',
     nameEn: 'Manual (Admin)',
-    description: 'অ্যাডমিন প্যানেল থেকে সরাসরি রেজাল্ট ইনপুট দেয়া হবে।',
+    description: 'অ্যাডমিন প্যানেল থেকে সরাসরি রেজাল্ট ইনপুট দেয়া হবে।',
     icon: Users
   },
   {
     id: 'ai_oracle',
     name: 'AI ওরাকল (Vertex/Kimi)',
     nameEn: 'AI Oracle',
-    description: 'AI এজেন্ট স্বয়ংক্রিয়ভাবে নিউজ স্ক্র্যাপ করে রেজাল্ট দিবে।',
+    description: 'AI এজেন্ট স্বয়ংক্রিয়ভাবে নিউজ স্ক্র্যাপ করে রেজাল্ট দিবে।',
     icon: Cpu
   },
   {
@@ -87,10 +86,19 @@ const ORACLE_TYPES = [
     id: 'hybrid',
     name: 'হাইব্রিড সিস্টেম',
     nameEn: 'Hybrid System',
-    description: 'AI এবং মানুষের সমন্বয়ে একটি উন্নত রেজোলিউশন ব্যবস্থা।',
+    description: 'AI এবং মানুষের সমন্বয়ে একটি উন্নত রেজোলিউশন ব্যবস্থা।',
     icon: SlidersHorizontal
   }
 ];
+
+async function adminFetch(path: string, options?: RequestInit) {
+  const res = await fetch(path, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...(options?.headers || {}) }
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
 
 export function EventCreationPanel({ onEventCreated }: EventCreationPanelProps) {
   const [isCreating, setIsCreating] = useState(false);
@@ -130,20 +138,9 @@ export function EventCreationPanel({ onEventCreated }: EventCreationPanelProps) 
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        const supabase = createClient();
+        const { data } = await adminFetch('/api/admin/custom-categories');
 
-        // Try custom_categories table first (Bangladesh-specific categories)
-        const { data, error } = await supabase
-          .from('custom_categories')
-          .select('name, slug, is_active, display_order')
-          .eq('is_active', true)
-          .order('display_order', { ascending: true });
-
-        if (error) {
-          console.warn('[EventCreationPanel] Failed to fetch custom_categories:', error);
-          // Fallback to default categories
-          setCategories(DEFAULT_CATEGORIES);
-        } else if (data && data.length > 0) {
+        if (data && data.length > 0) {
           // Map database categories to component format
           const mappedCategories = data.map((cat: any) => ({
             id: cat.name, // Use name as ID to match existing event format
@@ -305,6 +302,7 @@ export function EventCreationPanel({ onEventCreated }: EventCreationPanelProps) 
       }
 
     } catch (error: any) {
+
       console.error('Error creating event:', error);
       toast.error(error.message || 'ইভেন্ট তৈরি করতে ব্যর্থ হয়েছে');
       setErrors([error.message || 'ইভেন্ট তৈরি করতে ব্যর্থ']);

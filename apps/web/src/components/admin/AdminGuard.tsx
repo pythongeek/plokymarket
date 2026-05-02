@@ -8,10 +8,18 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2, ShieldAlert } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
 
 interface AdminGuardProps {
   children: React.ReactNode;
+}
+
+async function adminFetch(path: string, options?: RequestInit) {
+  const res = await fetch(path, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...(options?.headers || {}) }
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
 }
 
 export function AdminGuard({ children }: AdminGuardProps) {
@@ -22,26 +30,8 @@ export function AdminGuard({ children }: AdminGuardProps) {
   useEffect(() => {
     async function checkAdmin() {
       try {
-        // Get current user
-        const { data: { user } } = await supabase.auth.getUser();
-
-        if (!user) {
-          router.push('/login?redirect=/admin/resolutions');
-          return;
-        }
-
-        // Check if user is admin
-        const { data, error } = await (supabase
-          .from('user_profiles')
-          .select('is_admin')
-          .eq('id', user.id)
-          .single() as any);
-
-        if (error || !data?.is_admin) {
-          setIsAdmin(false);
-        } else {
-          setIsAdmin(true);
-        }
+        const { is_admin } = await adminFetch('/api/admin/user-profiles/admin-check');
+        setIsAdmin(is_admin);
       } catch (err) {
         setIsAdmin(false);
       } finally {
@@ -50,7 +40,7 @@ export function AdminGuard({ children }: AdminGuardProps) {
     }
 
     checkAdmin();
-  }, [router]);
+  }, []);
 
   if (loading) {
     return (

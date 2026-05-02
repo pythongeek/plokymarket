@@ -1,6 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { pool, query } from '@/lib/admin/local-db';
 import { suggestEventWithGemini } from '@/lib/market-creation/ai-suggestion';
+
+async function getUserFromToken(token: string): Promise<string | null> {
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    if (!cloudRes.ok) return null;
+    const userData = await cloudRes.json();
+    return userData?.id || null;
+}
 
 /**
  * POST /api/admin/events/ai-suggest
@@ -9,17 +22,22 @@ import { suggestEventWithGemini } from '@/lib/market-creation/ai-suggestion';
  */
 export async function POST(req: NextRequest) {
     try {
-        const supabase = await createClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        const authHeader = req.headers.get('authorization');
+        const token = authHeader?.replace('Bearer ', '');
+        if (!token) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
 
-        // Admin check
-        const { data: profile } = await supabase
-            .from('user_profiles')
-            .select('is_admin, is_super_admin')
-            .eq('id', user.id)
-            .single();
-        if (!(profile as any)?.is_admin && !(profile as any)?.is_super_admin) {
+        const userId = await getUserFromToken(token);
+        if (!userId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const profiles = await query<{ is_admin: boolean; is_super_admin: boolean }>(
+            'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
+            [userId]
+        );
+        if (!profiles[0]?.is_admin && !profiles[0]?.is_super_admin) {
             return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
         }
 

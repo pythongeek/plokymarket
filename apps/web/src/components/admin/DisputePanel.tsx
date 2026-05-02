@@ -28,7 +28,18 @@ import {
   User,
   AlertCircle
 } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+// API helpers using fetch (routes use local PostgreSQL)
+async function adminFetch(path: string, options?: RequestInit) {
+  const res = await fetch(path, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Request failed' }));
+    throw new Error(err.error || 'API error');
+  }
+  return res.json();
+}
 
 interface Dispute {
   id: string;
@@ -94,33 +105,13 @@ export function DisputePanel() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Fetch disputes
-      const { data: disputesData, error: disputesError } = await supabase
-        .from('dispute_records')
-        .select(`
-          *,
-          markets:market_id (question, status),
-          user_profiles:disputed_by (full_name)
-        `)
-        .order('created_at', { ascending: false });
+      // Fetch disputes via API route (uses local PostgreSQL)
+      const disputesResult = await adminFetch('/api/admin/disputes?tab=disputes');
+      setDisputes(disputesResult.data || []);
 
-      if (disputesError) throw disputesError;
-      setDisputes(disputesData || []);
-
-      // Fetch manual reviews
-      const { data: reviewsData, error: reviewsError } = await supabase
-        .from('manual_review_queue')
-        .select(`
-          *,
-          markets:market_id (question, category),
-          ai_trust_scores:ai_trust_score_id (trust_score, ai_confidence, ai_reasoning, ai_sources)
-        `)
-        .in('status', ['pending', 'in_review'])
-        .order('priority', { ascending: false })
-        .order('created_at', { ascending: true });
-
-      if (reviewsError) throw reviewsError;
-      setReviews(reviewsData || []);
+      // Fetch manual reviews via API route (uses local PostgreSQL)
+      const reviewsResult = await adminFetch('/api/admin/disputes?tab=reviews');
+      setReviews(reviewsResult.data || []);
 
     } catch (err) {
       console.error('Failed to fetch data:', err);
@@ -140,16 +131,18 @@ export function DisputePanel() {
     try {
       const resolution = adminDecision === 'YES' ? 'upheld' : 'dismissed';
       
-      // Call resolve_dispute function
-      const { error } = await supabase.rpc('resolve_dispute', {
-        p_dispute_id: selectedDispute.id,
-        p_reviewed_by: (await supabase.auth.getUser()).data.user?.id,
-        p_resolution: resolution,
-        p_review_notes: adminNotes,
-        p_return_bond: returnBond
+      // Call resolve_dispute via API route (uses local PostgreSQL)
+      await adminFetch('/api/admin/disputes', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          action: 'resolve_dispute',
+          dispute_id: selectedDispute.id,
+          reviewed_by: selectedDispute.disputed_by,
+          resolution,
+          review_notes: adminNotes,
+          return_bond: returnBond
+        })
       });
-
-      if (error) throw error;
 
       setDisputeDialogOpen(false);
       setSelectedDispute(null);
@@ -171,16 +164,17 @@ export function DisputePanel() {
     try {
       const outcome = adminDecision === 'YES' ? 1 : 2;
       
-      // Call admin_manual_resolve function
-      const { error } = await supabase.rpc('admin_manual_resolve', {
-        p_market_id: selectedReview.market_id,
-        p_admin_id: (await supabase.auth.getUser()).data.user?.id,
-        p_outcome: outcome,
-        p_reasoning: adminNotes,
-        p_confidence: 95.0
+      // Call manual_resolve via API route (uses local PostgreSQL)
+      await adminFetch('/api/admin/disputes', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          action: 'manual_resolve',
+          id: selectedReview.id,
+          market_id: selectedReview.market_id,
+          outcome,
+          reasoning: adminNotes
+        })
       });
-
-      if (error) throw error;
 
       setReviewDialogOpen(false);
       setSelectedReview(null);

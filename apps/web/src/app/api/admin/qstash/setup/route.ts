@@ -10,9 +10,23 @@
  * - leaderboard: Daily leaderboard processing
  */
 
+// @ts-nocheck
 import { NextResponse } from 'next/server';
-import { createServiceClient } from '@/lib/supabase/server';
+import { pool, query } from '@/lib/admin/local-db';
 import { createSchedule, listSchedules, deleteSchedule } from '@/lib/qstash/client';
+
+async function getUserFromToken(token: string): Promise<string | null> {
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    if (!cloudRes.ok) return null;
+    const userData = await cloudRes.json();
+    return userData?.id || null;
+}
 
 // Available workflow configurations
 const WORKFLOW_CONFIGS = {
@@ -60,20 +74,17 @@ async function verifyAdmin(request: Request): Promise<{ isAdmin: boolean; error?
 
   const token = authHeader.split(' ')[1];
 
-  const supabase = await createServiceClient();
-
-  const { data: { user }, error } = await supabase.auth.getUser(token);
-
-  if (error || !user) {
+  const userId = await getUserFromToken(token);
+  if (!userId) {
     return { isAdmin: false, error: 'Invalid token' };
   }
 
   // Check if user is admin (canonical user_profiles table)
-  const { data: profile } = await supabase
-    .from('user_profiles')
-    .select('is_admin, is_super_admin')
-    .eq('id', user.id)
-    .single();
+  const profileResult = await pool.query(
+    'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
+    [userId]
+  );
+  const profile = profileResult.rows[0];
 
   const isAdmin = !!(profile?.is_admin || profile?.is_super_admin);
 

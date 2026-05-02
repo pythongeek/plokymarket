@@ -26,7 +26,6 @@ import {
   Bell, BellOff, Volume2, VolumeX
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { createClient } from '@/lib/supabase/client';
 import { toast } from '@/components/ui/use-toast';
 
 interface MarketAlert {
@@ -62,10 +61,9 @@ interface QuickAction {
 }
 
 export function MarketMonitor() {
-  const { t } = useTranslation();
-  const supabase = createClient();
+    const { t } = useTranslation();
 
-  const [alerts, setAlerts] = useState<MarketAlert[]>([]);
+    const [alerts, setAlerts] = useState<MarketAlert[]>([]);
   const [markets, setMarkets] = useState<MarketStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -74,108 +72,23 @@ export function MarketMonitor() {
   const [alertNotifications, setAlertNotifications] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
 
-  // Fetch market stats
+  // Fetch market stats via API route (uses local PostgreSQL)
   const fetchMarkets = useCallback(async () => {
     try {
-      const { data: events, error } = await supabase
-        .from('events')
-        .select(`
-          id,
-          question,
-          status,
-          volume,
-          created_at,
-          outcomes (
-            probability,
-            type
-          )
-        `)
-        .order('created_at', { ascending: false })
-        .limit(50);
-
-      if (error) throw error;
-
-      // Fetch trade stats for each market
-      const marketsWithStats: MarketStats[] = await Promise.all(
-        (events || []).map(async (event) => {
-          // Get 24h volume
-          const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-          const { data: trades } = await supabase
-            .from('trades')
-            .select('price, quantity, created_at')
-            .eq('event_id', event.id)
-            .gte('created_at', dayAgo);
-
-          const volume24h = (trades || []).reduce(
-            (sum, t) => sum + (Number(t.price) * Number(t.quantity)),
-            0
-          );
-
-          const trades24h = (trades || []).length;
-
-          // Get unique traders
-          const { data: positions } = await supabase
-            .from('positions')
-            .select('user_id')
-            .eq('event_id', event.id);
-
-          const uniqueTraders = new Set((positions || []).map(p => p.user_id)).size;
-
-          // Get order book depth
-          const { data: orders } = await supabase
-            .from('orders')
-            .select('side, price, remaining_quantity')
-            .eq('event_id', event.id)
-            .eq('status', 'open');
-
-          const bids = (orders || [])
-            .filter(o => o.side === 'buy')
-            .reduce((sum, o) => sum + Number(o.remaining_quantity), 0);
-          const asks = (orders || [])
-            .filter(o => o.side === 'sell')
-            .reduce((sum, o) => sum + Number(o.remaining_quantity), 0);
-
-          // Get current price from outcomes
-          const yesOutcome = (event.outcomes as any[])?.find(
-            (o: any) => o.type === 'YES'
-          );
-          const noOutcome = (event.outcomes as any[])?.find(
-            (o: any) => o.type === 'NO'
-          );
-
-          return {
-            marketId: event.id,
-            question: event.question,
-            status: event.status,
-            volume24h,
-            totalVolume: Number(event.volume) || 0,
-            yesPrice: yesOutcome ? Number(yesOutcome.probability) : 0.5,
-            noPrice: noOutcome ? Number(noOutcome.probability) : 0.5,
-            bidDepth: bids,
-            askDepth: asks,
-            uniqueTraders,
-            trades24h,
-            priceChange24h: 0, // calculated from historical data
-          };
-        })
-      );
-
-      setMarkets(marketsWithStats);
+      const res = await fetch('/api/admin/monitoring/markets');
+      if (!res.ok) throw new Error('Failed to fetch market data');
+      const result = await res.json();
+      setMarkets(result.data || []);
       setLastUpdated(new Date());
-
-      // Detect alerts
-      detectAlerts(marketsWithStats);
+      // @ts-ignore
+      if (typeof detectAlerts === 'function') detectAlerts(result.data || []);
     } catch (error) {
       console.error('Error fetching markets:', error);
-      toast({
-        title: 'ত্রুটি',
-        description: 'বাজারের তথ্য লোড করতে ব্যর্থ হয়েছে',
-        variant: 'destructive',
-      });
     } finally {
       setLoading(false);
     }
-  }, [supabase, toast]);
+  }, []);
+
 
   // Detect alerts
   const detectAlerts = useCallback((marketData: MarketStats[]) => {
@@ -236,40 +149,22 @@ export function MarketMonitor() {
     });
   }, []);
 
-  // Initial fetch
+  // Initial fetch (no realtime - uses API polling)
   useEffect(() => {
     fetchMarkets();
-    // Set up realtime subscription
-    const channel = supabase
-      .channel('market-monitor')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'events' },
-        () => fetchMarkets()
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'trades' },
-        () => fetchMarkets()
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [fetchMarkets, supabase]);
+  }, [fetchMarkets]);
 
   // Pause/Resume market
   const handleMarketAction = async (action: QuickAction) => {
     try {
       if (action.type === 'pause' || action.type === 'resume') {
         const newStatus = action.type === 'pause' ? 'paused' : 'active';
-        const { error } = await supabase
-          .from('events')
-          .update({ status: newStatus })
-          .eq('id', action.marketId);
-
-        if (error) throw error;
+        const res = await fetch(`/api/admin/markets/${action.marketId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: newStatus })
+        });
+        if (!res.ok) throw new Error('Failed to update market');
 
         toast({
           title: 'সফল',

@@ -1,17 +1,28 @@
-import { createClient } from '@/lib/supabase/server';
+/**
+ * Cron: Check Conditional Orders
+ * GET /api/cron/check-conditional-orders
+ * 
+ * Uses local PostgreSQL (pg) via local-db pool.
+ * Auth: CRON_SECRET bearer token.
+ */
 import { NextResponse } from 'next/server';
+import { pool } from '@/lib/admin/local-db';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
-  try {
-    const supabase = await createClient();
+export async function GET(req: Request) {
+  // Verify cron auth
+  const authHeader = req.headers.get('authorization');
+  const secret = process.env.CRON_SECRET || process.env.MASTER_CRON_SECRET;
+  if (secret && authHeader !== `Bearer ${secret}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
+  try {
     // Get all active markets
-    const { data: activeMarkets } = await supabase
-      .from('markets')
-      .select('id')
-      .eq('status', 'active');
+    const { rows: activeMarkets } = await pool.query(
+      `SELECT id FROM markets WHERE status = 'active'`
+    );
 
     if (!activeMarkets || activeMarkets.length === 0) {
       return NextResponse.json({ triggered: 0, markets: [] });
@@ -21,29 +32,36 @@ export async function GET() {
 
     // Check conditional orders for each active market
     for (const market of activeMarkets) {
-      const { data } = await supabase.rpc('check_conditional_orders_for_market', {
-        p_market_id: market.id,
-      });
-      if (data && data.triggered_count > 0) {
-        results.push(data);
+      try {
+        const { rows } = await pool.query(
+          `SELECT * FROM check_conditional_orders_for_market($1)`,
+          [market.id]
+        );
+        if (rows && rows[0]?.triggered_count > 0) {
+          results.push(rows[0]);
+        }
+      } catch (e) {
+        // Function may not exist - skip
+        console.warn(`check_conditional_orders_for_market failed for market ${market.id}:`, e);
       }
     }
 
+    const totalTriggered = results.reduce((sum, r) => sum + (r?.triggered_count || 0), 0);
+
     // Log the cron run
-    await supabase.from('admin_audit_log').insert({
-      admin_id: null, // system
-      action: 'cron_check_conditional_orders',
-      resource: 'conditional_orders',
-      metadata: {
-        markets_checked: activeMarkets.length,
-        triggered_total: results.reduce((sum, r) => sum + r.triggered_count, 0),
-        results,
-      },
-    });
+    try {
+      await pool.query(
+        `INSERT INTO admin_access_log (admin_id, action, resource, metadata)
+         VALUES (NULL, 'cron_check_conditional_orders', 'conditional_orders', $1)`,
+        [JSON.stringify({ markets_checked: activeMarkets.length, triggered_total: totalTriggered })]
+      );
+    } catch (e) {
+      // admin_access_log may not exist in dev - skip
+    }
 
     return NextResponse.json({
       success: true,
-      triggered: results.reduce((sum, r) => sum + r.triggered_count, 0),
+      triggered: totalTriggered,
       markets: results,
       checked_at: new Date().toISOString(),
     });

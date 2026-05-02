@@ -12,7 +12,6 @@ import {
     RefreshCw,
     Eye,
 } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
 
 interface UserPosition {
     id: string;
@@ -34,9 +33,16 @@ interface UserPositionsViewProps {
     userId: string;
 }
 
-export function UserPositionsView({ userId }: UserPositionsViewProps) {
-    const supabase = createClient();
+async function adminFetch(path: string, options?: RequestInit) {
+    const res = await fetch(path, {
+        ...options,
+        headers: { 'Content-Type': 'application/json', ...(options?.headers || {}) }
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+}
 
+export function UserPositionsView({ userId }: UserPositionsViewProps) {
     const [positions, setPositions] = useState<UserPosition[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -45,37 +51,8 @@ export function UserPositionsView({ userId }: UserPositionsViewProps) {
         const fetchPositions = async () => {
             setIsLoading(true);
             try {
-                // Fetch positions
-                const { data: positionsData, error: posError } = await supabase
-                    .from('positions')
-                    .select('*')
-                    .eq('user_id', userId)
-                    .order('created_at', { ascending: false });
-
-                if (posError) throw posError;
-
-                // Get unique market IDs
-                const marketIds = [...new Set(positionsData?.map((p: UserPosition) => p.market_id) || [])];
-
-                // Fetch market details
-                let marketMap: Record<string, { question: string; status: string }> = {};
-                if (marketIds.length > 0) {
-                    const { data: marketsData } = await supabase
-                        .from('markets')
-                        .select('id, question, status')
-                        .in('id', marketIds);
-
-                    marketsData?.forEach((m: { id: string; question: string; status: string }) => { marketMap[m.id] = { question: m.question, status: m.status }; });
-                }
-
-                // Enrich positions with market info
-                const enriched = positionsData?.map((p: UserPosition) => ({
-                    ...p,
-                    market_question: marketMap[p.market_id]?.question,
-                    market_status: marketMap[p.market_id]?.status,
-                })) || [];
-
-                setPositions(enriched);
+                const { data } = await adminFetch(`/api/admin/positions?userId=${userId}`);
+                setPositions(data || []);
             } catch (error) {
                 console.error('Error fetching user positions:', error);
             } finally {

@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { TrendingUp, Clock } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { supabase } from '@/lib/supabase';
 
 interface RelatedMarketsProps {
   currentMarketId: string;
@@ -44,6 +43,15 @@ function CategoryIcon({ category }: { category: string }) {
   return <span className="text-lg">{icons[category] ?? '📊'}</span>;
 }
 
+async function adminFetch(path: string, options?: RequestInit) {
+  const res = await fetch(path, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...(options?.headers || {}) }
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
 export function RelatedMarkets({ currentMarketId, category }: RelatedMarketsProps) {
   const router = useRouter();
   const [markets, setMarkets] = useState<MarketSummary[]>([]);
@@ -51,17 +59,16 @@ export function RelatedMarkets({ currentMarketId, category }: RelatedMarketsProp
 
   useEffect(() => {
     async function fetchRelated() {
-      const { data, error } = await supabase
-        .from('markets')
-        .select('id, question, category, yes_price, total_volume, image_url, trading_closes_at, status')
-        .eq('category', category)
-        .neq('id', currentMarketId)
-        .in('status', ['active', 'open'])
-        .order('total_volume', { ascending: false })
-        .limit(4);
-
-      if (!error && data) setMarkets(data as MarketSummary[]);
-      setLoading(false);
+      try {
+        const { data } = await adminFetch(
+          `/api/admin/markets/related?category=${encodeURIComponent(category)}&currentMarketId=${encodeURIComponent(currentMarketId)}`
+        );
+        if (data) setMarkets(data);
+      } catch (err) {
+        console.error('Error fetching related markets:', err);
+      } finally {
+        setLoading(false);
+      }
     }
 
     fetchRelated();

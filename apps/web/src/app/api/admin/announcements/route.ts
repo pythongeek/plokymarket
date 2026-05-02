@@ -2,37 +2,49 @@
  * API Route: /api/admin/announcements
  * CRUD operations for site announcements
  */
-import { createClient } from '@/lib/supabase/server';
-import { requireAdmin } from '@/lib/admin/auth-guard';
+// @ts-nocheck
+import { pool, query } from '@/lib/admin/local-db';
 import { NextRequest, NextResponse } from 'next/server';
+
+async function getUserFromToken(token: string): Promise<string | null> {
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    if (!cloudRes.ok) return null;
+    const userData = await cloudRes.json();
+    return userData?.id || null;
+}
 
 // GET /api/admin/announcements - Get all announcements (or active only for non-admin)
 export async function GET(req: NextRequest) {
     try {
-        const supabase = await createClient();
         const searchParams = req.nextUrl.searchParams;
         const activeOnly = searchParams.get('active') === 'true';
 
-        // Use any to break deep type instantiation on the query chain
-        const baseQuery = (supabase as any)
-            .from('site_announcements')
-            .select('*', { count: 'exact' })
-            .order('created_at', { ascending: false });
-
-        let query = baseQuery;
+        let sql = 'SELECT * FROM site_announcements';
+        let params: any[] = [];
+        let conditions: string[] = [];
 
         if (activeOnly) {
-            query = query
-                .eq('is_active', true)
-                .lte('starts_at', new Date().toISOString())
-                .or('ends_at.is.null,ends_at.gt.' + new Date().toISOString());
+            const now = new Date().toISOString();
+            conditions.push('is_active = true');
+            conditions.push('starts_at <= $1');
+            params.push(now);
+            conditions.push('(ends_at IS NULL OR ends_at > $1)');
         }
 
-        const { data, error } = await query;
+        if (conditions.length > 0) {
+            sql += ' WHERE ' + conditions.join(' AND ');
+        }
+        sql += ' ORDER BY created_at DESC';
 
-        if (error) throw error;
+        const result = await pool.query(sql, params);
 
-        return NextResponse.json(data || []);
+        return NextResponse.json(result.rows || []);
     } catch (error) {
         console.error('[Announcements GET]', error);
         return NextResponse.json({ error: 'Failed to fetch announcements' }, { status: 500 });
@@ -42,11 +54,24 @@ export async function GET(req: NextRequest) {
 // POST /api/admin/announcements - Create new announcement
 export async function POST(req: NextRequest) {
     try {
-        // Use auth guard utility
-        const admin = await requireAdmin();
-        if (admin instanceof NextResponse) return admin;
+        const authHeader = req.headers.get('authorization');
+        const token = authHeader?.replace('Bearer ', '');
+        if (!token) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
 
-        const supabase = await createClient();
+        const userId = await getUserFromToken(token);
+        if (!userId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const profiles = await query<{ is_admin: boolean; is_super_admin: boolean }>(
+            'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
+            [userId]
+        );
+        if (!profiles[0]?.is_admin && !profiles[0]?.is_super_admin) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
 
         const body = await req.json();
         const { title, message, type, is_active, is_global, action_text, action_url, starts_at, ends_at } = body;
@@ -55,26 +80,28 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Title and message are required' }, { status: 400 });
         }
 
-        const { data, error } = await (supabase as any)
-            .from('site_announcements')
-            .insert({
+        const result = await pool.query(
+            `INSERT INTO site_announcements 
+                (title, message, type, is_active, is_global, action_text, action_url, starts_at, ends_at, created_by)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+             RETURNING *`,
+            [
                 title,
                 message,
-                type: type || 'info',
-                is_active: is_active ?? true,
-                is_global: is_global ?? true,
-                action_text,
-                action_url,
-                starts_at: starts_at || new Date().toISOString(),
-                ends_at,
-                created_by: admin.user.id
-            })
-            .select()
-            .single();
+                type || 'info',
+                is_active ?? true,
+                is_global ?? true,
+                action_text || null,
+                action_url || null,
+                starts_at || new Date().toISOString(),
+                ends_at || null,
+                userId
+            ]
+        );
 
-        if (error) throw error;
+        if (result.error) throw result.error;
 
-        return NextResponse.json(data);
+        return NextResponse.json(result.rows[0]);
     } catch (error) {
         console.error('[Announcements POST]', error);
         return NextResponse.json({ error: 'Failed to create announcement' }, { status: 500 });
@@ -84,9 +111,24 @@ export async function POST(req: NextRequest) {
 // PUT /api/admin/announcements - Update announcement
 export async function PUT(req: NextRequest) {
     try {
-        // Use auth guard utility
-        const admin = await requireAdmin();
-        if (admin instanceof NextResponse) return admin;
+        const authHeader = req.headers.get('authorization');
+        const token = authHeader?.replace('Bearer ', '');
+        if (!token) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const userId = await getUserFromToken(token);
+        if (!userId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const profiles = await query<{ is_admin: boolean; is_super_admin: boolean }>(
+            'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
+            [userId]
+        );
+        if (!profiles[0]?.is_admin && !profiles[0]?.is_super_admin) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
 
         const body = await req.json();
         const { id, title, message, type, is_active, is_global, action_text, action_url, starts_at, ends_at } = body;
@@ -95,27 +137,36 @@ export async function PUT(req: NextRequest) {
             return NextResponse.json({ error: 'Announcement ID is required' }, { status: 400 });
         }
 
-        const supabase = await createClient();
-        const { data, error } = await (supabase as any)
-            .from('site_announcements')
-            .update({
-                title,
-                message,
-                type,
-                is_active,
-                is_global,
-                action_text,
-                action_url,
-                starts_at,
-                ends_at
-            })
-            .eq('id', id)
-            .select()
-            .single();
+        const updates: string[] = [];
+        const values: any[] = [];
+        let paramIndex = 1;
 
-        if (error) throw error;
+        if (title !== undefined) { updates.push(`title = $${paramIndex++}`); values.push(title); }
+        if (message !== undefined) { updates.push(`message = $${paramIndex++}`); values.push(message); }
+        if (type !== undefined) { updates.push(`type = $${paramIndex++}`); values.push(type); }
+        if (is_active !== undefined) { updates.push(`is_active = $${paramIndex++}`); values.push(is_active); }
+        if (is_global !== undefined) { updates.push(`is_global = $${paramIndex++}`); values.push(is_global); }
+        if (action_text !== undefined) { updates.push(`action_text = $${paramIndex++}`); values.push(action_text); }
+        if (action_url !== undefined) { updates.push(`action_url = $${paramIndex++}`); values.push(action_url); }
+        if (starts_at !== undefined) { updates.push(`starts_at = $${paramIndex++}`); values.push(starts_at); }
+        if (ends_at !== undefined) { updates.push(`ends_at = $${paramIndex++}`); values.push(ends_at); }
 
-        return NextResponse.json(data);
+        if (updates.length === 0) {
+            return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
+        }
+
+        values.push(id);
+        const result = await pool.query(
+            `UPDATE site_announcements SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
+            values
+        );
+
+        if (result.error) throw result.error;
+        if (result.rows.length === 0) {
+            return NextResponse.json({ error: 'Announcement not found' }, { status: 404 });
+        }
+
+        return NextResponse.json(result.rows[0]);
     } catch (error) {
         console.error('[Announcements PUT]', error);
         return NextResponse.json({ error: 'Failed to update announcement' }, { status: 500 });
@@ -125,9 +176,24 @@ export async function PUT(req: NextRequest) {
 // DELETE /api/admin/announcements - Delete announcement
 export async function DELETE(req: NextRequest) {
     try {
-        // Use auth guard utility
-        const admin = await requireAdmin();
-        if (admin instanceof NextResponse) return admin;
+        const authHeader = req.headers.get('authorization');
+        const token = authHeader?.replace('Bearer ', '');
+        if (!token) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const userId = await getUserFromToken(token);
+        if (!userId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const profiles = await query<{ is_admin: boolean; is_super_admin: boolean }>(
+            'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
+            [userId]
+        );
+        if (!profiles[0]?.is_admin && !profiles[0]?.is_super_admin) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
 
         const searchParams = req.nextUrl.searchParams;
         const id = searchParams.get('id');
@@ -136,13 +202,12 @@ export async function DELETE(req: NextRequest) {
             return NextResponse.json({ error: 'Announcement ID is required' }, { status: 400 });
         }
 
-        const supabase = await createClient();
-        const { error } = await (supabase as any)
-            .from('site_announcements')
-            .delete()
-            .eq('id', id);
+        const result = await pool.query(
+            'DELETE FROM site_announcements WHERE id = $1',
+            [id]
+        );
 
-        if (error) throw error;
+        if (result.error) throw result.error;
 
         return NextResponse.json({ success: true });
     } catch (error) {

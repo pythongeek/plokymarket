@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -30,17 +29,14 @@ export default function AgentWalletManager() {
         account_name: ''
     });
 
-    const supabase = createClient();
-
+  
     useEffect(() => {
         fetchWallets();
     }, []);
 
     const fetchWallets = async () => {
-        const { data, error } = await supabase
-            .from('agent_wallets')
-            .select('*')
-            .order('created_at', { ascending: false });
+        const result = await adminFetch('/api/admin/agent-wallets');
+            const data = result.data || [];
 
         if (error) {
             toast({ title: 'Error', description: 'Failed to load wallets', variant: 'destructive' });
@@ -57,13 +53,12 @@ export default function AgentWalletManager() {
         }
 
         try {
-            const { data, error } = await supabase
-                .from('agent_wallets')
-                .insert([newWallet])
-                .select()
-                .single();
-
-            if (error) throw error;
+            const result = await adminFetch('/api/admin/agent-wallets', {
+                method: 'POST',
+                body: JSON.stringify(newWallet)
+            });
+            if (result.error) throw new Error(result.error);
+            const data = result.data;
             setWallets([data, ...wallets]);
             setNewWallet({ ...newWallet, phone_number: '', account_name: '' });
             toast({ title: 'Success', description: 'Wallet added' });
@@ -74,7 +69,7 @@ export default function AgentWalletManager() {
 
     const handleDeleteWallet = async (id: string) => {
         try {
-            const { error } = await supabase.from('agent_wallets').delete().eq('id', id);
+            await adminFetch(`/api/admin/agent-wallets?id=${id}`, { method: 'DELETE' });
             if (error) throw error;
             setWallets(wallets.filter(w => w.id !== id));
             toast({ title: 'Success', description: 'Wallet deleted' });

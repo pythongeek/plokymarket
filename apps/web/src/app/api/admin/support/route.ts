@@ -1,23 +1,40 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { pool } from '@/lib/admin/local-db';
+
+async function getUserFromToken(token: string): Promise<string | null> {
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    if (!cloudRes.ok) return null;
+    const userData = await cloudRes.json();
+    return userData?.id || null;
+}
 
 // GET /api/admin/support - List support tickets
 export async function GET(req: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    if (authError || !user) {
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const token = authHeader.split(' ')[1];
+
+    const userId = await getUserFromToken(token);
+    if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Check admin status
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('is_admin')
-      .eq('id', user.id)
-      .single();
+    const profileResult = await pool.query(
+      'SELECT is_admin FROM user_profiles WHERE id = $1',
+      [userId]
+    );
+    const profile = profileResult.rows[0];
 
     if (!profile?.is_admin) {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
@@ -30,37 +47,52 @@ export async function GET(req: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
 
-    let query = supabase
-      .from('support_tickets')
-      .select(`
-        *,
-        user:user_id(email, full_name),
-        assigned_to:assigned_to(full_name)
-      `, { count: 'exact' })
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1);
+    let whereClause = '';
+    const params: any[] = [];
+    let paramIndex = 1;
 
     if (status) {
-      query = query.eq('status', status);
+      whereClause += `${whereClause ? ' AND ' : ''}st.status = $${paramIndex++}`;
+      params.push(status);
     }
 
     if (priority) {
-      query = query.eq('priority', priority);
+      whereClause += `${whereClause ? ' AND ' : ''}st.priority = $${paramIndex++}`;
+      params.push(priority);
     }
 
     if (assigned === 'me') {
-      query = query.eq('assigned_to', user.id);
+      whereClause += `${whereClause ? ' AND ' : ''}st.assigned_to = $${paramIndex++}`;
+      params.push(userId);
     } else if (assigned === 'unassigned') {
-      query = query.is('assigned_to', null);
+      whereClause += `${whereClause ? ' AND ' : ''}st.assigned_to IS NULL`;
     }
 
-    const { data, error, count } = await query;
+    const whereStr = whereClause ? `WHERE ${whereClause}` : '';
 
-    if (error) throw error;
+    const countResult = await pool.query(
+      `SELECT COUNT(*) as total FROM support_tickets st ${whereStr}`,
+      params
+    );
+    const count = parseInt(countResult.rows[0]?.total || '0');
+
+    params.push(limit, offset);
+    const dataResult = await pool.query(
+      `SELECT st.*,
+              u.email as user_email, u.full_name as user_full_name,
+              a.full_name as assigned_to_full_name
+       FROM support_tickets st
+       LEFT JOIN user_profiles u ON u.id = st.user_id
+       LEFT JOIN user_profiles a ON a.id = st.assigned_to
+       ${whereStr}
+       ORDER BY st.created_at DESC
+       LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
+      params
+    );
 
     return NextResponse.json({ 
-      data: data || [],
-      total: count || 0
+      data: dataResult.rows || [],
+      total: count
     });
   } catch (error: any) {
     console.error('Error fetching tickets:', error);
@@ -75,19 +107,23 @@ export async function GET(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    if (authError || !user) {
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const token = authHeader.split(' ')[1];
+
+    const userId = await getUserFromToken(token);
+    if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Check admin status
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('is_admin')
-      .eq('id', user.id)
-      .single();
+    const profileResult = await pool.query(
+      'SELECT is_admin FROM user_profiles WHERE id = $1',
+      [userId]
+    );
+    const profile = profileResult.rows[0];
 
     if (!profile?.is_admin) {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
@@ -114,23 +150,35 @@ export async function PATCH(req: NextRequest) {
       updates.closed_at = new Date().toISOString();
     }
 
-    const { data, error } = await supabase
-      .from('support_tickets')
-      .update(updates)
-      .eq('id', ticket_id)
-      .select()
-      .single();
+    const setClauses: string[] = [];
+    const values: any[] = [];
+    let paramIndex = 1;
 
-    if (error) throw error;
+    for (const [key, value] of Object.entries(updates)) {
+      setClauses.push(`${key} = $${paramIndex++}`);
+      values.push(value);
+    }
+    values.push(ticket_id);
 
-    // Log action
-    await supabase.rpc('log_admin_action', {
-      p_admin_id: user.id,
-      p_action: 'update_support_ticket',
-      p_action_category: 'support',
-      p_target_user_id: data.user_id,
-      p_new_value: { ticket_id, updates }
-    });
+    const updateResult = await pool.query(
+      `UPDATE support_tickets 
+       SET ${setClauses.join(', ')} 
+       WHERE id = $${paramIndex}
+       RETURNING *`,
+      values
+    );
+
+    if (updateResult.rowCount === 0) {
+      return NextResponse.json({ error: 'Ticket not found' }, { status: 404 });
+    }
+
+    const data = updateResult.rows[0];
+
+    // Log action via RPC
+    await pool.query(
+      `SELECT * FROM log_admin_action($1, 'update_support_ticket', 'support', $2, NULL, $3)`,
+      [userId, data.user_id, { ticket_id, updates }]
+    );
 
     return NextResponse.json({ data });
   } catch (error: any) {

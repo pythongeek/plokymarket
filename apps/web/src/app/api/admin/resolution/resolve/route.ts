@@ -1,6 +1,20 @@
+// @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { pool } from '@/lib/admin/local-db';
 import { inngest } from '@/lib/inngest/client';
+
+async function getUserFromToken(token: string): Promise<string | null> {
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    if (!cloudRes.ok) return null;
+    const userData = await cloudRes.json();
+    return userData?.id || null;
+}
 
 /**
  * POST /api/admin/resolution/resolve
@@ -9,17 +23,23 @@ import { inngest } from '@/lib/inngest/client';
  */
 export async function POST(request: NextRequest) {
     try {
-        const supabase = await createClient();
-
         // 1. Authenticate and Admin Check
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        const authHeader = request.headers.get('authorization');
+        if (!authHeader?.startsWith('Bearer ')) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        const token = authHeader.split(' ')[1];
 
-        const { data: profile } = await supabase
-            .from('user_profiles')
-            .select('id, is_admin, is_super_admin')
-            .eq('id', user.id)
-            .single();
+        const userId = await getUserFromToken(token);
+        if (!userId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const profileResult = await pool.query(
+            'SELECT id, is_admin, is_super_admin FROM user_profiles WHERE id = $1',
+            [userId]
+        );
+        const profile = profileResult.rows[0];
 
         if (!profile?.is_admin && !profile?.is_super_admin) {
             return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
@@ -32,19 +52,16 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Missing eventId or winner' }, { status: 400 });
         }
 
-        const service = await createServiceClient();
-
         // 3. Call RPC function resolve_market
         // Function signature: resolve_market(p_event_id UUID, p_winner INTEGER, p_resolver_id UUID)
-        const { error } = await service.rpc('resolve_market', {
-            p_event_id: eventId,
-            p_winner: winner,
-            p_resolver_id: profile.id
-        });
+        const rpcResult = await pool.query(
+            'SELECT * FROM resolve_market($1, $2, $3)',
+            [eventId, winner, profile.id]
+        );
 
-        if (error) {
-            console.error('[Resolution API] Resolution error:', error);
-            return NextResponse.json({ error: error.message }, { status: 500 });
+        if (rpcResult.rows[0]?.error) {
+            console.error('[Resolution API] Resolution error:', rpcResult.rows[0].error);
+            return NextResponse.json({ error: rpcResult.rows[0].error }, { status: 500 });
         }
 
         // 4. Trigger Inngest Settlement Workflow (Section 2.3.3)

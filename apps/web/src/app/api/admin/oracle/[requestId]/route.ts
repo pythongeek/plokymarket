@@ -1,8 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { pool } from '@/lib/admin/local-db';
 import { OracleService } from '@/lib/oracle/service';
 
 const oracleService = new OracleService();
+
+async function getUserFromToken(token: string): Promise<string | null> {
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    if (!cloudRes.ok) return null;
+    const userData = await cloudRes.json();
+    return userData?.id || null;
+}
 
 /**
  * GET /api/admin/oracle/[requestId] - Get single oracle request
@@ -12,28 +25,33 @@ export async function GET(
     { params }: { params: Promise<{ requestId: string }> }
 ) {
     try {
-        const supabase = await createClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        const authHeader = request.headers.get('Authorization');
+        const token = authHeader?.split(' ')[1] || '';
+        const userId = await getUserFromToken(token);
+        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
         const { requestId } = await params;
 
-        const { data, error } = await (supabase
-            .from('oracle_requests')
-            .select('*, markets(question, status, category, winning_outcome)')
-            .eq('id', requestId)
-            .single() as any);
+        const dataResult = await pool.query(
+            `SELECT or.*, m.question, m.status as market_status, m.category, m.winning_outcome
+             FROM oracle_requests or
+             LEFT JOIN markets m ON m.id = or.market_id
+             WHERE or.id = $1`,
+            [requestId]
+        );
 
-        if (error) throw error;
+        const data = dataResult.rows[0];
+        if (!data) {
+            return NextResponse.json({ error: 'Oracle request not found' }, { status: 404 });
+        }
 
         // Also fetch related disputes
-        const { data: disputes } = await (supabase
-            .from('oracle_disputes')
-            .select('*')
-            .eq('request_id', requestId)
-            .order('created_at', { ascending: false }) as any);
+        const disputesResult = await pool.query(
+            'SELECT * FROM oracle_disputes WHERE request_id = $1 ORDER BY created_at DESC',
+            [requestId]
+        );
 
-        return NextResponse.json({ data: { ...data, disputes: disputes || [] } });
+        return NextResponse.json({ data: { ...data, disputes: disputesResult.rows || [] } });
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
@@ -48,18 +66,19 @@ export async function POST(
     { params }: { params: Promise<{ requestId: string }> }
 ) {
     try {
-        const supabase = await createClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        const authHeader = req.headers.get('Authorization');
+        const token = authHeader?.split(' ')[1] || '';
+        const userId = await getUserFromToken(token);
+        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
         const { requestId } = await params;
 
-        const { data: profile } = await (supabase
-            .from('user_profiles')
-            .select('is_admin, is_super_admin')
-            .eq('id', user.id)
-            .single() as any);
-        if (!(profile as any)?.is_admin && !(profile as any)?.is_super_admin) {
+        const profileResult = await pool.query(
+            'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
+            [userId]
+        );
+        const profile = profileResult.rows[0];
+        if (!profile?.is_admin && !profile?.is_super_admin) {
             return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
         }
 
@@ -76,7 +95,7 @@ export async function POST(
                 const { reason } = body;
                 if (!reason) return NextResponse.json({ error: 'Challenge reason is required' }, { status: 400 });
 
-                const result = await oracleService.challengeOutcome(requestId, user.id, reason);
+                const result = await oracleService.challengeOutcome(requestId, userId, reason);
                 return NextResponse.json({ data: result });
             }
 

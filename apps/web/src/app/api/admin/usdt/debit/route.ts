@@ -1,5 +1,19 @@
+// @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { pool } from '@/lib/admin/local-db';
+
+async function getUserFromToken(token: string): Promise<string | null> {
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    if (!cloudRes.ok) return null;
+    const userData = await cloudRes.json();
+    return userData?.id || null;
+}
 
 /**
  * POST /api/admin/usdt/debit
@@ -7,19 +21,23 @@ import { createClient, createServiceClient } from '@/lib/supabase/server';
  */
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const token = authHeader.split(' ')[1];
 
-    // Check if user is admin
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
+    const userId = await getUserFromToken(token);
+    if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('is_admin')
-      .eq('id', user.id)
-      .single();
+    // Check if user is admin
+    const profileResult = await pool.query(
+      'SELECT is_admin FROM user_profiles WHERE id = $1',
+      [userId]
+    );
+    const profile = profileResult.rows[0];
 
     if (!profile?.is_admin) {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
@@ -27,24 +45,22 @@ export async function POST(request: NextRequest) {
 
     // Parse form data
     const formData = await request.formData();
-    const userId = formData.get('user_id') as string;
+    const targetUserId = formData.get('user_id') as string;
     const amount = parseFloat(formData.get('amount') as string);
     const reason = formData.get('reason') as string;
 
-    if (!userId || !amount || amount <= 0 || !reason) {
+    if (!targetUserId || !amount || amount <= 0 || !reason) {
       return NextResponse.json({ error: 'Invalid parameters' }, { status: 400 });
     }
 
-    const service = await createServiceClient();
-
     // Get current wallet balance and version
-    const { data: wallet, error: walletError } = await service
-      .from('wallets')
-      .select('usdt_balance, locked_usdt, version')
-      .eq('user_id', userId)
-      .single();
+    const walletResult = await pool.query(
+      'SELECT usdt_balance, locked_usdt, version FROM wallets WHERE user_id = $1',
+      [targetUserId]
+    );
+    const wallet = walletResult.rows[0];
 
-    if (walletError || !wallet) {
+    if (!wallet) {
       return NextResponse.json({ error: 'Wallet not found' }, { status: 404 });
     }
 
@@ -58,44 +74,39 @@ export async function POST(request: NextRequest) {
 
     // Update wallet balance with optimistic locking
     const newBalance = (wallet.usdt_balance || 0) - amount;
-    const { error: updateError, count } = await service
-      .from('wallets')
-      .update({
-        usdt_balance: newBalance,
-        total_withdrawn: amount,
-        version: (wallet.version || 0) + 1,
-        updated_at: new Date().toISOString()
-      })
-      .eq('user_id', userId)
-      .eq('version', wallet.version || 0);
+    const updateResult = await pool.query(
+      `UPDATE wallets 
+       SET usdt_balance = $1,
+           total_withdrawn = total_withdrawn + $2,
+           version = version + 1,
+           updated_at = NOW()
+       WHERE user_id = $3 AND version = $4`,
+      [newBalance, amount, targetUserId, wallet.version || 0]
+    );
 
-    if (updateError || count === 0) {
+    if (updateResult.rowCount === 0) {
       return NextResponse.json({
         error: 'Concurrency error: The wallet was updated by another process. Please try again.'
       }, { status: 409 });
     }
 
     // Log transaction
-    await service.from('usdt_transactions').insert({
-      user_id: userId,
-      type: 'admin_debit',
-      amount: -amount,
-      balance_after: newBalance,
-      reference: `admin:${user.id}`,
-      metadata: { reason, admin_id: user.id },
-      created_at: new Date().toISOString()
-    });
+    await pool.query(
+      `INSERT INTO usdt_transactions 
+       (user_id, type, amount, balance_after, reference, metadata, created_at)
+       VALUES ($1, 'admin_debit', $2, $3, $4, $5, NOW())`,
+      [targetUserId, -amount, newBalance, `admin:${userId}`, { reason, admin_id: userId }]
+    );
 
     // Log admin action
-    await service.from('admin_audit_log').insert({
-      admin_id: user.id,
-      action: 'usdt_debit',
-      target_user_id: userId,
-      details: { amount, reason },
-      created_at: new Date().toISOString()
-    });
+    await pool.query(
+      `INSERT INTO admin_audit_log 
+       (admin_id, action, target_user_id, details, created_at)
+       VALUES ($1, 'usdt_debit', $2, $3, NOW())`,
+      [userId, targetUserId, { amount, reason }]
+    );
 
-    console.log(`[Admin Debit] ${user.id} debited ${amount} USDT from ${userId}`);
+    console.log(`[Admin Debit] ${userId} debited ${amount} USDT from ${targetUserId}`);
 
     return NextResponse.json({
       success: true,

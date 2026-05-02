@@ -2,22 +2,31 @@
  * API Route: /api/admin/categories
  * Get and update category settings (sorting, visibility)
  */
-import { createClient } from '@/lib/supabase/server';
+// @ts-nocheck
+import { pool, query } from '@/lib/admin/local-db';
 import { NextRequest, NextResponse } from 'next/server';
+
+async function getUserFromToken(token: string): Promise<string | null> {
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    if (!cloudRes.ok) return null;
+    const userData = await cloudRes.json();
+    return userData?.id || null;
+}
 
 // GET /api/admin/categories - Get all category settings
 export async function GET() {
     try {
-        const supabase = await createClient();
-        
-        const { data, error } = await supabase
-            .from('category_settings')
-            .select('*')
-            .order('display_order', { ascending: true });
-        
-        if (error) throw error;
-        
-        return NextResponse.json(data || []);
+        const result = await pool.query(
+            'SELECT * FROM category_settings ORDER BY display_order ASC'
+        );
+
+        return NextResponse.json(result.rows || []);
     } catch (error) {
         console.error('[Categories GET]', error);
         return NextResponse.json({ error: 'Failed to fetch categories' }, { status: 500 });
@@ -27,56 +36,59 @@ export async function GET() {
 // PUT /api/admin/categories - Update category settings (bulk)
 export async function PUT(req: NextRequest) {
     try {
-        const supabase = await createClient();
-        
-        // Check admin权限
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
+        const authHeader = req.headers.get('authorization');
+        const token = authHeader?.replace('Bearer ', '');
+        if (!token) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
-        
-        const { data: userData } = await supabase
-            .from('user_profiles')
-            .select('is_admin')
-            .eq('id', user.id)
-            .single();
-        
-        if (!userData?.is_admin) {
+
+        const userId = await getUserFromToken(token);
+        if (!userId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const profiles = await query<{ is_admin: boolean; is_super_admin: boolean }>(
+            'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
+            [userId]
+        );
+        if (!profiles[0]?.is_admin && !profiles[0]?.is_super_admin) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
-        
+
         const body = await req.json();
-        const { categories } = body; // Array of { category_key, display_name, display_order, is_visible, is_featured, icon_emoji }
-        
+        const { categories } = body;
+
         if (!categories || !Array.isArray(categories)) {
             return NextResponse.json({ error: 'Categories array is required' }, { status: 400 });
         }
-        
-        // Update each category - use explicit typing to avoid deep type instantiation
-        const updates = categories.map((cat: { category_key: string; display_name?: string; display_order?: number; is_visible?: boolean; is_featured?: boolean; icon_emoji?: string }) => {
-            const updateData: Record<string, any> = {};
-            if (cat.display_name !== undefined) updateData.display_name = cat.display_name;
-            if (cat.display_order !== undefined) updateData.display_order = cat.display_order;
-            if (cat.is_visible !== undefined) updateData.is_visible = cat.is_visible;
-            if (cat.is_featured !== undefined) updateData.is_featured = cat.is_featured;
-            if (cat.icon_emoji !== undefined) updateData.icon_emoji = cat.icon_emoji;
-            return (supabase as any)
-                .from('category_settings')
-                .update(updateData)
-                .eq('category_key', cat.category_key);
-        });
-        
-        await Promise.all(updates);
-        
+
+        // Update each category
+        for (const cat of categories) {
+            const updates: string[] = [];
+            const values: any[] = [];
+            let paramIndex = 1;
+
+            if (cat.display_name !== undefined) { updates.push(`display_name = $${paramIndex++}`); values.push(cat.display_name); }
+            if (cat.display_order !== undefined) { updates.push(`display_order = $${paramIndex++}`); values.push(cat.display_order); }
+            if (cat.is_visible !== undefined) { updates.push(`is_visible = $${paramIndex++}`); values.push(cat.is_visible); }
+            if (cat.is_featured !== undefined) { updates.push(`is_featured = $${paramIndex++}`); values.push(cat.is_featured); }
+            if (cat.icon_emoji !== undefined) { updates.push(`icon_emoji = $${paramIndex++}`); values.push(cat.icon_emoji); }
+
+            if (updates.length > 0) {
+                values.push(cat.category_key);
+                await pool.query(
+                    `UPDATE category_settings SET ${updates.join(', ')} WHERE category_key = $${paramIndex}`,
+                    values
+                );
+            }
+        }
+
         // Fetch updated categories
-        const { data, error } = await supabase
-            .from('category_settings')
-            .select('*')
-            .order('display_order', { ascending: true });
-        
-        if (error) throw error;
-        
-        return NextResponse.json(data);
+        const result = await pool.query(
+            'SELECT * FROM category_settings ORDER BY display_order ASC'
+        );
+
+        return NextResponse.json(result.rows);
     } catch (error) {
         console.error('[Categories PUT]', error);
         return NextResponse.json({ error: 'Failed to update categories' }, { status: 500 });

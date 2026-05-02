@@ -33,7 +33,19 @@ import {
   BarChart3,
   Medal
 } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+
+// API helper using fetch (routes use local PostgreSQL)
+async function adminFetch(path: string, options?: RequestInit) {
+  const res = await fetch(path, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Request failed' }));
+    throw new Error(err.error || 'API error');
+  }
+  return res.json();
+}
 
 interface Expert {
   id: string;
@@ -112,13 +124,8 @@ export function ExpertPanel() {
   const fetchExperts = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('expert_panel')
-        .select('*')
-        .order('reputation_score', { ascending: false });
-
-      if (error) throw error;
-      setExperts(data || []);
+      const result = await adminFetch('/api/admin/experts?tab=experts');
+      setExperts(result.data || []);
     } catch (err) {
       console.error('Failed to fetch experts:', err);
     } finally {
@@ -128,21 +135,8 @@ export function ExpertPanel() {
 
   const fetchVotes = async (expertId: string) => {
     try {
-      const { data, error } = await supabase
-        .from('expert_votes')
-        .select(`
-          *,
-          markets:event_id (
-            question,
-            outcome
-          )
-        `)
-        .eq('expert_id', expertId)
-        .order('created_at', { ascending: false })
-        .limit(20);
-
-      if (error) throw error;
-      setVotes(data || []);
+      const result = await adminFetch(`/api/admin/experts?tab=votes&expert_id=${expertId}`);
+      setVotes(result.data || []);
     } catch (err) {
       console.error('Failed to fetch votes:', err);
     }
@@ -154,16 +148,10 @@ export function ExpertPanel() {
 
   const handleVerifyExpert = async (expertId: string, verified: boolean) => {
     try {
-      const { error } = await supabase
-        .from('expert_panel')
-        .update({ 
-          is_verified: verified,
-          verified_at: verified ? new Date().toISOString() : null,
-          verified_by: verified ? (await supabase.auth.getUser()).data.user?.id : null
-        })
-        .eq('id', expertId);
-
-      if (error) throw error;
+      await adminFetch('/api/admin/experts', {
+        method: 'PATCH',
+        body: JSON.stringify({ id: expertId, action: 'verify' })
+      });
       fetchExperts();
     } catch (err) {
       console.error('Failed to verify expert:', err);
@@ -172,29 +160,16 @@ export function ExpertPanel() {
 
   const handleAddExpert = async () => {
     try {
-      // Create user first (simplified - in production you'd send invitation)
-      const { data: userData, error: userError } = await supabase.auth.signUp({
-        email: newExpert.email,
-        password: Math.random().toString(36).slice(-8), // Random temp password
-      });
-
-      if (userError) throw userError;
-
-      // Create expert profile
-      const { error } = await supabase
-        .from('expert_panel')
-        .insert({
-          user_id: userData.user?.id,
+      await adminFetch('/api/admin/experts', {
+        method: 'POST',
+        body: JSON.stringify({
           expert_name: newExpert.expert_name,
+          email: newExpert.email,
           credentials: newExpert.credentials,
-          specializations: newExpert.specializations.split(',').map(s => s.trim()),
+          specializations: newExpert.specializations.split(',').map((s: string) => s.trim()),
           bio: newExpert.bio,
-          is_verified: false,
-          is_active: true
-        });
-
-      if (error) throw error;
-
+        })
+      });
       setAddExpertOpen(false);
       setNewExpert({ expert_name: '', email: '', credentials: '', specializations: '', bio: '' });
       fetchExperts();

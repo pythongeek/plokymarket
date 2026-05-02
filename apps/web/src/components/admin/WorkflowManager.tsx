@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -13,6 +12,19 @@ import {
   RefreshCw, Save, Edit2, Zap
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+
+// API helper using fetch (routes use local PostgreSQL)
+async function adminFetch(path: string, options?: RequestInit) {
+  const res = await fetch(path, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Request failed' }));
+    throw new Error(err.error || 'API error');
+  }
+  return res.json();
+}
 
 interface WorkflowConfig {
   id: string;
@@ -29,35 +41,27 @@ interface WorkflowConfig {
 }
 
 export default function WorkflowManager() {
-  const supabase = createClient();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [editingCron, setEditingCron] = useState<string | null>(null);
   const [cronValues, setCronValues] = useState<Record<string, string>>({});
 
-  // Fetch workflows from database
+  // Fetch workflows via API route (uses local PostgreSQL)
   const { data: workflows, isLoading, refetch } = useQuery({
     queryKey: ['workflowConfigs'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('workflow_configs')
-        .select('*')
-        .order('name');
-
-      if (error) throw error;
-      return data as WorkflowConfig[];
+      const result = await adminFetch('/api/admin/workflows');
+      return result.data as WorkflowConfig[];
     }
   });
 
   // Toggle workflow active/inactive
   const toggleMutation = useMutation({
     mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
-      const { error } = await supabase
-        .from('workflow_configs')
-        .update({ is_active: isActive, updated_at: new Date().toISOString() })
-        .eq('id', id);
-
-      if (error) throw error;
+      await adminFetch('/api/admin/workflows', {
+        method: 'PATCH',
+        body: JSON.stringify({ id, action: 'toggle', is_active: isActive })
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['workflowConfigs'] });
@@ -71,12 +75,10 @@ export default function WorkflowManager() {
   // Update cron expression
   const updateCronMutation = useMutation({
     mutationFn: async ({ id, cron }: { id: string; cron: string }) => {
-      const { error } = await supabase
-        .from('workflow_configs')
-        .update({ cron_expression: cron, updated_at: new Date().toISOString() })
-        .eq('id', id);
-
-      if (error) throw error;
+      await adminFetch('/api/admin/workflows', {
+        method: 'PATCH',
+        body: JSON.stringify({ id, cron_expression: cron })
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['workflowConfigs'] });

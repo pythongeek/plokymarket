@@ -1,23 +1,40 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { pool } from '@/lib/admin/local-db';
+
+async function getUserFromToken(token: string): Promise<string | null> {
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    if (!cloudRes.ok) return null;
+    const userData = await cloudRes.json();
+    return userData?.id || null;
+}
 
 // GET /api/admin/support/messages?ticket_id=xxx - Get ticket messages
 export async function GET(req: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    if (authError || !user) {
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const token = authHeader.split(' ')[1];
+
+    const userId = await getUserFromToken(token);
+    if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Check admin status
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('is_admin')
-      .eq('id', user.id)
-      .single();
+    const profileResult = await pool.query(
+      'SELECT is_admin FROM user_profiles WHERE id = $1',
+      [userId]
+    );
+    const profile = profileResult.rows[0];
 
     if (!profile?.is_admin) {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
@@ -30,18 +47,16 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Ticket ID required' }, { status: 400 });
     }
 
-    const { data, error } = await supabase
-      .from('support_ticket_messages')
-      .select(`
-        *,
-        sender:sender_id(full_name)
-      `)
-      .eq('ticket_id', ticketId)
-      .order('created_at', { ascending: true });
+    const dataResult = await pool.query(
+      `SELECT stm.*, up.full_name as sender_full_name
+       FROM support_ticket_messages stm
+       LEFT JOIN user_profiles up ON up.id = stm.sender_id
+       WHERE stm.ticket_id = $1
+       ORDER BY stm.created_at ASC`,
+      [ticketId]
+    );
 
-    if (error) throw error;
-
-    return NextResponse.json({ data: data || [] });
+    return NextResponse.json({ data: dataResult.rows || [] });
   } catch (error: any) {
     console.error('Error fetching messages:', error);
     return NextResponse.json(
@@ -55,19 +70,23 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    if (authError || !user) {
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const token = authHeader.split(' ')[1];
+
+    const userId = await getUserFromToken(token);
+    if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Check admin status
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('is_admin')
-      .eq('id', user.id)
-      .single();
+    const profileResult = await pool.query(
+      'SELECT is_admin FROM user_profiles WHERE id = $1',
+      [userId]
+    );
+    const profile = profileResult.rows[0];
 
     if (!profile?.is_admin) {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
@@ -82,27 +101,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { data, error } = await supabase
-      .from('support_ticket_messages')
-      .insert({
-        ticket_id,
-        sender_id: user.id,
-        sender_type: 'admin',
-        message,
-        is_internal_note: is_internal_note || false,
-        attachments: attachments || []
-      })
-      .select()
-      .single();
+    const insertResult = await pool.query(
+      `INSERT INTO support_ticket_messages 
+       (ticket_id, sender_id, sender_type, message, is_internal_note, attachments)
+       VALUES ($1, $2, 'admin', $3, $4, $5)
+       RETURNING *`,
+      [ticket_id, userId, message, is_internal_note || false, attachments || []]
+    );
 
-    if (error) throw error;
+    const data = insertResult.rows[0];
 
     // Update ticket status if not internal note
     if (!is_internal_note) {
-      await supabase
-        .from('support_tickets')
-        .update({ status: 'in_progress' })
-        .eq('id', ticket_id);
+      await pool.query(
+        `UPDATE support_tickets SET status = 'in_progress' WHERE id = $1`,
+        [ticket_id]
+      );
     }
 
     return NextResponse.json({ data });

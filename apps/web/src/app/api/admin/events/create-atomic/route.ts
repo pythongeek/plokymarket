@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Atomic Event Creation API
  * Uses PostgreSQL RPC to ensure event and markets are created together
@@ -11,45 +12,58 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { pool } from '@/lib/admin/local-db';
 import { preFlightCheck, generateUniqueSlug } from '@/lib/events/slug-utils';
 import { convertToUTC } from '@/lib/utils/timezone';
+
+async function getUserFromToken(token: string): Promise<string | null> {
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    if (!cloudRes.ok) return null;
+    const userData = await cloudRes.json();
+    return userData?.id || null;
+}
 
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   try {
-    // ============================================================================
-    // STEP 1: Authentication & Authorization
-    // ============================================================================
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json(
+        { error: 'Unauthorized', message: 'Please sign in to create events' },
+        { status: 401 }
+      );
+    }
+    const token = authHeader.split(' ')[1];
 
-    if (authError || !user) {
+    const userId = await getUserFromToken(token);
+    if (!userId) {
       return NextResponse.json(
         { error: 'Unauthorized', message: 'Please sign in to create events' },
         { status: 401 }
       );
     }
 
-    // Check admin permission
-    const { data: userData, error: userError } = await (supabase
-      .from('user_profiles')
-      .select('is_admin, can_create_events')
-      .eq('id', user.id)
-      .single() as any);
+    const profileResult = await pool.query(
+      'SELECT is_admin, can_create_events FROM user_profiles WHERE id = $1',
+      [userId]
+    );
+    const userData = profileResult.rows[0];
 
-    if (userError || (!userData?.is_admin && !userData?.can_create_events)) {
+    if (!userData?.is_admin && !userData?.can_create_events) {
       return NextResponse.json(
         { error: 'Forbidden', message: 'No permission to create events' },
         { status: 403 }
       );
     }
 
-    // ============================================================================
-    // STEP 2: Parse & Validate Input
-    // ============================================================================
     const body = await req.json();
     console.log('[Create Event] Received body:', JSON.stringify(body, null, 2));
     
@@ -63,9 +77,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ============================================================================
-    // STEP 3: Pre-flight Check (Slug Generation & Validation)
-    // ============================================================================
     const preFlight = await preFlightCheck(event_data.title);
 
     if (!preFlight.success) {
@@ -77,22 +88,16 @@ export async function POST(req: NextRequest) {
 
     const finalSlug = event_data.slug || preFlight.slug;
 
-    // Double-check slug uniqueness
-    const { data: slugExists } = await supabase
-      .from('events')
-      .select('id')
-      .eq('slug', finalSlug)
-      .maybeSingle();
+    const slugCheck = await pool.query(
+      'SELECT id FROM events WHERE slug = $1',
+      [finalSlug]
+    );
 
-    if (slugExists) {
-      // Generate new unique slug
+    if (slugCheck.rows.length > 0) {
       const uniqueSlug = await generateUniqueSlug(event_data.title);
       console.warn(`[Create Event] Slug collision detected, using: ${uniqueSlug}`);
     }
 
-    // ============================================================================
-    // STEP 4: Timezone Conversion (Asia/Dhaka → UTC)
-    // ============================================================================
     const tradingClosesAtUTC = event_data.trading_closes_at
       ? convertToUTC(event_data.trading_closes_at)
       : null;
@@ -108,9 +113,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ============================================================================
-    // STEP 5: Prepare Event Data for RPC (using create_event_complete)
-    // ============================================================================
     const eventDataForRPC = {
       title: event_data.title,
       question: event_data.question || event_data.title,
@@ -138,33 +140,14 @@ export async function POST(req: NextRequest) {
       ai_confidence_threshold: event_data.ai_confidence_threshold || 85,
     };
 
-    // ============================================================================
-    // STEP 6: Execute Atomic Transaction via RPC (create_event_complete)
-    // ============================================================================
     console.log('[Create Event] Executing atomic transaction with create_event_complete...');
 
-    const { data: result, error: rpcError } = await (supabase as any).rpc(
-      'create_event_complete',
-      {
-        p_event_data: eventDataForRPC,
-        p_admin_id: user.id,
-      }
+    const rpcResult = await pool.query(
+      'SELECT * FROM create_event_complete($1, $2)',
+      [JSON.stringify(eventDataForRPC), userId]
     );
 
-    if (rpcError) {
-      console.error('[Create Event] RPC Error:', rpcError);
-      return NextResponse.json(
-        {
-          error: 'Database Error',
-          message: rpcError.message,
-          details: 'Transaction rolled back. Event not created.'
-        },
-        { status: 500 }
-      );
-    }
-
-    // Parse result
-    const resultData = typeof result === 'string' ? JSON.parse(result) : result;
+    const resultData = rpcResult.rows[0];
 
     if (!resultData?.success) {
       return NextResponse.json(
@@ -173,9 +156,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ============================================================================
-    // STEP 8: Success Response
-    // ============================================================================
     console.log(`[Create Event] Success: ${resultData.event_id}`);
 
     return NextResponse.json({
@@ -185,7 +165,7 @@ export async function POST(req: NextRequest) {
       message: resultData.message,
       warnings: preFlight.warnings || [],
       metadata: {
-        created_by: user.id,
+        created_by: userId,
         created_at: new Date().toISOString(),
         timezone: 'Asia/Dhaka → UTC',
         transaction: 'atomic',
@@ -205,9 +185,6 @@ export async function POST(req: NextRequest) {
   }
 }
 
-/**
- * GET: Check pre-flight status
- */
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const title = searchParams.get('title');

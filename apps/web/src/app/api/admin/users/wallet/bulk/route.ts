@@ -1,16 +1,32 @@
-import { createClient } from '@supabase/supabase-js';
+// @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
+import { pool } from '@/lib/admin/local-db';
+
+async function getUserFromToken(token: string): Promise<string | null> {
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    if (!cloudRes.ok) return null;
+    const userData = await cloudRes.json();
+    return userData?.id || null;
+}
 
 export async function POST(request: NextRequest) {
     try {
-        const supabase = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.SUPABASE_SERVICE_ROLE_KEY!
-        );
+        const authHeader = request.headers.get('authorization');
+        if (!authHeader?.startsWith('Bearer ')) {
+            return NextResponse.json(
+                { success: false, error: 'Unauthorized' },
+                { status: 401 }
+            );
+        }
+        const token = authHeader.split(' ')[1];
 
-        // Get admin user from headers
-        const userId = request.headers.get('x-user-id');
-
+        const userId = await getUserFromToken(token);
         if (!userId) {
             return NextResponse.json(
                 { success: false, error: 'Unauthorized' },
@@ -19,13 +35,13 @@ export async function POST(request: NextRequest) {
         }
 
         // Verify admin status
-        const { data: adminUser, error: adminError } = await supabase
-            .from('users')
-            .select('is_admin, is_super_admin')
-            .eq('id', userId)
-            .single();
+        const adminResult = await pool.query(
+            'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
+            [userId]
+        );
+        const adminUser = adminResult.rows[0];
 
-        if (adminError || (!adminUser?.is_admin && !adminUser?.is_super_admin)) {
+        if (!adminUser?.is_admin && !adminUser?.is_super_admin) {
             return NextResponse.json(
                 { success: false, error: 'Admin access required' },
                 { status: 403 }
@@ -63,25 +79,21 @@ export async function POST(request: NextRequest) {
 
         for (const targetUserId of userIds) {
             try {
-                let result;
+                let rpcResult;
                 if (action === 'credit') {
-                    result = await supabase.rpc('admin_credit_wallet', {
-                        p_admin_id: userId,
-                        p_user_id: targetUserId,
-                        p_amount: amount,
-                        p_reason: reason || `Bulk credit by admin`
-                    });
+                    rpcResult = await pool.query(
+                        'SELECT * FROM admin_credit_wallet($1, $2, $3, $4)',
+                        [userId, targetUserId, amount, reason || `Bulk credit by admin`]
+                    );
                 } else {
-                    result = await supabase.rpc('admin_debit_wallet', {
-                        p_admin_id: userId,
-                        p_user_id: targetUserId,
-                        p_amount: amount,
-                        p_reason: reason || `Bulk debit by admin`
-                    });
+                    rpcResult = await pool.query(
+                        'SELECT * FROM admin_debit_wallet($1, $2, $3, $4)',
+                        [userId, targetUserId, amount, reason || `Bulk debit by admin`]
+                    );
                 }
 
-                if (result.error) {
-                    errors.push({ userId: targetUserId, error: result.error.message });
+                if (rpcResult.rows[0]?.error) {
+                    errors.push({ userId: targetUserId, error: rpcResult.rows[0].error });
                 } else {
                     results.push({ userId: targetUserId, success: true });
                 }

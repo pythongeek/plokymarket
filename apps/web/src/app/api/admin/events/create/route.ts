@@ -6,20 +6,26 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { nanoid } from 'nanoid';
 import { QStashClient } from '@/lib/upstash/workflows';
 import { MarketService } from '@/lib/services/MarketService';
+import { pool, query } from '@/lib/admin/local-db';
 
 export const runtime = 'edge';
 export const maxDuration = 30;
 
-// Initialize Supabase client
-const getSupabase = () => createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { persistSession: false } }
-);
+async function getUserFromToken(token: string): Promise<string | null> {
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    if (!cloudRes.ok) return null;
+    const userData = await cloudRes.json();
+    return userData?.id || null;
+}
 
 // Generate unique slug
 function generateSlug(title: string): string {
@@ -114,7 +120,6 @@ function validateEventData(body: any): { valid: boolean; error?: string; data?: 
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
-  const supabase = getSupabase();
 
   try {
     // 1. Authenticate user
@@ -128,10 +133,10 @@ export async function POST(request: NextRequest) {
     }
 
     const token = authHeader.split(' ')[1];
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    const userId = await getUserFromToken(token);
 
-    if (authError || !user) {
-      console.error('[Event Create] Auth error:', authError);
+    if (!userId) {
+      console.error('[Event Create] Auth error: invalid token');
       return NextResponse.json(
         { success: false, error: 'Invalid token' },
         { status: 401 }
@@ -139,18 +144,13 @@ export async function POST(request: NextRequest) {
     }
 
     // 2. Check admin status
-    const { data: profile, error: profileError } = await supabase
-      .from('user_profiles')
-      .select('is_admin, is_super_admin')
-      .eq('id', user.id)
-      .single();
+    const profiles = await query<{ is_admin: boolean; is_super_admin: boolean }>(
+      'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
+      [userId]
+    );
 
-    if (profileError) {
-      console.error('[Event Create] Profile fetch error:', profileError);
-    }
-
-    if (!profile?.is_admin && !profile?.is_super_admin) {
-      console.error('[Event Create] User not admin:', user.id);
+    if (!profiles[0]?.is_admin && !profiles[0]?.is_super_admin) {
+      console.error('[Event Create] User not admin:', userId);
       return NextResponse.json(
         { success: false, error: 'Admin access required' },
         { status: 403 }
@@ -189,45 +189,51 @@ export async function POST(request: NextRequest) {
     console.log('[Event Create] Creating event with title:', data.title);
 
     // Insert Event
-    const { data: event, error: eventError } = await supabase
-      .from('events')
-      .insert({
-        title: data.title,
-        name: data.title,
-        name_en: data.title,
-        slug: data.slug,
-        question: data.question,
-        description: data.description,
-        category: data.category,
-        subcategory: data.subcategory,
-        status: 'active',
-        starts_at: new Date().toISOString(),
-        trading_opens_at: new Date().toISOString(),
-        trading_closes_at: data.trading_closes_at,
-        event_date: data.trading_closes_at,
-        resolution_method: data.resolution_method,
-        resolution_delay_hours: data.resolution_delay_hours,
-        initial_liquidity: data.initial_liquidity,
-        current_liquidity: data.initial_liquidity,
-        is_featured: data.is_featured,
-        answer_type: 'binary',
-        answer1: data.answer1,
-        answer2: data.answer2,
-        created_by: user.id,
-        image_url: data.image_url,
-        tags: data.tags,
-      })
-      .select()
-      .single();
+    const eventResult = await pool.query(
+      `INSERT INTO events (
+        title, name, name_en, slug, question, description, category, subcategory,
+        status, starts_at, trading_opens_at, trading_closes_at, event_date,
+        resolution_method, resolution_delay_hours, initial_liquidity, current_liquidity,
+        is_featured, answer_type, answer1, answer2, created_by, image_url, tags
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+      RETURNING *`,
+      [
+        data.title,
+        data.title,
+        data.title,
+        data.slug,
+        data.question,
+        data.description,
+        data.category,
+        data.subcategory,
+        'active',
+        new Date().toISOString(),
+        new Date().toISOString(),
+        data.trading_closes_at,
+        data.trading_closes_at,
+        data.resolution_method,
+        data.resolution_delay_hours,
+        data.initial_liquidity,
+        data.initial_liquidity,
+        data.is_featured,
+        'binary',
+        data.answer1,
+        data.answer2,
+        userId,
+        data.image_url,
+        data.tags
+      ]
+    );
 
-    if (eventError) {
-      console.error('[Event Create] Event insert error:', eventError);
+    if (eventResult.error) {
+      console.error('[Event Create] Event insert error:', eventResult.error);
       return NextResponse.json(
-        { success: false, error: `Failed to create event: ${eventError.message}` },
+        { success: false, error: `Failed to create event: ${eventResult.error.message}` },
         { status: 500 }
       );
     }
 
+    const event = eventResult.rows[0];
     const eventId = event.id;
     console.log('[Event Create] Event created:', eventId);
 
@@ -236,36 +242,38 @@ export async function POST(request: NextRequest) {
     console.log('[Event Create] Creating market for event:', eventId);
 
     // Only use columns that exist in the markets table
-    const marketInsertData = {
-      event_id: eventId,
-      name: data.title,
-      question: data.question,
-      description: data.description || null,
-      category: data.category,
-      subcategory: data.subcategory || null,
-      trading_closes_at: data.trading_closes_at,
-      event_date: data.trading_closes_at,  // Required field
-      initial_liquidity: data.initial_liquidity,
-      liquidity: data.initial_liquidity,
-      status: 'active',
-      slug: `${data.slug}-market`,
-      answer_type: 'binary',
-      answer1: data.answer1,
-      answer2: data.answer2,
-      is_featured: data.is_featured || false,
-      created_by: user.id,
-      image_url: data.image_url || null,
-      total_volume: 0,
-    };
+    const marketResult = await pool.query(
+      `INSERT INTO markets (
+        event_id, name, question, description, category, subcategory,
+        trading_closes_at, event_date, initial_liquidity, liquidity, status, slug,
+        answer_type, answer1, answer2, is_featured, created_by, image_url, total_volume
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+      RETURNING *`,
+      [
+        eventId,
+        data.title,
+        data.question,
+        data.description || null,
+        data.category,
+        data.subcategory || null,
+        data.trading_closes_at,
+        data.trading_closes_at,
+        data.initial_liquidity,
+        data.initial_liquidity,
+        'active',
+        `${data.slug}-market`,
+        'binary',
+        data.answer1,
+        data.answer2,
+        data.is_featured || false,
+        userId,
+        data.image_url || null,
+        0
+      ]
+    );
 
-    const { data: market, error: marketError } = await supabase
-      .from('markets')
-      .insert(marketInsertData)
-      .select()
-      .single();
-
-    if (marketError) {
-      console.error('[Event Create] Market insert error:', marketError);
+    if (marketResult.error) {
+      console.error('[Event Create] Market insert error:', marketResult.error);
       // Don't fail the whole request - event is already created
       // Return success but with warning
       return NextResponse.json({
@@ -279,14 +287,15 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    const market = marketResult.rows[0];
     const marketId = market.id;
     console.log('[Event Create] Market created:', marketId);
 
     // 6. Update event with market_id
-    await supabase
-      .from('events')
-      .update({ market_id: marketId })
-      .eq('id', eventId);
+    await pool.query(
+      'UPDATE events SET market_id = $1 WHERE id = $2',
+      [marketId, eventId]
+    );
 
     // 7. Create outcomes in the outcomes table
     try {
@@ -307,9 +316,17 @@ export async function POST(request: NextRequest) {
         }
       ];
 
-      const { error: outcomesError } = await supabase.from('outcomes').insert(outcomes);
-      if (outcomesError) {
-        console.warn('[Event Create] Outcomes creation error:', outcomesError.message);
+      const outcomesResult = await pool.query(
+        `INSERT INTO outcomes (market_id, label, label_bn, current_price, display_order) 
+         VALUES ($1, $2, $3, $4, $5), ($6, $7, $8, $9, $10)`,
+        [
+          marketId, 'Yes', data.answer1 || 'হ্যাঁ (Yes)', 0.5, 0,
+          marketId, 'No', data.answer2 || 'না (No)', 0.5, 1
+        ]
+      );
+
+      if (outcomesResult.error) {
+        console.warn('[Event Create] Outcomes creation error:', outcomesResult.error.message);
       } else {
         console.log('[Event Create] Outcomes created for market:', marketId);
       }
@@ -324,7 +341,7 @@ export async function POST(request: NextRequest) {
       const seedOrders = [
         {
           market_id: marketId,
-          user_id: user.id,
+          user_id: userId,
           order_type: 'limit',
           side: 'buy',
           outcome: ensureUpperCase('YES'),
@@ -335,7 +352,7 @@ export async function POST(request: NextRequest) {
         },
         {
           market_id: marketId,
-          user_id: user.id,
+          user_id: userId,
           order_type: 'limit',
           side: 'buy',
           outcome: ensureUpperCase('NO'),
@@ -346,9 +363,17 @@ export async function POST(request: NextRequest) {
         }
       ];
 
-      const { error: seedError } = await supabase.from('orders').insert(seedOrders);
-      if (seedError) {
-        console.warn('[Event Create] Orderbook seeding error:', seedError.message);
+      const seedResult = await pool.query(
+        `INSERT INTO orders (market_id, user_id, order_type, side, outcome, price, quantity, status, filled_quantity) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9), ($10, $11, $12, $13, $14, $15, $16, $17, $18)`,
+        [
+          marketId, userId, 'limit', 'buy', ensureUpperCase('YES'), 0.48, Math.floor(data.initial_liquidity / 2 / 0.48), 'open', 0,
+          marketId, userId, 'limit', 'buy', ensureUpperCase('NO'), 0.48, Math.floor(data.initial_liquidity / 2 / 0.48), 'open', 0
+        ]
+      );
+
+      if (seedResult.error) {
+        console.warn('[Event Create] Orderbook seeding error:', seedResult.error.message);
       } else {
         console.log('[Event Create] Orderbook seeded with initial liquidity');
       }

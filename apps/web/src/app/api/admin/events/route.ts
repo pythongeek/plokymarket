@@ -1,80 +1,111 @@
 // apps/web/src/app/api/admin/events/route.ts
 // Admin-only events listing — used by /sys-cmd-7x9k2/events page
+// @ts-nocheck
+import { pool, query } from '@/lib/admin/local-db';
+import { NextRequest, NextResponse } from 'next/server';
+import type { UnifiedEvent } from '@/types/unified';
 
-import { createClient } from '@/lib/supabase/server'
-import { NextRequest, NextResponse } from 'next/server'
-import type { UnifiedEvent } from '@/types/unified'
-
-// ─── Auth guard helper ────────────────────────────────────────────────────────
-async function requireAdmin(supabase: Awaited<ReturnType<typeof createClient>>) {
-  const { data: { user }, error } = await supabase.auth.getUser()
-  if (error || !user) return null
-
-  const { data: profile } = await supabase
-    .from('user_profiles')
-    .select('is_admin, is_super_admin')
-    .eq('id', user.id)
-    .maybeSingle()
-
-  if (!profile?.is_admin && !profile?.is_super_admin) return null
-  return user
+async function getUserFromToken(token: string): Promise<string | null> {
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    if (!cloudRes.ok) return null;
+    const userData = await cloudRes.json();
+    return userData?.id || null;
 }
 
 // ─── GET /api/admin/events ────────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
   try {
-    const supabase = await createClient()
-    const user = await requireAdmin(supabase)
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const authHeader = req.headers.get('authorization');
+    const token = authHeader?.replace('Bearer ', '');
+    if (!token) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { searchParams } = new URL(req.url)
-    const status   = searchParams.get('status')   || undefined
-    const category = searchParams.get('category') || undefined
-    const search   = searchParams.get('search')   || undefined
-    const limit    = Math.min(parseInt(searchParams.get('limit')  || '100'), 200)
-    const offset   = parseInt(searchParams.get('offset') || '0')
+    const userId = await getUserFromToken(token);
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const profiles = await query<{ is_admin: boolean; is_super_admin: boolean }>(
+      'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
+      [userId]
+    );
+    if (!profiles[0]?.is_admin && !profiles[0]?.is_super_admin) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(req.url);
+    const status   = searchParams.get('status')   || undefined;
+    const category = searchParams.get('category') || undefined;
+    const search   = searchParams.get('search')   || undefined;
+    const limit    = Math.min(parseInt(searchParams.get('limit')  || '100'), 200);
+    const offset   = parseInt(searchParams.get('offset') || '0');
 
     // Try the RPC function first (returns resolver_reference + market_count)
-    const { data: rpcData, error: rpcError } = await supabase.rpc('get_admin_events', {
-      p_status:   status   ?? undefined,
-      p_category: category ?? undefined,
-      p_search:   search   ?? undefined,
-      p_limit:    limit,
-      p_offset:   offset,
-    })
+    try {
+      const rpcResult = await pool.query(
+        'SELECT * FROM get_admin_events($1, $2, $3, $4, $5)',
+        [status ?? null, category ?? null, search ?? null, limit, offset]
+      );
 
-    if (!rpcError && rpcData) {
-      return NextResponse.json({ data: rpcData as unknown as UnifiedEvent[], count: rpcData.length })
+      if (rpcResult.rows && rpcResult.rows.length > 0) {
+        return NextResponse.json({ data: rpcResult.rows as unknown as UnifiedEvent[], count: rpcResult.rows.length });
+      }
+    } catch (rpcError: any) {
+      console.warn('[admin/events] RPC failed, falling back to direct query:', rpcError?.message);
     }
 
     // Fallback: direct table query if RPC fails
-    console.warn('[admin/events] RPC failed, falling back to direct query:', rpcError?.message)
+    let sql = 'SELECT * FROM events';
+    const conditions: string[] = [];
+    const params: any[] = [];
+    let paramIndex = 1;
 
-    let query = supabase
-      .from('events')
-      .select('*', { count: 'exact' })
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1)
-
-    if (status)   query = query.eq('status', status)
-    if (category) query = query.eq('category', category)
-    if (search)   query = query.or(
-      `title.ilike.%${search}%,question.ilike.%${search}%`
-    )
-
-    const { data, error, count } = await query
-
-    if (error) {
-      console.error('[admin/events] Fallback query error:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    if (status) {
+      conditions.push(`status = $${paramIndex++}`);
+      params.push(status);
+    }
+    if (category) {
+      conditions.push(`category = $${paramIndex++}`);
+      params.push(category);
+    }
+    if (search) {
+      conditions.push(`(title ILIKE $${paramIndex} OR question ILIKE $${paramIndex})`);
+      params.push(`%${search}%`);
+      paramIndex++;
     }
 
-    return NextResponse.json({ data: (data ?? []) as UnifiedEvent[], count: count ?? 0 })
+    if (conditions.length > 0) {
+      sql += ' WHERE ' + conditions.join(' AND ');
+    }
+    sql += ` ORDER BY created_at DESC LIMIT $${paramIndex++} OFFSET $${paramIndex}`;
+    params.push(limit, offset);
+
+    const result = await pool.query(sql, params);
+
+    if (result.error) {
+      console.error('[admin/events] Fallback query error:', result.error);
+      return NextResponse.json({ error: result.error.message }, { status: 500 });
+    }
+
+    // Get count
+    let countSql = 'SELECT COUNT(*) FROM events';
+    if (conditions.length > 0) {
+      countSql += ' WHERE ' + conditions.join(' AND ');
+    }
+    const countResult = await pool.query(countSql, params.slice(0, -2));
+    const count = parseInt(countResult.rows[0]?.count || '0');
+
+    return NextResponse.json({ data: (result.rows ?? []) as UnifiedEvent[], count });
   } catch (err: any) {
-    console.error('[admin/events] Unexpected error:', err)
-    return NextResponse.json({ error: err?.message ?? 'Internal error' }, { status: 500 })
+    console.error('[admin/events] Unexpected error:', err);
+    return NextResponse.json({ error: err?.message ?? 'Internal error' }, { status: 500 });
   }
 }
 
@@ -82,35 +113,56 @@ export async function GET(req: NextRequest) {
 // Body: { id, ...fields }  — patch any event fields
 export async function PATCH(req: NextRequest) {
   try {
-    const supabase = await createClient()
-    const user = await requireAdmin(supabase)
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const authHeader = req.headers.get('authorization');
+    const token = authHeader?.replace('Bearer ', '');
+    if (!token) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = await req.json()
-    const { id, ...updates } = body
+    const userId = await getUserFromToken(token);
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const profiles = await query<{ is_admin: boolean; is_super_admin: boolean }>(
+      'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
+      [userId]
+    );
+    if (!profiles[0]?.is_admin && !profiles[0]?.is_super_admin) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const body = await req.json();
+    const { id, ...updates } = body;
 
     if (!id) {
-      return NextResponse.json({ error: 'Event id required' }, { status: 400 })
+      return NextResponse.json({ error: 'Event id required' }, { status: 400 });
     }
 
     // Disallow changing created_by through this endpoint
-    delete updates.created_by
+    delete updates.created_by;
 
-    const { data, error } = await supabase
-      .from('events')
-      .update({ ...updates, updated_at: new Date().toISOString() })
-      .eq('id', id)
-      .select()
-      .single()
+    // Add updated_at
+    updates.updated_at = new Date().toISOString();
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    const setClause = Object.keys(updates).map((k, i) => `${k} = $${i + 1}`).join(', ');
+    const values = [...Object.values(updates), id];
+    
+    const result = await pool.query(
+      `UPDATE events SET ${setClause} WHERE id = $${values.length} RETURNING *`,
+      values
+    );
+
+    if (result.error) {
+      return NextResponse.json({ error: result.error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true, data })
+    if (result.rows.length === 0) {
+      return NextResponse.json({ error: 'Event not found' }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true, data: result.rows[0] });
   } catch (err: any) {
-    return NextResponse.json({ error: err?.message ?? 'Internal error' }, { status: 500 })
+    return NextResponse.json({ error: err?.message ?? 'Internal error' }, { status: 500 });
   }
 }

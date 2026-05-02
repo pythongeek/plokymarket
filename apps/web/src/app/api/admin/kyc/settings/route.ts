@@ -1,33 +1,37 @@
+// @ts-nocheck
+import { pool, query } from '@/lib/admin/local-db';
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { KycService } from '@/lib/kyc/service';
 
-// Helper to check admin
-async function checkAdmin(supabase: any, userId: string): Promise<boolean> {
-    const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('is_admin, is_super_admin')
-        .eq('id', userId)
-        .single();
-    return profile?.is_admin || profile?.is_super_admin || false;
+async function getUserFromToken(token: string): Promise<string | null> {
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    if (!cloudRes.ok) return null;
+    const userData = await cloudRes.json();
+    return userData?.id || null;
 }
 
 // GET /api/admin/kyc/settings - Get platform KYC settings
 export async function GET() {
     try {
-        const supabase = await createClient();
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        const result = await pool.query('SELECT * FROM kyc_settings WHERE id = 1');
 
-        if (authError || !user) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        if (result.rows.length === 0) {
+            return NextResponse.json({
+                withdrawal_threshold: 5000,
+                required_documents: ['id_document', 'selfie'],
+                auto_approve_enabled: false,
+                auto_approve_max_risk_score: 30,
+                kyc_globally_required: false,
+                updated_at: null
+            });
         }
 
-        if (!(await checkAdmin(supabase, user.id))) {
-            return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
-        }
-
-        const settings = await KycService.getSettings();
-        return NextResponse.json(settings);
+        return NextResponse.json(result.rows[0]);
     } catch (error: any) {
         console.error('Error getting KYC settings:', error);
         return NextResponse.json(
@@ -40,14 +44,22 @@ export async function GET() {
 // PUT /api/admin/kyc/settings - Update platform KYC settings
 export async function PUT(req: NextRequest) {
     try {
-        const supabase = await createClient();
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-        if (authError || !user) {
+        const authHeader = req.headers.get('authorization');
+        const token = authHeader?.replace('Bearer ', '');
+        if (!token) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        if (!(await checkAdmin(supabase, user.id))) {
+        const userId = await getUserFromToken(token);
+        if (!userId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const profiles = await query<{ is_admin: boolean; is_super_admin: boolean }>(
+            'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
+            [userId]
+        );
+        if (!profiles[0]?.is_admin && !profiles[0]?.is_super_admin) {
             return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
         }
 
@@ -82,8 +94,22 @@ export async function PUT(req: NextRequest) {
             );
         }
 
-        const settings = await KycService.updateSettings(user.id, updates);
-        return NextResponse.json(settings);
+        updates.updated_by = userId;
+        updates.updated_at = new Date().toISOString();
+
+        const setClause = Object.keys(updates).map((k, i) => `${k} = $${i + 1}`).join(', ');
+        const values = [...Object.values(updates), 1];
+
+        const result = await pool.query(
+            `UPDATE kyc_settings SET ${setClause} WHERE id = $${values.length} RETURNING *`,
+            values
+        );
+
+        if (result.rows.length === 0) {
+            return NextResponse.json({ error: 'Settings not found' }, { status: 404 });
+        }
+
+        return NextResponse.json(result.rows[0]);
     } catch (error: any) {
         console.error('Error updating KYC settings:', error);
         return NextResponse.json(

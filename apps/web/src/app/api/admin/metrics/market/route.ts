@@ -1,5 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { pool, query } from '@/lib/admin/local-db';
+
+async function getUserFromToken(token: string): Promise<string | null> {
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    if (!cloudRes.ok) return null;
+    const userData = await cloudRes.json();
+    return userData?.id || null;
+}
 
 /**
  * GET /api/admin/metrics/market
@@ -7,27 +20,32 @@ import { createClient } from '@/lib/supabase/server';
  */
 export async function GET(request: NextRequest) {
     try {
-        const supabase = await createClient();
-
         // 1. Authenticate and Admin Check
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        const authHeader = request.headers.get('authorization');
+        if (!authHeader?.startsWith('Bearer ')) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
 
-        const { data: profile } = await supabase
-            .from('user_profiles')
-            .select('id, is_admin, is_super_admin')
-            .eq('id', user.id)
-            .single();
+        const token = authHeader.split(' ')[1];
+        const userId = await getUserFromToken(token);
 
-        if (!profile?.is_admin && !profile?.is_super_admin) {
+        if (!userId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const profiles = await query<{ is_admin: boolean; is_super_admin: boolean }>(
+            'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
+            [userId]
+        );
+
+        if (!profiles[0]?.is_admin && !profiles[0]?.is_super_admin) {
             return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
         }
 
         // 2. Fetch Materialized View
-        const { data: metrics, error } = await supabase
-            .from('market_metrics')
-            .select('*')
-            .order('created_at', { ascending: false });
+        const { rows: metrics, error } = await pool.query(
+            'SELECT * FROM market_metrics ORDER BY created_at DESC'
+        );
 
         if (error) {
             console.error('[Market Metrics API] Fetch error:', error);

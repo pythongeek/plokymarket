@@ -6,8 +6,21 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createServiceClient } from '@/lib/supabase/server';
+import { pool } from '@/lib/admin/local-db';
 import { QStashClient } from '@/lib/upstash/workflows';
+
+async function getUserFromToken(token: string): Promise<string | null> {
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    if (!cloudRes.ok) return null;
+    const userData = await cloudRes.json();
+    return userData?.id || null;
+}
 
 export const runtime = 'edge';
 
@@ -17,20 +30,20 @@ const getQStashClient = () => {
   return new QStashClient({ token });
 };
 
-async function verifyAdmin(supabase: any, request: NextRequest): Promise<boolean> {
+async function verifyAdmin(request: NextRequest): Promise<boolean> {
   const authHeader = request.headers.get('authorization');
   if (!authHeader?.startsWith('Bearer ')) return false;
 
   const token = authHeader.split(' ')[1];
-  const { data: { user } } = await supabase.auth.getUser(token);
+  const userId = await getUserFromToken(token);
   
-  if (!user) return false;
+  if (!userId) return false;
 
-  const { data: profile } = await supabase
-    .from('user_profiles')
-    .select('is_admin, is_super_admin')
-    .eq('id', user.id)
-    .single();
+  const profileResult = await pool.query(
+    'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
+    [userId]
+  );
+  const profile = profileResult.rows[0];
 
   return !!(profile?.is_admin || profile?.is_super_admin);
 }
@@ -85,9 +98,7 @@ const DEFAULT_SCHEDULES = [
 ];
 
 export async function GET(request: NextRequest) {
-  const supabase = await createServiceClient();
-
-  if (!await verifyAdmin(supabase, request)) {
+  if (!await verifyAdmin(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -95,10 +106,9 @@ export async function GET(request: NextRequest) {
     const qstash = getQStashClient();
     const schedules = await qstash.schedules.list();
 
-    const { data: localSchedules } = await supabase
-      .from('workflow_schedules')
-      .select('*')
-      .order('created_at', { ascending: false });
+    const localSchedulesResult = await pool.query(
+      'SELECT * FROM workflow_schedules ORDER BY created_at DESC'
+    );
 
     return NextResponse.json({
       success: true,
@@ -108,7 +118,7 @@ export async function GET(request: NextRequest) {
         cron: s.cron,
         created_at: s.createdAt,
       })),
-      local_schedules: localSchedules || [],
+      local_schedules: localSchedulesResult.rows || [],
     });
 
   } catch (error: any) {
@@ -121,9 +131,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = await createServiceClient();
-
-  if (!await verifyAdmin(supabase, request)) {
+  if (!await verifyAdmin(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -149,21 +157,18 @@ export async function POST(request: NextRequest) {
             },
           });
 
-          await supabase
-            .from('workflow_schedules')
-            .upsert({
-              schedule_id: schedule.id,
-              name: config.name,
-              workflow_type: config.workflow_type,
-              cron_expression: config.cron,
-              timezone: config.timezone || 'UTC',
-              endpoint_url: config.endpoint,
-              default_payload: config.payload,
-              description: config.description,
-              is_active: true,
-            }, { onConflict: 'name' })
-            .select()
-            .single();
+          await pool.query(
+            `INSERT INTO workflow_schedules 
+             (schedule_id, name, workflow_type, cron_expression, timezone, endpoint_url, default_payload, description, is_active, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, NOW(), NOW())
+             ON CONFLICT (name) DO UPDATE SET
+               schedule_id = EXCLUDED.schedule_id,
+               cron_expression = EXCLUDED.cron_expression,
+               is_active = EXCLUDED.is_active,
+               updated_at = NOW()
+             RETURNING *`,
+            [schedule.id, config.name, config.workflow_type, config.cron, config.timezone || 'UTC', config.endpoint, JSON.stringify(config.payload), config.description]
+          );
 
           results.push({
             name: config.name,
@@ -189,10 +194,12 @@ export async function POST(request: NextRequest) {
     if (action === 'delete' && schedule_id) {
       await qstash.schedules.delete({ id: schedule_id });
       
-      await supabase
-        .from('workflow_schedules')
-        .update({ is_active: false, updated_at: new Date().toISOString() })
-        .eq('schedule_id', schedule_id);
+      await pool.query(
+        `UPDATE workflow_schedules 
+         SET is_active = false, updated_at = NOW()
+         WHERE schedule_id = $1`,
+        [schedule_id]
+      );
 
       return NextResponse.json({
         success: true,
@@ -201,10 +208,12 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'pause' && schedule_id) {
-      await supabase
-        .from('workflow_schedules')
-        .update({ is_active: false, updated_at: new Date().toISOString() })
-        .eq('schedule_id', schedule_id);
+      await pool.query(
+        `UPDATE workflow_schedules 
+         SET is_active = false, updated_at = NOW()
+         WHERE schedule_id = $1`,
+        [schedule_id]
+      );
 
       return NextResponse.json({
         success: true,
@@ -213,10 +222,12 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'resume' && schedule_id) {
-      await supabase
-        .from('workflow_schedules')
-        .update({ is_active: true, updated_at: new Date().toISOString() })
-        .eq('schedule_id', schedule_id);
+      await pool.query(
+        `UPDATE workflow_schedules 
+         SET is_active = true, updated_at = NOW()
+         WHERE schedule_id = $1`,
+        [schedule_id]
+      );
 
       return NextResponse.json({
         success: true,

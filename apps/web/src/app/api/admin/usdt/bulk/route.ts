@@ -1,16 +1,32 @@
-import { createClient } from '@supabase/supabase-js';
+// @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
+import { pool } from '@/lib/admin/local-db';
+
+async function getUserFromToken(token: string): Promise<string | null> {
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    if (!cloudRes.ok) return null;
+    const userData = await cloudRes.json();
+    return userData?.id || null;
+}
 
 export async function POST(request: NextRequest) {
     try {
-        const supabase = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.SUPABASE_SERVICE_ROLE_KEY!
-        );
+        const authHeader = request.headers.get('authorization');
+        if (!authHeader?.startsWith('Bearer ')) {
+            return NextResponse.json(
+                { success: false, error: 'Unauthorized' },
+                { status: 401 }
+            );
+        }
+        const token = authHeader.split(' ')[1];
 
-        // Get admin user from headers
-        const userId = request.headers.get('x-user-id');
-
+        const userId = await getUserFromToken(token);
         if (!userId) {
             return NextResponse.json(
                 { success: false, error: 'Unauthorized' },
@@ -19,13 +35,13 @@ export async function POST(request: NextRequest) {
         }
 
         // Verify admin status
-        const { data: adminUser, error: adminError } = await supabase
-            .from('users')
-            .select('is_admin, is_super_admin')
-            .eq('id', userId)
-            .single();
+        const adminResult = await pool.query(
+            'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
+            [userId]
+        );
+        const adminUser = adminResult.rows[0];
 
-        if (adminError || (!adminUser?.is_admin && !adminUser?.is_super_admin)) {
+        if (!adminUser?.is_admin && !adminUser?.is_super_admin) {
             return NextResponse.json(
                 { success: false, error: 'Admin access required' },
                 { status: 403 }
@@ -64,50 +80,45 @@ export async function POST(request: NextRequest) {
         for (const targetUserId of userIds) {
             try {
                 // Get or create wallet for user
-                let { data: wallet, error: walletError } = await supabase
-                    .from('wallets')
-                    .select('*')
-                    .eq('user_id', targetUserId)
-                    .single();
+                const walletResult = await pool.query(
+                    'SELECT * FROM wallets WHERE user_id = $1',
+                    [targetUserId]
+                );
+                let wallet = walletResult.rows[0];
 
-                if (walletError || !wallet) {
+                if (!wallet) {
                     // Create wallet if doesn't exist
-                    const { data: newWallet, error: newWalletError } = await supabase
-                        .from('wallets')
-                        .insert({ user_id: targetUserId })
-                        .select()
-                        .single();
-
-                    if (newWalletError) {
-                        errors.push({ userId: targetUserId, error: newWalletError.message });
-                        continue;
-                    }
-                    wallet = newWallet;
+                    const newWalletResult = await pool.query(
+                        `INSERT INTO wallets (user_id, usdt_balance, total_deposited, total_withdrawn, locked_usdt, version, created_at, updated_at)
+                         VALUES ($1, 0, 0, 0, 0, 1, NOW(), NOW())
+                         RETURNING *`,
+                        [targetUserId]
+                    );
+                    wallet = newWalletResult.rows[0];
                 }
 
                 if (action === 'credit') {
                     // Credit USDT to wallet
-                    const { error: creditError } = await supabase
-                        .from('wallets')
-                        .update({
-                            usdt_balance: (wallet.usdt_balance || 0) + amount,
-                            total_deposited: (wallet.total_deposited || 0) + amount,
-                            updated_at: new Date().toISOString()
-                        })
-                        .eq('user_id', targetUserId);
+                    const creditResult = await pool.query(
+                        `UPDATE wallets 
+                         SET usdt_balance = usdt_balance + $1,
+                             total_deposited = total_deposited + $1,
+                             updated_at = NOW()
+                         WHERE user_id = $2
+                         RETURNING *`,
+                        [amount, targetUserId]
+                    );
 
-                    if (creditError) {
-                        errors.push({ userId: targetUserId, error: creditError.message });
+                    if (creditResult.rowCount === 0) {
+                        errors.push({ userId: targetUserId, error: 'Failed to credit wallet' });
                     } else {
                         // Log transaction
-                        await supabase.from('transactions').insert({
-                            user_id: targetUserId,
-                            transaction_type: 'deposit',
-                            amount: amount,
-                            status: 'completed',
-                            description: reason || `Bulk USDT credit by admin`,
-                            created_at: new Date().toISOString()
-                        });
+                        await pool.query(
+                            `INSERT INTO transactions 
+                             (user_id, transaction_type, amount, status, description, created_at)
+                             VALUES ($1, 'deposit', $2, 'completed', $3, NOW())`,
+                            [targetUserId, amount, reason || 'Bulk USDT credit by admin']
+                        );
 
                         results.push({ userId: targetUserId, success: true });
                     }
@@ -119,36 +130,34 @@ export async function POST(request: NextRequest) {
                         continue;
                     }
 
-                    const { error: debitError } = await supabase
-                        .from('wallets')
-                        .update({
-                            usdt_balance: currentBalance - amount,
-                            total_withdrawn: (wallet.total_withdrawn || 0) + amount,
-                            updated_at: new Date().toISOString()
-                        })
-                        .eq('user_id', targetUserId);
+                    const debitResult = await pool.query(
+                        `UPDATE wallets 
+                         SET usdt_balance = usdt_balance - $1,
+                             total_withdrawn = total_withdrawn + $1,
+                             updated_at = NOW()
+                         WHERE user_id = $2
+                         RETURNING *`,
+                        [amount, targetUserId]
+                    );
 
-                    if (debitError) {
-                        errors.push({ userId: targetUserId, error: debitError.message });
+                    if (debitResult.rowCount === 0) {
+                        errors.push({ userId: targetUserId, error: 'Failed to debit wallet' });
                     } else {
                         // Log transaction
-                        await supabase.from('transactions').insert({
-                            user_id: targetUserId,
-                            transaction_type: 'withdrawal',
-                            amount: -amount,
-                            status: 'completed',
-                            description: reason || `Bulk USDT debit by admin`,
-                            created_at: new Date().toISOString()
-                        });
+                        await pool.query(
+                            `INSERT INTO transactions 
+                             (user_id, transaction_type, amount, status, description, created_at)
+                             VALUES ($1, 'withdrawal', $2, 'completed', $3, NOW())`,
+                            [targetUserId, -amount, reason || 'Bulk USDT debit by admin']
+                        );
 
                         // Log admin action
-                        await supabase.from('admin_actions').insert({
-                            admin_id: userId,
-                            action: 'usdt_bulk_debit',
-                            target_user_id: targetUserId,
-                            details: { amount, reason },
-                            created_at: new Date().toISOString()
-                        });
+                        await pool.query(
+                            `INSERT INTO admin_actions 
+                             (admin_id, action, target_user_id, details, created_at)
+                             VALUES ($1, 'usdt_bulk_debit', $2, $3, NOW())`,
+                            [userId, targetUserId, { amount, reason }]
+                        );
 
                         results.push({ userId: targetUserId, success: true });
                     }

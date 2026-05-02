@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { createClient } from '@/lib/supabase/client';
 import {
     DollarSign, Link2, Coins, Shield, FileCode,
     Save, Loader2, AlertTriangle, CheckCircle, ToggleLeft, ToggleRight
@@ -53,12 +52,11 @@ export function MarketFieldsPanel({ market, onSaved }: MarketFieldsPanelProps) {
 
     useEffect(() => {
         const fetchResolvers = async () => {
-            const { data } = await createClient()
-                .from('resolvers')
-                .select('*')
-                .eq('is_active', true)
-                .order('success_count', { ascending: false });
-            if (data) setResolvers(data);
+            const res = await fetch('/api/admin/resolvers?is_active=true');
+            if (res.ok) {
+                const data = await res.json();
+                setResolvers(data.data || []);
+            }
         };
         fetchResolvers();
     }, []);

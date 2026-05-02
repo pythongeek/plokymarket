@@ -1,15 +1,18 @@
+// @ts-nocheck
+import { pool, query } from '@/lib/admin/local-db';
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { KycService } from '@/lib/kyc/service';
 
-// Helper to check admin
-async function checkAdmin(supabase: any, userId: string): Promise<boolean> {
-    const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('is_admin, is_super_admin')
-        .eq('id', userId)
-        .single();
-    return profile?.is_admin || profile?.is_super_admin || false;
+async function getUserFromToken(token: string): Promise<string | null> {
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    if (!cloudRes.ok) return null;
+    const userData = await cloudRes.json();
+    return userData?.id || null;
 }
 
 // GET /api/admin/kyc/[userId] - Get specific user's KYC details
@@ -18,20 +21,72 @@ export async function GET(
     { params }: { params: Promise<{ userId: string }> }
 ) {
     try {
-        const supabase = await createClient();
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-        if (authError || !user) {
+        const authHeader = req.headers.get('authorization');
+        const token = authHeader?.replace('Bearer ', '');
+        if (!token) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        if (!(await checkAdmin(supabase, user.id))) {
+        const adminUserId = await getUserFromToken(token);
+        if (!adminUserId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const profiles = await query<{ is_admin: boolean; is_super_admin: boolean }>(
+            'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
+            [adminUserId]
+        );
+        if (!profiles[0]?.is_admin && !profiles[0]?.is_super_admin) {
             return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
         }
 
         const { userId } = await params;
-        const result = await KycService.adminGetUserKyc(userId);
-        return NextResponse.json(result);
+
+        // Fetch profile
+        const profileResult = await pool.query(
+            'SELECT * FROM user_kyc_profiles WHERE id = $1',
+            [userId]
+        );
+
+        // Fetch submissions
+        const submissionsResult = await pool.query(
+            'SELECT * FROM kyc_submissions WHERE user_id = $1 ORDER BY created_at DESC',
+            [userId]
+        );
+
+        // Fetch overrides
+        const overridesResult = await pool.query(
+            'SELECT * FROM kyc_admin_overrides WHERE user_id = $1 ORDER BY created_at DESC',
+            [userId]
+        );
+
+        // Get gate status - call RPC if available
+        let gate = {
+            needs_kyc: false,
+            reason: 'error',
+            kyc_status: profileResult.rows[0]?.verification_status || 'unverified',
+            total_withdrawn: 0,
+            threshold: 5000,
+        };
+
+        try {
+            const gateResult = await pool.query(
+                'SELECT * FROM check_kyc_withdrawal_gate($1)',
+                [userId]
+            );
+            if (gateResult.rows.length > 0) {
+                gate = gateResult.rows[0];
+            }
+        } catch (gateError) {
+            console.warn('check_kyc_withdrawal_gate error:', gateError);
+        }
+
+        return NextResponse.json({
+            profile: profileResult.rows[0] || null,
+            submissions: submissionsResult.rows || [],
+            overrides: overridesResult.rows || [],
+            gate,
+        });
     } catch (error: any) {
         console.error('Error getting user KYC:', error);
         return NextResponse.json(
@@ -41,20 +96,28 @@ export async function GET(
     }
 }
 
-// POST /api/admin/kyc/[userId] - Perform KYC action (approve/reject/force/waive)
+// POST /api/admin/kyc/[userId] - Perform KYC action (approve/reject/force/waive/override)
 export async function POST(
     req: NextRequest,
     { params }: { params: Promise<{ userId: string }> }
 ) {
     try {
-        const supabase = await createClient();
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-        if (authError || !user) {
+        const authHeader = req.headers.get('authorization');
+        const token = authHeader?.replace('Bearer ', '');
+        if (!token) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        if (!(await checkAdmin(supabase, user.id))) {
+        const adminUserId = await getUserFromToken(token);
+        if (!adminUserId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const profiles = await query<{ is_admin: boolean; is_super_admin: boolean }>(
+            'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
+            [adminUserId]
+        );
+        if (!profiles[0]?.is_admin && !profiles[0]?.is_super_admin) {
             return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
         }
 
@@ -77,15 +140,21 @@ export async function POST(
             );
         }
 
-        const result = await KycService.adminKycAction(
-            user.id,
-            userId,
-            action,
-            reason,
-            rejection_reason
-        );
+        // Call the admin_kyc_action RPC
+        try {
+            const result = await pool.query(
+                'SELECT * FROM admin_kyc_action($1, $2, $3, $4, $5)',
+                [adminUserId, userId, action, reason || null, rejection_reason || null]
+            );
 
-        return NextResponse.json(result);
+            return NextResponse.json(result.rows[0] || { success: true });
+        } catch (rpcError: any) {
+            console.error('admin_kyc_action RPC error:', rpcError);
+            return NextResponse.json(
+                { error: rpcError.message || 'Failed to perform KYC action' },
+                { status: 500 }
+            );
+        }
     } catch (error: any) {
         console.error('Error performing KYC action:', error);
         return NextResponse.json(

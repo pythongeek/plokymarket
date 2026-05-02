@@ -1,12 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RefreshCw, TrendingUp, TrendingDown, Activity, Clock, DollarSign, BarChart3 } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
 import { useAutoRefreshRate } from '@/lib/realtime/exchange-rate-sse';
 
 interface ExchangeRate {
@@ -24,22 +23,30 @@ interface RateHistory {
   fetched_at: string;
 }
 
+async function adminFetch(path: string, options?: RequestInit) {
+  const res = await fetch(path, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...(options?.headers || {}) }
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
 export function AdminP2PRateDisplay() {
   const { rate, loading, error, lastUpdated, refresh } = useAutoRefreshRate(30);
   const [rateHistory, setRateHistory] = useState<RateHistory[]>([]);
   const [prevRate, setPrevRate] = useState<number | null>(null);
   const [isAutoRefresh, setIsAutoRefresh] = useState(true);
-  const supabase = createClient();
 
   // Fetch rate history
   useEffect(() => {
     const fetchHistory = async () => {
-      const { data } = await supabase
-        .from('exchange_rates_live')
-        .select('usdt_to_bdt, source, fetched_at')
-        .order('fetched_at', { ascending: false })
-        .limit(24);
-      if (data) setRateHistory(data);
+      try {
+        const { data } = await adminFetch('/api/admin/exchange-rates');
+        if (data) setRateHistory(data);
+      } catch (err) {
+        console.warn('[P2PRateDisplay] Error fetching rate history:', err);
+      }
     };
     fetchHistory();
   }, []);

@@ -6,6 +6,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -31,7 +32,7 @@ import {
   ChevronUp,
   Lightbulb
 } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+
 
 interface DailyTopic {
   id: string;
@@ -87,8 +88,7 @@ export function DailyTopicsPanel() {
     setError(null);
     
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      
+          const { data: { session } } = await supabase.auth.getSession();
       const response = await fetch(`/api/admin/daily-topics?status=${activeTab}&limit=50`, {
         headers: {
           'Authorization': `Bearer ${session?.access_token}`
@@ -110,8 +110,7 @@ export function DailyTopicsPanel() {
 
   const fetchSettings = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      
+          const { data: { session } } = await supabase.auth.getSession();
       const response = await fetch('/api/admin/ai-config', {
         headers: {
           'Authorization': `Bearer ${session?.access_token}`
@@ -143,8 +142,7 @@ export function DailyTopicsPanel() {
     
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      const { data: { session } } = await supabase.auth.getSession();
-      
+          const { data: { session } } = await supabase.auth.getSession();
       const response = await fetch('/api/admin/generate-topics', {
         method: 'POST',
         headers: {
@@ -178,8 +176,7 @@ export function DailyTopicsPanel() {
   const handleSaveSettings = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      const { data: { session } } = await supabase.auth.getSession();
-      
+          const { data: { session } } = await supabase.auth.getSession();
       const response = await fetch('/api/admin/ai-config', {
         method: 'POST',
         headers: {
@@ -212,8 +209,7 @@ export function DailyTopicsPanel() {
     setError(null);
     
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      
+          const { data: { session } } = await supabase.auth.getSession();
       const response = await fetch('/api/admin/daily-topics', {
         method: 'POST',
         headers: {
@@ -253,8 +249,7 @@ export function DailyTopicsPanel() {
     setError(null);
     
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      
+          const { data: { session } } = await supabase.auth.getSession();
       const response = await fetch('/api/admin/daily-topics', {
         method: 'POST',
         headers: {
@@ -289,8 +284,7 @@ export function DailyTopicsPanel() {
     if (!confirm('Are you sure you want to delete this topic?')) return;
     
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      
+          const { data: { session } } = await supabase.auth.getSession();
       const response = await fetch(`/api/admin/daily-topics?id=${topicId}`, {
         method: 'DELETE',
         headers: {

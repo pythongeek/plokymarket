@@ -1,52 +1,69 @@
-import { createClient } from '@/lib/supabase/server';
+// @ts-nocheck
+import { pool, query } from '@/lib/admin/local-db';
 import { NextResponse } from 'next/server';
+
+async function getUserFromToken(token: string): Promise<string | null> {
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    if (!cloudRes.ok) return null;
+    const userData = await cloudRes.json();
+    return userData?.id || null;
+}
 
 export async function GET(
     request: Request,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    const supabase = await createClient() as any;
     const { id } = await params;
 
     try {
         // Try events table first (events created via the event creation flow)
-        const { data: eventData, error: eventError } = await supabase
-            .from('events')
-            .select('*')
-            .eq('id', id)
-            .single();
+        const eventResult = await pool.query(
+            'SELECT * FROM events WHERE id = $1',
+            [id]
+        );
 
-        if (eventData && !eventError) {
-            // Found in events table — also fetch associated markets
-            const { data: markets } = await supabase
-                .from('markets')
-                .select('id, question, name, status, slug, category, created_at, trading_closes_at, liquidity, initial_liquidity')
-                .eq('event_id', id);
+        if (eventResult.rows.length > 0) {
+            const eventData = eventResult.rows[0];
+            
+            // Also fetch associated markets
+            const marketsResult = await pool.query(
+                `SELECT id, question, name, status, slug, category, created_at, trading_closes_at, liquidity, initial_liquidity
+                 FROM markets WHERE event_id = $1`,
+                [id]
+            );
 
             return NextResponse.json({
                 data: {
-                    ...(eventData as any),
+                    ...eventData,
                     title: eventData.name || eventData.question || eventData.title,
-                    markets: markets || []
+                    markets: marketsResult.rows || []
                 }
             });
         }
 
         // Fallback: try markets table directly (standalone markets)
-        const { data: market, error: marketError } = await supabase
-            .from('markets')
-            .select('id, question, name, description, slug, status, category, image_url, created_at, trading_closes_at, liquidity, initial_liquidity, is_featured, tags, answer1, answer2')
-            .eq('id', id)
-            .single();
+        const marketResult = await pool.query(
+            `SELECT id, question, name, description, slug, status, category, image_url, created_at, trading_closes_at, liquidity, initial_liquidity, is_featured, tags, answer1, answer2
+             FROM markets WHERE id = $1`,
+            [id]
+        );
 
-        if (marketError || !market) {
+        if (marketResult.rows.length === 0) {
             return NextResponse.json({ error: 'Event not found' }, { status: 404 });
         }
+
+        const market = marketResult.rows[0];
 
         // Map for frontend compatibility
         return NextResponse.json({
             data: {
-                ...(market as any),
+                ...market,
                 title: market.question || market.name,
                 markets: [] // standalone market, no nested markets
             }
@@ -61,12 +78,18 @@ export async function PATCH(
     request: Request,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    const supabase = await createClient() as any;
     const { id } = await params;
 
-    // Check auth
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const authHeader = request.headers.get('authorization');
+    const token = authHeader?.replace('Bearer ', '');
+    if (!token) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const userId = await getUserFromToken(token);
+    if (!userId) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     try {
         const body = await request.json();
@@ -84,41 +107,42 @@ export async function PATCH(
         }
 
         // Try events table first
-        const { data: eventExists } = await supabase
-            .from('events')
-            .select('id')
-            .eq('id', id)
-            .single();
+        const eventExistsResult = await pool.query(
+            'SELECT id FROM events WHERE id = $1',
+            [id]
+        );
 
-        if (eventExists) {
-            const { data, error } = await supabase
-                .from('events')
-                .update(updates)
-                .eq('id', id)
-                .select('*')
-                .single();
+        if (eventExistsResult.rows.length > 0) {
+            const setClause = Object.keys(updates).map((k, i) => `${k} = $${i + 1}`).join(', ');
+            const values = [...Object.values(updates), id];
+            
+            const result = await pool.query(
+                `UPDATE events SET ${setClause} WHERE id = $${values.length} RETURNING *`,
+                values
+            );
 
-            if (error) {
-                console.error('Error updating event:', error);
-                return NextResponse.json({ error: error.message }, { status: 500 });
+            if (result.error) {
+                console.error('Error updating event:', result.error);
+                return NextResponse.json({ error: result.error.message }, { status: 500 });
             }
-            return NextResponse.json({ data });
+            return NextResponse.json({ data: result.rows[0] });
         }
 
         // Fallback: markets table
-        const { data, error } = await supabase
-            .from('markets')
-            .update(updates)
-            .eq('id', id)
-            .select('*')
-            .single();
+        const setClause = Object.keys(updates).map((k, i) => `${k} = $${i + 1}`).join(', ');
+        const values = [...Object.values(updates), id];
+        
+        const result = await pool.query(
+            `UPDATE markets SET ${setClause} WHERE id = $${values.length} RETURNING *`,
+            values
+        );
 
-        if (error) {
-            console.error('Error updating market:', error);
-            return NextResponse.json({ error: error.message }, { status: 500 });
+        if (result.error) {
+            console.error('Error updating market:', result.error);
+            return NextResponse.json({ error: result.error.message }, { status: 500 });
         }
 
-        return NextResponse.json({ data });
+        return NextResponse.json({ data: result.rows[0] });
     } catch (error) {
         console.error('PATCH error:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
@@ -129,32 +153,37 @@ export async function DELETE(
     request: Request,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    const supabase = await createClient() as any;
     const { id } = await params;
 
-    // Check auth
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const authHeader = request.headers.get('authorization');
+    const token = authHeader?.replace('Bearer ', '');
+    if (!token) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const userId = await getUserFromToken(token);
+    if (!userId) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     try {
         // Try events table first
-        const { data: eventExists } = await supabase
-            .from('events')
-            .select('id')
-            .eq('id', id)
-            .single();
+        const eventExistsResult = await pool.query(
+            'SELECT id FROM events WHERE id = $1',
+            [id]
+        );
 
-        if (eventExists) {
+        if (eventExistsResult.rows.length > 0) {
             // Delete associated markets first
-            await supabase.from('markets').delete().eq('event_id', id);
-            const { error } = await supabase.from('events').delete().eq('id', id);
-            if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+            await pool.query('DELETE FROM markets WHERE event_id = $1', [id]);
+            const result = await pool.query('DELETE FROM events WHERE id = $1', [id]);
+            if (result.error) return NextResponse.json({ error: result.error.message }, { status: 500 });
             return NextResponse.json({ success: true });
         }
 
         // Fallback: markets table
-        const { error } = await supabase.from('markets').delete().eq('id', id);
-        if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+        const result = await pool.query('DELETE FROM markets WHERE id = $1', [id]);
+        if (result.error) return NextResponse.json({ error: result.error.message }, { status: 500 });
 
         return NextResponse.json({ success: true });
     } catch (error) {

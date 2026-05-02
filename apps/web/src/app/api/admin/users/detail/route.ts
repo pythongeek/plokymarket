@@ -1,94 +1,111 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { pool } from '@/lib/admin/local-db';
+
+async function getUserFromToken(token: string): Promise<string | null> {
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    if (!cloudRes.ok) return null;
+    const userData = await cloudRes.json();
+    return userData?.id || null;
+}
 
 // GET /api/admin/users/detail?id=xxx - Get user full profile
 export async function GET(req: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    if (authError || !user) {
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const token = authHeader.split(' ')[1];
+
+    const userId = await getUserFromToken(token);
+    if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Check admin status
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('is_admin')
-      .eq('id', user.id)
-      .single();
+    const profileResult = await pool.query(
+      'SELECT is_admin FROM user_profiles WHERE id = $1',
+      [userId]
+    );
+    const profile = profileResult.rows[0];
 
     if (!profile?.is_admin) {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
     }
 
     const { searchParams } = new URL(req.url);
-    const userId = searchParams.get('id');
+    const targetUserId = searchParams.get('id');
 
-    if (!userId) {
+    if (!targetUserId) {
       return NextResponse.json({ error: 'User ID required' }, { status: 400 });
     }
 
     // Log admin view action
-    await supabase.rpc('log_admin_action', {
-      p_admin_id: user.id,
-      p_action: 'view_profile',
-      p_action_category: 'kyc',
-      p_target_user_id: userId,
-      p_reason: 'Admin viewing user profile'
-    });
-
-    // Get user profile
-    const { data: userProfile, error: profileError } = await supabase.rpc(
-      'get_user_admin_profile',
-      { p_user_id: userId }
+    await pool.query(
+      `SELECT * FROM log_admin_action($1, 'view_profile', 'kyc', $2, NULL, 'Admin viewing user profile')`,
+      [userId, targetUserId]
     );
 
-    if (profileError) throw profileError;
+    // Get user profile via RPC
+    const userProfileResult = await pool.query(
+      'SELECT * FROM get_user_admin_profile($1)',
+      [targetUserId]
+    );
+    const userProfile = userProfileResult.rows;
 
     // Get KYC details
-    const { data: kycData } = await supabase
-      .from('user_kyc_profiles')
-      .select('*')
-      .eq('id', userId)
-      .single();
+    const kycResult = await pool.query(
+      'SELECT * FROM user_kyc_profiles WHERE id = $1',
+      [targetUserId]
+    );
+    const kycData = kycResult.rows[0];
 
     // Get status details
-    const { data: statusData } = await supabase
-      .from('user_status')
-      .select('*')
-      .eq('id', userId)
-      .single();
+    const statusResult = await pool.query(
+      'SELECT * FROM user_status WHERE id = $1',
+      [targetUserId]
+    );
+    const statusData = statusResult.rows[0];
 
     // Get internal notes
-    const { data: notes } = await supabase
-      .from('user_internal_notes')
-      .select(`
-        *,
-        created_by:created_by(full_name)
-      `)
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
+    const notesResult = await pool.query(
+      `SELECT uin.*, up.full_name as created_by_full_name
+       FROM user_internal_notes uin
+       LEFT JOIN user_profiles up ON up.id = uin.created_by
+       WHERE uin.user_id = $1
+       ORDER BY uin.created_at DESC`,
+      [targetUserId]
+    );
+    const notes = notesResult.rows;
 
     // Get recent interventions
-    const { data: interventions } = await supabase
-      .from('position_interventions')
-      .select('*')
-      .eq('user_id', userId)
-      .order('performed_at', { ascending: false })
-      .limit(10);
+    const interventionsResult = await pool.query(
+      `SELECT * FROM position_interventions 
+       WHERE user_id = $1
+       ORDER BY performed_at DESC
+       LIMIT 10`,
+      [targetUserId]
+    );
+    const interventions = interventionsResult.rows;
 
     // Get support tickets
-    const { data: tickets } = await supabase
-      .from('support_tickets')
-      .select(`
-        *,
-        assigned_to:assigned_to(full_name)
-      `)
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(10);
+    const ticketsResult = await pool.query(
+      `SELECT st.*, up.full_name as assigned_to_full_name
+       FROM support_tickets st
+       LEFT JOIN user_profiles up ON up.id = st.assigned_to
+       WHERE st.user_id = $1
+       ORDER BY st.created_at DESC
+       LIMIT 10`,
+      [targetUserId]
+    );
+    const tickets = ticketsResult.rows;
 
     return NextResponse.json({
       profile: userProfile?.[0] || null,
@@ -111,19 +128,23 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    if (authError || !user) {
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const token = authHeader.split(' ')[1];
+
+    const userId = await getUserFromToken(token);
+    if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Check admin status
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('is_admin')
-      .eq('id', user.id)
-      .single();
+    const profileResult = await pool.query(
+      'SELECT is_admin FROM user_profiles WHERE id = $1',
+      [userId]
+    );
+    const profile = profileResult.rows[0];
 
     if (!profile?.is_admin) {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
@@ -138,31 +159,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { data, error } = await supabase
-      .from('user_internal_notes')
-      .insert({
-        user_id,
-        created_by: user.id,
-        note,
-        note_type: note_type || 'general',
-        is_escalation: is_escalation || false,
-        escalated_to,
-        escalation_reason
-      })
-      .select()
-      .single();
+    const insertResult = await pool.query(
+      `INSERT INTO user_internal_notes 
+       (user_id, created_by, note, note_type, is_escalation, escalated_to, escalation_reason)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING *`,
+      [user_id, userId, note, note_type || 'general', is_escalation || false, escalated_to, escalation_reason]
+    );
 
-    if (error) throw error;
+    const data = insertResult.rows[0];
 
     // Log action
-    await supabase.rpc('log_admin_action', {
-      p_admin_id: user.id,
-      p_action: 'add_internal_note',
-      p_action_category: 'support',
-      p_target_user_id: user_id,
-      p_new_value: { note_id: data.id, note_type },
-      p_reason: is_escalation ? `Escalation: ${escalation_reason}` : 'Internal note added'
-    });
+    await pool.query(
+      `SELECT * FROM log_admin_action($1, 'add_internal_note', 'support', $2, NULL, $3)`,
+      [userId, user_id, { note_id: data.id, note_type, escalation: is_escalation ? `Escalation: ${escalation_reason}` : 'Internal note added' }]
+    );
 
     return NextResponse.json({ data });
   } catch (error: any) {

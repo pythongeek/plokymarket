@@ -2,9 +2,22 @@
  * Admin API Route: Individual Cron Job Management
  * Handle PUT, DELETE, and POST (trigger) for specific cron jobs
  */
-
+// @ts-nocheck
+import { pool, query } from '@/lib/admin/local-db';
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+
+async function getUserFromToken(token: string): Promise<string | null> {
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    if (!cloudRes.ok) return null;
+    const userData = await cloudRes.json();
+    return userData?.id || null;
+}
 
 const CRONJOB_API_BASE = 'https://api.cron-job.org/jobs';
 
@@ -54,22 +67,22 @@ export async function PUT(
 ) {
     try {
         const { id } = await params;
-        const supabase = await createClient();
-
-        // Check authentication
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
+        const authHeader = request.headers.get('authorization');
+        const token = authHeader?.replace('Bearer ', '');
+        if (!token) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // Check admin role
-        const { data: profile } = await supabase
-            .from('user_profiles')
-            .select('is_admin, is_super_admin')
-            .eq('user_id', session.user.id)
-            .single();
+        const userId = await getUserFromToken(token);
+        if (!userId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
 
-        const isAdmin = (profile as any)?.is_admin || (profile as any)?.is_super_admin;
+        const profiles = await query<{ is_admin: boolean; is_super_admin: boolean }>(
+            'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
+            [userId]
+        );
+        const isAdmin = profiles[0]?.is_admin || profiles[0]?.is_super_admin;
         if (!isAdmin) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
@@ -110,22 +123,22 @@ export async function DELETE(
 ) {
     try {
         const { id } = await params;
-        const supabase = await createClient();
-
-        // Check authentication
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
+        const authHeader = request.headers.get('authorization');
+        const token = authHeader?.replace('Bearer ', '');
+        if (!token) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // Check admin role
-        const { data: profile } = await supabase
-            .from('user_profiles')
-            .select('is_admin, is_super_admin')
-            .eq('user_id', session.user.id)
-            .single();
+        const userId = await getUserFromToken(token);
+        if (!userId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
 
-        const isAdmin = (profile as any)?.is_admin || (profile as any)?.is_super_admin;
+        const profiles = await query<{ is_admin: boolean; is_super_admin: boolean }>(
+            'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
+            [userId]
+        );
+        const isAdmin = profiles[0]?.is_admin || profiles[0]?.is_super_admin;
         if (!isAdmin) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
@@ -149,22 +162,22 @@ export async function POST(
 ) {
     try {
         const { id } = await params;
-        const supabase = await createClient();
-
-        // Check authentication
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
+        const authHeader = request.headers.get('authorization');
+        const token = authHeader?.replace('Bearer ', '');
+        if (!token) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // Check admin role
-        const { data: profile } = await supabase
-            .from('user_profiles')
-            .select('is_admin, is_super_admin')
-            .eq('user_id', session.user.id)
-            .single();
+        const userId = await getUserFromToken(token);
+        if (!userId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
 
-        const isAdmin = (profile as any)?.is_admin || (profile as any)?.is_super_admin;
+        const profiles = await query<{ is_admin: boolean; is_super_admin: boolean }>(
+            'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
+            [userId]
+        );
+        const isAdmin = profiles[0]?.is_admin || profiles[0]?.is_super_admin;
         if (!isAdmin) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }

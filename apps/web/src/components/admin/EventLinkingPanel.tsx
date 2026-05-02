@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { createClient } from "@/lib/supabase/client";
 import { isAbortError } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -32,43 +31,25 @@ interface EventLinkingPanelProps {
     onSelectEvent: (event: Event) => void;
 }
 
+async function adminFetch(path: string, options?: RequestInit) {
+    const res = await fetch(path, {
+        ...options,
+        headers: { 'Content-Type': 'application/json', ...(options?.headers || {}) }
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+}
+
 export function EventLinkingPanel({ onSelectEvent }: EventLinkingPanelProps) {
     const [events, setEvents] = useState<Event[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
-    const supabase = createClient();
 
     const fetchUnlinkedEvents = async () => {
         setLoading(true);
         try {
-            // Use a simpler approach - fetch all active events and filter out ones with markets
-            // This avoids the FK relationship ambiguity issue
-            const { data: fallbackData, error: fetchError } = await supabase
-                .from("events")
-                .select("id, title, question, category, trading_closes_at, status")
-                .eq("status", "active")
-                .order("trading_closes_at", { ascending: true });
-
-            if (fetchError) {
-                console.error("[EventLinkingPanel] Error fetching events:", fetchError.message);
-                setEvents([]);
-                return;
-            }
-
-            // Get all markets with event_id to find unlinked events
-            const { data: marketsData } = await supabase
-                .from("markets")
-                .select("event_id");
-
-            const linkedEventIds = new Set(
-                (marketsData || [])
-                    .map((m: any) => m.event_id)
-                    .filter(Boolean)
-            );
-
-            // Filter to only unlinked events
-            const unlinked = (fallbackData || []).filter((e: any) => !linkedEventIds.has(e.id));
-            setEvents(unlinked);
+            const { data } = await adminFetch('/api/admin/events/unlinked');
+            setEvents(data || []);
         } catch (error: any) {
             // Handle AbortError gracefully - request was cancelled during navigation
             if (isAbortError(error)) {
@@ -133,7 +114,7 @@ export function EventLinkingPanel({ onSelectEvent }: EventLinkingPanelProps) {
                     ) : filteredEvents.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-8 text-slate-500 gap-2">
                             <AlertCircle className="w-6 h-6 opacity-20" />
-                            <p className="text-xs">কোনো লিঙ্কিংযোগ্য ইভেন্ট পাওয়া যায়নি</p>
+                            <p className="text-xs">কোনো লিঙ্কিংযোগ্য ইভেন্ট পাওয়া যায়নি</p>
                         </div>
                     ) : (
                         filteredEvents.map((event) => (

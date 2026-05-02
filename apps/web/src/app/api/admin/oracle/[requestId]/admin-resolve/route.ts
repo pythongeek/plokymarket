@@ -1,5 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { pool } from '@/lib/admin/local-db';
+
+async function getUserFromToken(token: string): Promise<string | null> {
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    if (!cloudRes.ok) return null;
+    const userData = await cloudRes.json();
+    return userData?.id || null;
+}
 
 /**
  * POST /api/admin/oracle/[requestId]/admin-resolve
@@ -11,16 +24,17 @@ export async function POST(
     { params }: { params: Promise<{ requestId: string }> }
 ) {
     try {
-        const supabase = await createClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        const authHeader = req.headers.get('Authorization');
+        const token = authHeader?.split(' ')[1] || '';
+        const userId = await getUserFromToken(token);
+        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
         // Admin check
-        const { data: profile } = await supabase
-            .from('user_profiles')
-            .select('is_admin, is_super_admin')
-            .eq('id', user.id)
-            .single();
+        const profileResult = await pool.query(
+            'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
+            [userId]
+        );
+        const profile = profileResult.rows[0];
         if (!profile?.is_admin && !profile?.is_super_admin) {
             return NextResponse.json({ error: 'Super Admin access required' }, { status: 403 });
         }
@@ -34,41 +48,29 @@ export async function POST(
         }
 
         // Get the request to find market_id
-        const { data: oracleRequest, error: reqError } = await supabase
-            .from('oracle_requests')
-            .select('market_id')
-            .eq('id', requestId)
-            .single();
+        const requestResult = await pool.query(
+            'SELECT market_id FROM oracle_requests WHERE id = $1',
+            [requestId]
+        );
 
-        if (reqError || !oracleRequest) {
+        const oracleRequest = requestResult.rows[0];
+        if (!oracleRequest) {
             return NextResponse.json({ error: 'Oracle request not found' }, { status: 404 });
         }
 
-        // Admin Override: directly resolve
         const now = new Date().toISOString();
 
         // 1) Update oracle request
-        await supabase
-            .from('oracle_requests')
-            .update({
-                status: 'finalized',
-                proposed_outcome: winning_outcome,
-                confidence_score: 1.0,
-                evidence_text: `Admin Override by ${user.email}: ${reason}`,
-                finalized_at: now,
-            })
-            .eq('id', requestId);
+        await pool.query(
+            `UPDATE oracle_requests SET status = 'finalized', proposed_outcome = $1, confidence_score = 1.0, evidence_text = $2, finalized_at = $3 WHERE id = $4`,
+            [`Admin Override: ${winning_outcome}`, `Admin Override: ${reason}`, now, requestId]
+        );
 
         // 2) Resolve market
-        await supabase
-            .from('markets')
-            .update({
-                status: 'resolved',
-                winning_outcome,
-                resolved_at: now,
-                resolution_source: 'ADMIN_OVERRIDE',
-            })
-            .eq('id', oracleRequest.market_id);
+        await pool.query(
+            `UPDATE markets SET status = 'resolved', winning_outcome = $1, resolved_at = $2, resolution_source = 'ADMIN_OVERRIDE' WHERE id = $3`,
+            [winning_outcome, now, oracleRequest.market_id]
+        );
 
         return NextResponse.json({
             data: {

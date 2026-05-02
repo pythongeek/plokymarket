@@ -24,7 +24,6 @@ import {
   Shield,
   CheckCircle2
 } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -136,11 +135,9 @@ export function ParameterConfigurationStage({
   // Load resolvers
   useEffect(() => {
     const fetchResolvers = async () => {
-      const { data } = await createClient()
-        .from('resolvers')
-        .select('*')
-        .eq('is_active', true)
-        .order('success_count', { ascending: false });
+      const res = await fetch('/api/admin/resolvers?is_active=true');
+      const resData = await res.json();
+      const data = resData.data || [];
       if (data) setResolvers(data);
     };
     fetchResolvers();

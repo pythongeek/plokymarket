@@ -1,61 +1,69 @@
 // @ts-nocheck
-import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { pool, query } from '@/lib/admin/local-db';
+import { NextRequest, NextResponse } from 'next/server';
+
+async function getUserFromToken(token: string): Promise<string | null> {
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    if (!cloudRes.ok) return null;
+    const userData = await cloudRes.json();
+    return userData?.id || null;
+}
 
 export async function POST(req: NextRequest) {
     try {
-        const supabase = await createClient();
-
-        // Check if user is admin
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        const authHeader = req.headers.get('authorization');
+        const token = authHeader?.replace('Bearer ', '');
+        if (!token) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const { data: profile } = await supabase
-            .from('user_profiles')
-            .select('is_admin, is_super_admin')
-            .eq('id', user.id)
-            .single();
+        const userId = await getUserFromToken(token);
+        if (!userId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
 
-        if (!profile?.is_admin && !profile?.is_super_admin) {
-            return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        const profiles = await query<{ is_admin: boolean; is_super_admin: boolean }>(
+            'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
+            [userId]
+        );
+        if (!profiles[0]?.is_admin && !profiles[0]?.is_super_admin) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
         const body = await req.json();
-        const { userId } = body;
+        const { userId: targetUserId } = body;
 
-        if (!userId) {
-            return NextResponse.json({ error: "User ID is required" }, { status: 400 });
+        if (!targetUserId) {
+            return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
         }
 
         // Get the user's KYC documents
-        const { data: kycProfile, error: kycError } = await supabase
-            .from('user_kyc_profiles')
-            .select('*')
-            .eq('user_id', userId)
-            .single();
+        const kycResult = await pool.query(
+            'SELECT * FROM user_kyc_profiles WHERE user_id = $1',
+            [targetUserId]
+        );
 
-        if (kycError || !kycProfile) {
-            return NextResponse.json({ error: "KYC profile not found" }, { status: 404 });
+        if (kycResult.rows.length === 0) {
+            return NextResponse.json({ error: 'KYC profile not found' }, { status: 404 });
         }
 
+        const kycProfile = kycResult.rows[0];
+
         if (!kycProfile.id_document_front_url || !kycProfile.selfie_url) {
-            return NextResponse.json({ error: "Missing KYC documents" }, { status: 400 });
+            return NextResponse.json({ error: 'Missing KYC documents' }, { status: 400 });
         }
 
         // Call the Python AI Service
         const aiServiceUrl = process.env.AI_KYC_URL || 'http://localhost:8000';
 
-        // We need to ensure the URLs are accessible. 
-        // If they are signed URLs from the frontend, they might have expired, but usually they are valid for some time.
-        // If they are just paths, we need to sign them.
-        // The current implementation in page.tsx saves signed URLs (which expire).
-        // Ideally, we should save the PATH in DB and sign it on retrieval, OR save a long-lived signed URL.
-        // The page.tsx implementation saves the signedUrl.
-
         const verificationPayload = {
-            user_id: userId,
+            user_id: targetUserId,
             full_name: kycProfile.full_name,
             id_front_url: kycProfile.id_document_front_url,
             selfie_url: kycProfile.selfie_url
@@ -78,26 +86,11 @@ export async function POST(req: NextRequest) {
 
             aiResponse = await aiRes.json();
         } catch (error: any) {
-            console.error("AI Service Call Failed:", error);
-            return NextResponse.json({ error: "AI Service Unavailable: " + error.message }, { status: 503 });
+            console.error('AI Service Call Failed:', error);
+            return NextResponse.json({ error: 'AI Service Unavailable: ' + error.message }, { status: 503 });
         }
 
         // Update the KYC profile with AI verification result
-        // We store the result in the 'notes' or a new column 'ai_verification_result'
-        // Since we can't easily add columns without migration, we'll append to admin_notes for now
-        // or assume there is a jsonb column 'verification_data' (checked migration 063: it has `rejection_reason` and `status`, but no generic data column?)
-        // Migration 063 has:
-        /*
-        CREATE TABLE public.user_kyc_profiles (
-            ...
-            rejection_reason TEXT,
-            admin_notes TEXT,
-            reviewed_by UUID REFERENCES auth.users(id),
-            reviewed_at TIMESTAMPTZ,
-            ...
-        );
-        */
-
         const aiStatus = aiResponse.status === 'success' ? 'VERIFIED' : 'FAILED';
         const confidence = aiResponse.face_verification.confidence.toFixed(2);
 
@@ -108,22 +101,15 @@ Confidence: ${confidence}%
 Distance: ${aiResponse.face_verification.details?.distance || 'N/A'}
 OCR Raw: ${JSON.stringify(aiResponse.ocr_data).substring(0, 100)}...`;
 
-        const updates: any = {
-            admin_notes: (kycProfile.admin_notes || '') + newNote
-        };
+        const adminNotes = (kycProfile.admin_notes || '') + newNote;
 
-        if (aiStatus === 'VERIFIED' && parseFloat(confidence) > 85) {
-            // Auto-approve if high confidence? Maybe just suggest.
-            // Let's just return the result to the UI for the admin to decide.
-        }
+        const updateResult = await pool.query(
+            'UPDATE user_kyc_profiles SET admin_notes = $1 WHERE user_id = $2',
+            [adminNotes, targetUserId]
+        );
 
-        const { error: updateError } = await supabase
-            .from('user_kyc_profiles')
-            .update(updates)
-            .eq('user_id', userId);
-
-        if (updateError) {
-            throw new Error("Failed to update KYC profile with AI result");
+        if (updateResult.error) {
+            throw new Error('Failed to update KYC profile with AI result');
         }
 
         return NextResponse.json({
@@ -132,7 +118,7 @@ OCR Raw: ${JSON.stringify(aiResponse.ocr_data).substring(0, 100)}...`;
         });
 
     } catch (error: any) {
-        console.error("Error in AI verification route:", error);
+        console.error('Error in AI verification route:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }

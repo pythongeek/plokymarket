@@ -38,7 +38,7 @@ import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { supabase } from '@/lib/supabase';
+// Note: supabase removed - using API routes instead
 import { cn } from '@/lib/utils';
 import { useMarketStore } from '@/store/marketStore';
 import { marketSchema, type MarketFormData } from '@/lib/validations/market';
@@ -69,14 +69,18 @@ const generateUnicodeAwareSlug = (text: string): string => {
         .replace(/(^-|-$)/g, '');
 };
 
-const checkSlugCollision = async (slug: string) => {
-    const { data, error } = await supabase
-        .from('events')
-        .select('slug')
-        .ilike('slug', `${slug}%`)
-        .limit(10);
+async function adminFetch(path: string, options?: RequestInit) {
+    const res = await fetch(path, {
+        ...options,
+        headers: { 'Content-Type': 'application/json', ...(options?.headers || {}) }
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+}
 
-    if (error) return [];
+const checkSlugCollision = async (slug: string) => {
+    const { data } = await adminFetch(`/api/admin/events/slug-check?slug=${encodeURIComponent(slug)}`);
+    if (!data) return [];
     return data.map((d: { slug: string }) => d.slug);
 };
 

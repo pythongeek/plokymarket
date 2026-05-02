@@ -1,25 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { pool, query } from '@/lib/admin/local-db';
+
+async function getUserFromToken(token: string): Promise<string | null> {
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    if (!cloudRes.ok) return null;
+    const userData = await cloudRes.json();
+    return userData?.id || null;
+}
 
 export const dynamic = 'force-dynamic';
 
 // GET /api/admin/metrics/system - Get system health status
 export async function GET(request: NextRequest) {
     try {
-        const supabase = await createClient();
-
         // Security check - verify user is authenticated
-        const { data: { user } } = await supabase.auth.getUser();
+        const authHeader = request.headers.get('authorization');
+        if (!authHeader?.startsWith('Bearer ')) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
 
-        if (!user) {
+        const token = authHeader.split(' ')[1];
+        const userId = await getUserFromToken(token);
+
+        if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
         // Get database status
         let dbStatus: 'healthy' | 'degraded' | 'down' = 'healthy';
         try {
-            const { error: dbError } = await supabase.from('markets').select('id').limit(1);
-            if (dbError) dbStatus = 'degraded';
+            const dbResult = await pool.query('SELECT id FROM markets LIMIT 1');
+            if (dbResult.error) dbStatus = 'degraded';
         } catch {
             dbStatus = 'down';
         }
@@ -27,12 +44,10 @@ export async function GET(request: NextRequest) {
         // Get realtime status (check if any channels exist)
         let realtimeStatus: 'healthy' | 'degraded' | 'down' = 'healthy';
         try {
-            const { data: realtimeData } = await supabase
-                .from('workflow_executions')
-                .select('id')
-                .eq('status', 'running')
-                .limit(1);
-            if (!realtimeData) realtimeStatus = 'degraded';
+            const realtimeResult = await pool.query(
+                "SELECT id FROM workflow_executions WHERE status = 'running' LIMIT 1"
+            );
+            if (!realtimeResult.rows || realtimeResult.rows.length === 0) realtimeStatus = 'degraded';
         } catch {
             realtimeStatus = 'healthy';
         }
@@ -40,13 +55,11 @@ export async function GET(request: NextRequest) {
         // Check workflow status
         let workflowStatus: 'healthy' | 'degraded' | 'down' = 'healthy';
         try {
-            const { data: workflows } = await supabase
-                .from('workflow_executions')
-                .select('status')
-                .order('created_at', { ascending: false })
-                .limit(10);
+            const workflowResult = await pool.query(
+                'SELECT status FROM workflow_executions ORDER BY created_at DESC LIMIT 10'
+            );
 
-            const failedCount = workflows?.filter((w: { status: string }) => w.status === 'failed').length || 0;
+            const failedCount = workflowResult.rows?.filter((w: { status: string }) => w.status === 'failed').length || 0;
             if (failedCount > 5) workflowStatus = 'degraded';
             else if (failedCount > 10) workflowStatus = 'down';
         } catch {

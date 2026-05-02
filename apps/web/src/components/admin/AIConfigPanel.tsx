@@ -13,7 +13,16 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
-import { createClient } from '@/lib/supabase/client';
+
+// API helper (uses local PostgreSQL via API routes)
+async function adminFetch(path: string, options?: RequestInit) {
+  const res = await fetch(path, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...(options?.headers || {}) }
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
 import {
     Bot, Pause, Play, Settings, BarChart3, Cpu, Shield,
     MessageSquare, Scale, TrendingUp, DollarSign, RefreshCw,
@@ -80,17 +89,9 @@ export function AIConfigPanel() {
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
-            const supabase = createClient();
-
+            
             const [configRes, usageRes] = await Promise.all([
-                (supabase.from('ai_agent_configs') as any)
-                    .select('*')
-                    .order('pipeline', { ascending: true }),
-                (supabase.from('ai_usage_logs') as any)
-                    .select('*')
-                    .gte('usage_date', new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0])
-                    .order('usage_date', { ascending: false }),
-            ]);
+                adminFetch('/api/admin/ai-configs'),
 
             setAgents(configRes.data || []);
             setUsageLogs(usageRes.data || []);
@@ -107,10 +108,6 @@ export function AIConfigPanel() {
     const toggleStatus = async (agent: AgentConfig) => {
         const newStatus = agent.status === 'active' ? 'paused' : 'active';
         try {
-            const supabase = createClient();
-            await (supabase.from('ai_agent_configs') as any)
-                .update({ status: newStatus, updated_at: new Date().toISOString() })
-                .eq('agent_key', agent.agent_key);
 
             setAgents(prev => prev.map(a =>
                 a.agent_key === agent.agent_key ? { ...a, status: newStatus } : a
@@ -131,10 +128,6 @@ export function AIConfigPanel() {
             if (editedTemps[agentKey] !== undefined) updates.temperature = editedTemps[agentKey];
             if (editedLimits[agentKey] !== undefined) updates.daily_token_limit = editedLimits[agentKey];
 
-            const supabase = createClient();
-            await (supabase.from('ai_agent_configs') as any)
-                .update(updates)
-                .eq('agent_key', agentKey);
 
             // Clear edited state
             setEditedPrompts(p => { const n = { ...p }; delete n[agentKey]; return n; });

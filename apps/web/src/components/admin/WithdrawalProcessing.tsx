@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { createClient } from '@/lib/supabase/client';
 import { toast } from 'sonner';
 
 interface WithdrawalRequest {
@@ -23,6 +22,15 @@ interface WithdrawalRequest {
 
 type FilterStatus = 'all' | 'pending' | 'processing' | 'completed' | 'rejected';
 
+async function adminFetch(path: string, options?: RequestInit) {
+  const res = await fetch(path, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...(options?.headers || {}) }
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
 export default function WithdrawalProcessing() {
   const [selectedWithdrawal, setSelectedWithdrawal] = useState<WithdrawalRequest | null>(null);
   const [adminNotes, setAdminNotes] = useState('');
@@ -31,32 +39,20 @@ export default function WithdrawalProcessing() {
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('pending');
   const [modalMode, setModalMode] = useState<'process' | 'complete' | 'reject' | null>(null);
   
-  const supabase = createClient();
   const queryClient = useQueryClient();
 
-  // Get withdrawals
+  // Get withdrawals using API
   const { data: withdrawals, isLoading } = useQuery({
     queryKey: ['adminWithdrawals', filterStatus],
     queryFn: async (): Promise<WithdrawalRequest[]> => {
-      let query = supabase
-        .from('withdrawal_requests')
-        .select(`
-          *,
-          user_email:profiles!inner(email, full_name)
-        `)
-        .order('created_at', { ascending: false });
-      
-      if (filterStatus !== 'all') {
-        query = query.eq('status', filterStatus);
-      }
-      
-      const { data, error } = await query;
-        
-      if (error) throw error;
-      return (data as any[]).map(item => ({
+      const statusParam = filterStatus !== 'all' ? `?status=${filterStatus}` : '';
+      const response = await fetch(`/api/admin/withdrawals${statusParam}`);
+      if (!response.ok) throw new Error('Failed to fetch withdrawals');
+      const result = await response.json();
+      return (result.data || []).map((item: any) => ({
         ...item,
-        user_email: item.user_email?.email,
-        user_full_name: item.user_email?.full_name
+        user_email: item.email,
+        user_full_name: item.full_name
       })) as WithdrawalRequest[];
     },
     refetchInterval: 10000,

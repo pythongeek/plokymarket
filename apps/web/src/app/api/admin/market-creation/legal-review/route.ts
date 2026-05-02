@@ -1,22 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { MarketCreationService } from '@/lib/market-creation/service';
+import { pool, query } from '@/lib/admin/local-db';
+
+async function getUserFromToken(token: string): Promise<string | null> {
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    if (!cloudRes.ok) return null;
+    const userData = await cloudRes.json();
+    return userData?.id || null;
+}
 
 // GET /api/admin/market-creation/legal-review - Get review queue
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
+    const authHeader = req.headers.get('Authorization');
+    const token = authHeader?.split(' ')[1] || '';
+    const userId = await getUserFromToken(token);
+    if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { data: profile } = await supabase.from('user_profiles').select('is_admin').eq('id', user.id).single();
-    if (!profile?.is_admin) return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
+    const profileResult = await pool.query(
+      'SELECT is_admin FROM user_profiles WHERE id = $1',
+      [userId]
+    );
+    if (!profileResult.rows[0]?.is_admin) {
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
+    }
 
-    const data = await MarketCreationService.getLegalReviewQueue(supabase, user.id);
-    return NextResponse.json({ data });
+    const result = await pool.query(
+      'SELECT * FROM get_legal_review_queue($1)',
+      [userId]
+    );
+    return NextResponse.json({ data: result.rows });
   } catch (error: any) {
     console.error('Error fetching legal review queue:', error);
     return NextResponse.json(
@@ -30,24 +50,24 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
+    const authHeader = req.headers.get('Authorization');
+    const token = authHeader?.split(' ')[1] || '';
+    const userId = await getUserFromToken(token);
+    if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const { draft_id, notes } = body;
 
     if (!draft_id) {
-      return NextResponse.json(
-        { error: 'Draft ID required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Draft ID required' }, { status: 400 });
     }
 
-    const success = await MarketCreationService.submitForLegalReview(supabase, draft_id, notes);
-    return NextResponse.json({ success });
+    await pool.query(
+      'SELECT * FROM submit_for_legal_review($1, $2)',
+      [draft_id, notes || null]
+    );
+    return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error('Error submitting for review:', error);
     return NextResponse.json(
@@ -61,19 +81,18 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
+    const authHeader = req.headers.get('Authorization');
+    const token = authHeader?.split(' ')[1] || '';
+    const userId = await getUserFromToken(token);
+    if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Check admin status
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('is_admin, is_senior_counsel')
-      .eq('id', user.id)
-      .single();
+    const profileResult = await pool.query(
+      'SELECT is_admin, is_senior_counsel FROM user_profiles WHERE id = $1',
+      [userId]
+    );
+    const profile = profileResult.rows[0];
 
     if (!profile?.is_admin) {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
@@ -82,21 +101,13 @@ export async function PATCH(req: NextRequest) {
     const { draft_id, status, notes } = body;
 
     if (!draft_id || !status) {
-      return NextResponse.json(
-        { error: 'Missing required fields' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    // Validate status
     if (!['approved', 'rejected', 'escalated'].includes(status)) {
-      return NextResponse.json(
-        { error: 'Invalid status' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
     }
 
-    // If escalating, check if user is senior counsel
     if (status === 'escalated' && !profile.is_senior_counsel) {
       return NextResponse.json(
         { error: 'Senior counsel required for escalation' },
@@ -104,14 +115,12 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
-    const success = await MarketCreationService.completeLegalReview(supabase, user.id, {
-      draft_id,
-      status,
-      notes,
-      is_senior_counsel: !!profile.is_senior_counsel
-    });
+    await pool.query(
+      'SELECT * FROM complete_legal_review($1, $2, $3, $4)',
+      [draft_id, userId, status, notes || null]
+    );
 
-    return NextResponse.json({ success });
+    return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error('Error completing review:', error);
     return NextResponse.json(

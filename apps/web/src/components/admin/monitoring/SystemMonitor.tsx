@@ -24,7 +24,6 @@ import {
     Play
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { createClient } from '@/lib/supabase/client';
 import { toast } from '@/components/ui/use-toast';
 
 interface CronJobInfo {
@@ -73,8 +72,7 @@ interface PerformanceMetric {
 
 export function SystemMonitor() {
     const { t } = useTranslation();
-    const supabase = createClient();
-
+  
     const [activeTab, setActiveTab] = useState('overview');
     const [systemStatus, setSystemStatus] = useState<SystemStatus>({
         database: 'healthy',

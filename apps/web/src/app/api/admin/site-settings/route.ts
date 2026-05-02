@@ -2,22 +2,30 @@
  * API Route: /api/admin/site-settings
  * Get and update site-wide settings (trading pause, maintenance mode, etc.)
  */
-import { createClient } from '@/lib/supabase/server';
+// @ts-nocheck
+import { pool } from '@/lib/admin/local-db';
 import { NextRequest, NextResponse } from 'next/server';
+
+async function getUserFromToken(token: string): Promise<string | null> {
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    if (!cloudRes.ok) return null;
+    const userData = await cloudRes.json();
+    return userData?.id || null;
+}
 
 // GET /api/admin/site-settings - Get all site settings
 export async function GET() {
     try {
-        const supabase = await createClient();
+        const result = await pool.query('SELECT * FROM site_settings');
+        const settings = result.rows;
         
-        // Cast to any to avoid deep type instantiation with site_settings table
-        const { data: settings, error } = await (supabase as any)
-            .from('site_settings')
-            .select('*');
-        
-        if (error) throw error;
-        
-        // Convert array to key-value object - use any to avoid deep type instantiation
+        // Convert array to key-value object
         const settingsObj: Record<string, any> = {};
         (settings || []).forEach((s: any) => {
             settingsObj[s.id] = s.setting_value;
@@ -33,19 +41,23 @@ export async function GET() {
 // PUT /api/admin/site-settings - Update site settings
 export async function PUT(req: NextRequest) {
     try {
-        const supabase = await createClient();
-        
-        // Check admin权限
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
+        const authHeader = req.headers.get('authorization');
+        if (!authHeader?.startsWith('Bearer ')) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        const token = authHeader.split(' ')[1];
+
+        const userId = await getUserFromToken(token);
+        if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
         
-        const { data: userData } = await supabase
-            .from('user_profiles')
-            .select('is_admin')
-            .eq('id', user.id)
-            .single();
+        // Check admin permissions
+        const profileResult = await pool.query(
+            'SELECT is_admin FROM user_profiles WHERE id = $1',
+            [userId]
+        );
+        const userData = profileResult.rows[0];
         
         if (!userData?.is_admin) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -58,15 +70,17 @@ export async function PUT(req: NextRequest) {
             return NextResponse.json({ error: 'Missing key or value' }, { status: 400 });
         }
         
-        const { error } = await (supabase as any)
-            .from('site_settings')
-            .update({
-                setting_value: value,
-                updated_by: user.id
-            })
-            .eq('id', key);
+        const updateResult = await pool.query(
+            `UPDATE site_settings 
+             SET setting_value = $1, updated_by = $2 
+             WHERE id = $3
+             RETURNING *`,
+            [value, userId, key]
+        );
         
-        if (error) throw error;
+        if (updateResult.rowCount === 0) {
+            return NextResponse.json({ error: 'Setting not found' }, { status: 404 });
+        }
         
         return NextResponse.json({ success: true });
     } catch (error) {

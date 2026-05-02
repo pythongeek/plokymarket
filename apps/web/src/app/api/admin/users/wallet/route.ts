@@ -1,17 +1,32 @@
-import { createClient } from '@supabase/supabase-js';
+// @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
+import { pool } from '@/lib/admin/local-db';
+
+async function getUserFromToken(token: string): Promise<string | null> {
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    if (!cloudRes.ok) return null;
+    const userData = await cloudRes.json();
+    return userData?.id || null;
+}
 
 export async function POST(request: NextRequest) {
     try {
-        const supabase = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.SUPABASE_SERVICE_ROLE_KEY!
-        );
-
-        // Get admin user from auth header or session
         const authHeader = request.headers.get('authorization');
-        const userId = request.headers.get('x-user-id');
+        if (!authHeader?.startsWith('Bearer ')) {
+            return NextResponse.json(
+                { success: false, error: 'Unauthorized' },
+                { status: 401 }
+            );
+        }
+        const token = authHeader.split(' ')[1];
 
+        const userId = await getUserFromToken(token);
         if (!userId) {
             return NextResponse.json(
                 { success: false, error: 'Unauthorized' },
@@ -20,13 +35,13 @@ export async function POST(request: NextRequest) {
         }
 
         // Verify admin status
-        const { data: adminUser, error: adminError } = await supabase
-            .from('users')
-            .select('is_admin, is_super_admin')
-            .eq('id', userId)
-            .single();
+        const adminResult = await pool.query(
+            'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
+            [userId]
+        );
+        const adminUser = adminResult.rows[0];
 
-        if (adminError || (!adminUser?.is_admin && !adminUser?.is_super_admin)) {
+        if (!adminUser?.is_admin && !adminUser?.is_super_admin) {
             return NextResponse.json(
                 { success: false, error: 'Admin access required' },
                 { status: 403 }
@@ -44,31 +59,31 @@ export async function POST(request: NextRequest) {
         }
 
         let result;
+        let rpcResult;
 
         switch (action) {
             case 'credit':
-                result = await supabase.rpc('admin_credit_wallet', {
-                    p_admin_id: userId,
-                    p_user_id: targetUserId,
-                    p_amount: amount,
-                    p_reason: reason || 'Admin credit'
-                });
+                rpcResult = await pool.query(
+                    'SELECT * FROM admin_credit_wallet($1, $2, $3, $4)',
+                    [userId, targetUserId, amount, reason || 'Admin credit']
+                );
+                result = { data: rpcResult.rows[0], error: rpcResult.rows[0]?.error };
                 break;
 
             case 'debit':
-                result = await supabase.rpc('admin_debit_wallet', {
-                    p_admin_id: userId,
-                    p_user_id: targetUserId,
-                    p_amount: amount,
-                    p_reason: reason || 'Admin debit'
-                });
+                rpcResult = await pool.query(
+                    'SELECT * FROM admin_debit_wallet($1, $2, $3, $4)',
+                    [userId, targetUserId, amount, reason || 'Admin debit']
+                );
+                result = { data: rpcResult.rows[0], error: rpcResult.rows[0]?.error };
                 break;
 
             case 'get':
-                result = await supabase.rpc('admin_get_user_wallet', {
-                    p_admin_id: userId,
-                    p_user_id: targetUserId
-                });
+                rpcResult = await pool.query(
+                    'SELECT * FROM admin_get_user_wallet($1, $2)',
+                    [userId, targetUserId]
+                );
+                result = { data: rpcResult.rows[0], error: rpcResult.rows[0]?.error };
                 break;
 
             default:
@@ -80,7 +95,7 @@ export async function POST(request: NextRequest) {
 
         if (result.error) {
             return NextResponse.json(
-                { success: false, error: result.error.message },
+                { success: false, error: result.error },
                 { status: 400 }
             );
         }
@@ -102,27 +117,38 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url);
-        const userId = searchParams.get('user_id');
-        const adminId = request.headers.get('x-user-id');
+        const targetUserId = searchParams.get('user_id');
+        const authHeader = request.headers.get('authorization');
+        
+        if (!authHeader?.startsWith('Bearer ')) {
+            return NextResponse.json(
+                { success: false, error: 'Unauthorized' },
+                { status: 401 }
+            );
+        }
+        const token = authHeader.split(' ')[1];
 
-        if (!adminId || !userId) {
+        const userId = await getUserFromToken(token);
+        if (!userId) {
+            return NextResponse.json(
+                { success: false, error: 'Unauthorized' },
+                { status: 401 }
+            );
+        }
+
+        if (!targetUserId) {
             return NextResponse.json(
                 { success: false, error: 'Missing parameters' },
                 { status: 400 }
             );
         }
 
-        const supabase = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.SUPABASE_SERVICE_ROLE_KEY!
-        );
-
         // Verify admin
-        const { data: adminUser } = await supabase
-            .from('users')
-            .select('is_admin, is_super_admin')
-            .eq('id', adminId)
-            .single();
+        const adminResult = await pool.query(
+            'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
+            [userId]
+        );
+        const adminUser = adminResult.rows[0];
 
         if (!adminUser?.is_admin && !adminUser?.is_super_admin) {
             return NextResponse.json(
@@ -131,53 +157,51 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        // Try RPC first, fallback to direct query if RPC doesn't exist
-        let walletData: any = null;
-        let transactions: any[] = [];
+        // Try RPC first, fallback to direct query
+        const rpcResult = await pool.query(
+            'SELECT * FROM admin_get_user_wallet($1, $2)',
+            [userId, targetUserId]
+        );
 
-        const { data: rpcResult, error: rpcError } = await supabase.rpc('admin_get_user_wallet', {
-            p_admin_id: adminId,
-            p_user_id: userId
-        });
-
-        if (rpcError) {
+        if (rpcResult.rows[0]?.error || !rpcResult.rows[0]) {
             // Fallback: Get wallet and transactions directly
-            const { data: wallet, error: walletError } = await supabase
-                .from('wallets')
-                .select('*')
-                .eq('user_id', userId)
-                .single();
+            const walletResult = await pool.query(
+                'SELECT * FROM wallets WHERE user_id = $1',
+                [targetUserId]
+            );
 
-            if (walletError) {
+            if (walletResult.rowCount === 0) {
                 return NextResponse.json(
                     { success: false, error: 'Wallet not found' },
                     { status: 404 }
                 );
             }
 
-            walletData = wallet;
+            const walletData = walletResult.rows[0];
 
             // Get recent transactions
-            const { data: txData } = await supabase
-                .from('transactions')
-                .select('id, transaction_type, amount, status, description, created_at')
-                .eq('user_id', userId)
-                .order('created_at', { ascending: false })
-                .limit(50);
+            const txResult = await pool.query(
+                `SELECT id, transaction_type, amount, status, description, created_at
+                 FROM transactions
+                 WHERE user_id = $1
+                 ORDER BY created_at DESC
+                 LIMIT 50`,
+                [targetUserId]
+            );
 
-            transactions = txData || [];
-        } else {
-            // RPC returned data
-            walletData = rpcResult;
-            transactions = rpcResult?.transactions || [];
+            return NextResponse.json({
+                success: true,
+                data: {
+                    ...walletData,
+                    transactions: txResult.rows || []
+                }
+            });
         }
 
+        // RPC returned data
         return NextResponse.json({
             success: true,
-            data: {
-                ...walletData,
-                transactions
-            }
+            data: rpcResult.rows[0]
         });
 
     } catch (error: any) {

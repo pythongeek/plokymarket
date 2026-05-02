@@ -1,3 +1,7 @@
+/**
+ * Admin Templates API
+ * Note: This route does not use Supabase for data access - it only imports types/functions
+ */
 import { NextRequest, NextResponse } from 'next/server';
 import { BUILT_IN_TEMPLATES, generateFromTemplate } from '@/lib/market-creation/template-engine';
 

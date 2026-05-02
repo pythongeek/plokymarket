@@ -1,6 +1,19 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { pool } from '@/lib/admin/local-db';
+
+async function getUserFromToken(token: string): Promise<string | null> {
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    if (!cloudRes.ok) return null;
+    const userData = await cloudRes.json();
+    return userData?.id || null;
+}
 
 /**
  * POST /api/admin/markets/batch
@@ -20,20 +33,19 @@ import { createClient } from '@/lib/supabase/server';
  */
 export async function POST(req: NextRequest) {
     try {
-        const supabase = await createClient();
-        const { data: { user } } = await supabase.auth.getUser();
-
-        if (!user) {
+        const authHeader = req.headers.get('Authorization');
+        const token = authHeader?.split(' ')[1] || '';
+        const userId = await getUserFromToken(token);
+        if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
         // Admin check
-        const { data: profile } = await (supabase
-            .from('user_profiles')
-            .select('is_admin, is_super_admin')
-            .eq('id', user.id)
-            .single() as any);
-
+        const profileResult = await pool.query(
+            'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
+            [userId]
+        );
+        const profile = profileResult.rows[0];
         if (!profile?.is_admin && !profile?.is_super_admin) {
             return NextResponse.json({ error: 'Admin only' }, { status: 403 });
         }
@@ -46,39 +58,28 @@ export async function POST(req: NextRequest) {
 
         console.log(`[Batch Market] Creating ${markets.length} markets...`);
 
-        // We can't easily do atomic inserts across tables with standard Supabase client 
-        // without an RPC, but we can do a batch insert to 'markets' table.
-        // Note: This won't create 'outcomes' for each market if they are multi-outcome.
-        // For now, let's process them in parallel or a loop for simplicity, 
-        // or use a transaction-like approach if possible.
-
         const results = [];
         const errors = [];
 
         for (const marketData of markets) {
             try {
-                const { data, error } = await supabase
-                    .from('markets')
-                    .insert({
-                        event_id: marketData.event_id,
-                        name: marketData.name,
-                        name_bn: marketData.name_bn,
-                        category: marketData.category,
-                        question: marketData.question,
-                        question_bn: marketData.question_bn,
-                        trading_closes_at: marketData.trading_closes_at,
-                        status: 'active',
-                        market_type: marketData.outcomes?.length > 2 ? 'multi_outcome' : 'binary'
-                    })
-                    .select()
-                    .single();
-
-                if (error) throw error;
-
-                // If categorical, we'd need to insert outcomes here too.
-                // For a true "Phase 2" batch creation, we should have a dedicated RPC.
-
-                results.push(data);
+                const marketType = marketData.outcomes?.length > 2 ? 'multi_outcome' : 'binary';
+                const insertResult = await pool.query(
+                    `INSERT INTO markets (event_id, name, name_bn, category, question, question_bn, trading_closes_at, status, market_type)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', $8)
+                     RETURNING *`,
+                    [
+                        marketData.event_id,
+                        marketData.name,
+                        marketData.name_bn,
+                        marketData.category,
+                        marketData.question,
+                        marketData.question_bn,
+                        marketData.trading_closes_at,
+                        marketType
+                    ]
+                );
+                results.push(insertResult.rows[0]);
             } catch (err: any) {
                 errors.push({ event_id: marketData.event_id, error: err.message });
             }

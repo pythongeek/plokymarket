@@ -6,7 +6,6 @@
 
 import { useEffect, useState } from 'react';
 import { TrendingUp, TrendingDown, Droplets, Users, Activity } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
 
 interface MarketStatsBannerProps {
   market: {
@@ -26,6 +25,15 @@ function formatBDT(amount: number): string {
   return `৳${Math.round(amount)}`;
 }
 
+async function adminFetch(path: string, options?: RequestInit) {
+  const res = await fetch(path, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...(options?.headers || {}) }
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
 export function MarketStatsBanner({ market }: MarketStatsBannerProps) {
   const [stats, setStats] = useState({
     volume:   market.total_volume ?? 0,
@@ -40,17 +48,10 @@ export function MarketStatsBanner({ market }: MarketStatsBannerProps) {
   useEffect(() => {
     async function fetchStats() {
       try {
-        // ── Trades: handle both schema variants ──────────────────────────────
-        // Old schema:  trades.user_id (via positions)
-        // New schema:  trades.buyer_id + trades.seller_id
-        const { data: tradeRows, error } = await supabase
-          .from('trades')
-          .select('price, quantity, buyer_id, seller_id')
-          .eq('market_id', market.id)
-          .order('created_at', { ascending: false })
-          .limit(500);
+        // Fetch trades via API
+        const { data: tradeRows } = await adminFetch(`/api/admin/monitoring/trades?marketId=${market.id}&limit=500`);
 
-        if (!error && tradeRows) {
+        if (tradeRows && tradeRows.length > 0) {
           // Collect unique trader IDs (works for both schema variants)
           const traderSet = new Set<string>();
           let totalVolume = 0;
@@ -88,31 +89,6 @@ export function MarketStatsBanner({ market }: MarketStatsBannerProps) {
     }
 
     fetchStats();
-
-    // ── Real-time subscription for new trades ─────────────────────────────────
-    const channel = supabase
-      .channel(`mkt-stats-${market.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'trades',
-          filter: `market_id=eq.${market.id}`,
-        },
-        (payload) => {
-          const t = payload.new as any;
-          setStats(prev => ({
-            ...prev,
-            volume: prev.volume + (t.price ?? 0) * (t.quantity ?? 0),
-            trades: prev.trades + 1,
-            yesPrice: t.outcome === 'YES' ? (t.price ?? prev.yesPrice) : prev.yesPrice,
-          }));
-        }
-      )
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
   }, [market.id, market.total_volume]);
 
   const yesPercent  = Math.round(stats.yesPrice * 100);
