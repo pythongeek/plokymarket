@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-const AUTH_SERVER_URL = process.env.AUTH_SERVER_URL || 'http://127.0.0.1:8080';
+const AUTH_SERVER_URL = process.env.AUTH_SERVER_URL || 'http://204.168.167.195:8080';
 
 export async function POST(request: Request) {
   try {
