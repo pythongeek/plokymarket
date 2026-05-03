@@ -2,5 +2,9 @@ name = "plokymarket-csp-fix"
 main = "index.js"
 compatibility_date = "2024-01-01"
 
-# Zone-scoped Worker (no account needed for zone-level deployment)
-# Route will be set via GitHub Actions / Cloudflare Dashboard
+[env.production]
+zone_id = "385c3968142891b9aa4fa5e6de6d89e9"
+routes = [
+  { pattern = "polymarketbd.com", zone_name = "polymarketbd.com" },
+  { pattern = "*.polymarketbd.com", zone_name = "polymarketbd.com" }
+]
