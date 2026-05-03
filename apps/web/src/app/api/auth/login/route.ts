@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-const AUTH_SERVER_URL = process.env.AUTH_SERVER_URL || 'http://204.168.167.195:8080';
+const AUTH_SERVER_URL = process.env.AUTH_SERVER_URL || 'http://127.0.0.1:8080';
 
 export async function POST(request: Request) {
   try {
@@ -23,14 +23,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: data.error || 'Invalid credentials' }, { status: 401 });
     }
 
+    // ploky-auth returns { access_token, refresh_token, user, ... }
+    const token = data.access_token || data.token;
+    if (!token) {
+      return NextResponse.json({ error: 'No token returned' }, { status: 500 });
+    }
+
     // Set Supabase-compatible session cookies
     const response = NextResponse.json({
       user: data.user,
-      session: { access_token: data.token }
+      session: { access_token: token }
     });
 
     const maxAge = 7 * 24 * 60 * 60; // 7 days
-    response.cookies.set('sb-access-token', data.token, {
+    response.cookies.set('sb-access-token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
