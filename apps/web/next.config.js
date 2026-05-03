@@ -17,12 +17,24 @@ const nextConfig = {
     typescript: {
         ignoreBuildErrors: true,
     },
+    // Keep pg and pgpass as node_modules (don't bundle them in Edge Runtime)
+    serverExternalPackages: ['pg', 'pgpass', 'pg-pool'],
     // Ensure service worker is not bundled by Next.js
-    webpack: (config, { isServer }) => {
-        if (!isServer) {
+    webpack: (config, { isServer, isEdge }) => {
+        if (!isServer || isEdge) {
+            // Edge runtime and client need fallbacks for Node.js core modules
             config.resolve.fallback = {
                 ...config.resolve.fallback,
                 fs: false,
+                path: false,
+                net: false,
+                dns: false,
+                tls: false,
+                'pg-native': false,
+                stream: false,
+                string_decoder: false,
+                // Stub pgpass so pg can be imported in Edge without crypto errors
+                'pgpass': false,
             };
         }
         return config;
