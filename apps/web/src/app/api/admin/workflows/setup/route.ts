@@ -22,7 +22,7 @@ async function getUserFromToken(token: string): Promise<string | null> {
     return userData?.id || null;
 }
 
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 
 const getQStashClient = () => {
   const token = process.env.QSTASH_TOKEN;

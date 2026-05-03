@@ -4,12 +4,12 @@
  * 
  * Uses local PostgreSQL (pg) via local-db pool.
  * Auth: CRON_SECRET bearer token + x-cron-secret header.
- * Edge runtime compatible.
+ * Node.js runtime (uses pg pool)..
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { pool } from '@/lib/admin/local-db';
 
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 export async function GET(request: NextRequest) {

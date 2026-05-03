@@ -62,7 +62,7 @@ const WORKFLOW_CONFIGS = {
   }
 };
 
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 
 // Verify admin authentication
 async function verifyAdmin(request: Request): Promise<{ isAdmin: boolean; error?: string }> {
