@@ -1,0 +1,6 @@
+name = "plokymarket-csp-fix"
+main = "index.js"
+compatibility_date = "2024-01-01"
+
+# Zone-scoped Worker (no account needed for zone-level deployment)
+# Route will be set via GitHub Actions / Cloudflare Dashboard
