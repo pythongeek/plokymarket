@@ -5,11 +5,13 @@
  * Auth flow: Custom JWT cookie (from local auth server) → verified locally → local PostgreSQL pool used
  */
 import { NextResponse } from 'next/server';
-import jwt from 'jsonwebtoken';
+import { jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 import { pool } from '@/lib/admin/local-db';
 
-const JWT_SECRET = process.env.LOCAL_JWT_SECRET || 'P10kyM@rket.BD.2026.JWT.SECRET';
+const JWT_SECRET = process.env.LOCAL_JWT_SECRET || process.env.JWT_SECRET || 'P10kyM@rket.BD.2026.JWT.SECRET';
+// Encode for jose
+const secretKey = new TextEncoder().encode(JWT_SECRET);
 
 export type AdminLevel = 'super' | 'admin' | null;
 
@@ -35,7 +37,7 @@ export interface AdminResult {
 
 /**
  * Verify admin and return local PostgreSQL pool for direct DB access.
- * Uses local JWT validation instead of Supabase cloud.
+ * Uses local JWT validation with jose (Edge/Node compatible).
  */
 export async function admin(): Promise<AdminResult | { pool: null; error: NextResponse }> {
   try {
@@ -48,7 +50,8 @@ export async function admin(): Promise<AdminResult | { pool: null; error: NextRe
 
     let decoded: any;
     try {
-      decoded = jwt.verify(token, JWT_SECRET);
+      const { payload } = await jwtVerify(token, secretKey);
+      decoded = payload;
     } catch {
       return { pool: null, error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
     }
@@ -78,7 +81,14 @@ export async function getAdminUser(): Promise<AdminUser | null> {
     const token = cookieStore.get('sb-access-token')?.value;
     if (!token) return null;
 
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    let decoded: any;
+    try {
+      const { payload } = await jwtVerify(token, secretKey);
+      decoded = payload;
+    } catch {
+      return null;
+    }
+
     if (!decoded?.sub) return null;
 
     const { rows } = await pool.query(

@@ -2,7 +2,7 @@ import createMiddleware from 'next-intl/middleware';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { Redis } from '@upstash/redis';
-import jwt from 'jsonwebtoken';
+import { jwtVerify, decodeJwt } from 'jose';
 
 // Secure admin paths
 const SECURE_PATHS = {
@@ -11,9 +11,9 @@ const SECURE_PATHS = {
 };
 
 const ALLOWED_ADMIN_IPS: string[] = process.env.ADMIN_IP_WHITELIST?.split(',') || [];
-const AUTH_RATE_LIMIT_WINDOW = 15 * 60;
-const MAX_AUTH_ATTEMPTS = 20;
-const JWT_SECRET = process.env.LOCAL_JWT_SECRET || 'P10kyM@rket.BD.2026.JWT.SECRET';
+const AUTH_RATE_LIMIT_WINDOW=300;
+const MAX_AUTH_ATTEMPTS=5;
+const JWT_SECRET=process.env.LOCAL_JWT_SECRET || process.env.JWT_SECRET || 'P10kyM@rket.BD.2026.JWT.SECRET';
 
 // Lazy Redis
 let redis: Redis | undefined;
@@ -56,7 +56,8 @@ function isAdminPath(pathname: string) { return pathname.includes('/admin'); }
 
 const intlMiddleware = createMiddleware({
   locales: ['bn', 'en', 'hi'],
-  defaultLocale: 'bn',
+  defaultLocale: 'en',
+  localePrefix: 'never',
 });
 
 const securityHeaders = {
@@ -67,6 +68,9 @@ const securityHeaders = {
   'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
   'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
 };
+
+// Encode JWT secret for jose
+const secretKey = new TextEncoder().encode(JWT_SECRET);
 
 export async function middleware(request: NextRequest) {
   const intlResponse = intlMiddleware(request);
@@ -107,7 +111,7 @@ export async function middleware(request: NextRequest) {
       }
     }
 
-    // Validate JWT from cookie locally
+    // Validate JWT from cookie using jose (Edge Runtime compatible)
     const token = request.cookies.get('sb-access-token')?.value;
     if (!token) {
       const authUrl = new URL(SECURE_PATHS.auth, request.url);
@@ -117,7 +121,9 @@ export async function middleware(request: NextRequest) {
 
     let decoded: any;
     try {
-      decoded = jwt.verify(token, JWT_SECRET);
+      // jose works in Edge Runtime - no Node.js crypto needed
+      const { payload } = await jwtVerify(token, secretKey);
+      decoded = payload;
     } catch (jwtErr) {
       console.warn('JWT validation failed:', (jwtErr as Error).message);
       const authUrl = new URL(SECURE_PATHS.auth, request.url);

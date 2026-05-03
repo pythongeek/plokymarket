@@ -1,17 +1,27 @@
 import { NextResponse } from 'next/server';
-import jwt from 'jsonwebtoken';
+import { jwtVerify } from 'jose';
 
-const JWT_SECRET = process.env.LOCAL_JWT_SECRET || process.env.SUPABASE_JWT_SECRET || 'P10kyM@rket.BD.2026.JWT.SECRET';
+const JWT_SECRET = process.env.LOCAL_JWT_SECRET || process.env.SUPABASE_JWT_SECRET || process.env.JWT_SECRET || 'P10kyM@rket.BD.2026.JWT.SECRET';
+const secretKey = new TextEncoder().encode(JWT_SECRET);
 
 export async function GET() {
   try {
-    const token = (await import('next/headers')).cookies().then(c => c.get('sb-access-token')?.value);
+    const { cookies } = await import('next/headers');
+    const cookieStore = await cookies();
+    const token = cookieStore.get('sb-access-token')?.value;
 
     if (!token) {
       return NextResponse.json({ user: null }, { status: 401 });
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    let decoded: any;
+    try {
+      const { payload } = await jwtVerify(token, secretKey);
+      decoded = payload;
+    } catch {
+      return NextResponse.json({ user: null }, { status: 401 });
+    }
+
     return NextResponse.json({
       user: {
         id: decoded.sub,
