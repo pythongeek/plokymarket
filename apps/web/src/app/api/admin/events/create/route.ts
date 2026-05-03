@@ -11,7 +11,7 @@ import { QStashClient } from '@/lib/upstash/workflows';
 import { MarketService } from '@/lib/services/MarketService';
 import { pool, query } from '@/lib/admin/local-db';
 
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 export const maxDuration = 30;
 
 async function getUserFromToken(token: string): Promise<string | null> {

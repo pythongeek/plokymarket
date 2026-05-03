@@ -20,7 +20,7 @@ async function getUserFromToken(token: string): Promise<string | null> {
     return userData?.id || null;
 }
 
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 
 function generateSlug(title: string): string {
   return title

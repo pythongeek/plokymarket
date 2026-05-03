@@ -21,6 +21,16 @@ const nextConfig = {
     serverExternalPackages: ['pg', 'pgpass', 'pg-pool'],
     // Ensure service worker is not bundled by Next.js
     webpack: (config, { isServer, isEdge }) => {
+        if (isEdge) {
+            // Edge runtime: completely ignore pg-related packages
+            // Add aliases to prevent webpack from trying to bundle them
+            config.resolve.alias = {
+                ...config.resolve.alias,
+                'pgpass': false,
+                'pg': false,
+                'split2': false,
+            };
+        }
         if (!isServer || isEdge) {
             // Edge runtime and client need fallbacks for Node.js core modules
             config.resolve.fallback = {
@@ -33,8 +43,6 @@ const nextConfig = {
                 'pg-native': false,
                 stream: false,
                 string_decoder: false,
-                // Stub pgpass so pg can be imported in Edge without crypto errors
-                'pgpass': false,
             };
         }
         return config;

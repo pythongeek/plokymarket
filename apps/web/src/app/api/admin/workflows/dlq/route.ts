@@ -20,7 +20,7 @@ async function getUserFromToken(token: string): Promise<string | null> {
     return userData?.id || null;
 }
 
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 
 // Verify admin access
 async function verifyAdmin(request: NextRequest): Promise<{ isAdmin: boolean; userId?: string }> {
