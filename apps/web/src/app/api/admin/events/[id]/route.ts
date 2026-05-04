@@ -86,9 +86,10 @@ export async function PATCH(
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Verify token against cloud Supabase
     const userId = await getUserFromToken(token);
     if (!userId) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
     }
 
     try {
@@ -106,18 +107,20 @@ export async function PATCH(
             delete updates.is_active;
         }
 
-        // Try events table first
+        // events is a VIEW over event_definitions+markets
+        // For event updates, use event_definitions (the base table)
         const eventExistsResult = await pool.query(
-            'SELECT id FROM events WHERE id = $1',
+            'SELECT id FROM event_definitions WHERE id = $1',
             [id]
         );
 
         if (eventExistsResult.rows.length > 0) {
+            // Update event_definitions (base table), not events (VIEW)
             const setClause = Object.keys(updates).map((k, i) => `${k} = $${i + 1}`).join(', ');
             const values = [...Object.values(updates), id];
-            
+
             const result = await pool.query(
-                `UPDATE events SET ${setClause} WHERE id = $${values.length} RETURNING *`,
+                `UPDATE event_definitions SET ${setClause} WHERE id = $${values.length} RETURNING *`,
                 values
             );
 
@@ -161,22 +164,25 @@ export async function DELETE(
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Verify token
     const userId = await getUserFromToken(token);
     if (!userId) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
     }
 
     try {
-        // Try events table first
+        // events is a VIEW over event_definitions+markets
+        // Check event_definitions first
         const eventExistsResult = await pool.query(
-            'SELECT id FROM events WHERE id = $1',
+            'SELECT id FROM event_definitions WHERE id = $1',
             [id]
         );
 
         if (eventExistsResult.rows.length > 0) {
-            // Delete associated markets first
+            // Delete associated markets first (ON DELETE CASCADE should handle this, but be explicit)
             await pool.query('DELETE FROM markets WHERE event_id = $1', [id]);
-            const result = await pool.query('DELETE FROM events WHERE id = $1', [id]);
+            // Delete from event_definitions (base table), not events (VIEW)
+            const result = await pool.query('DELETE FROM event_definitions WHERE id = $1', [id]);
             if (result.error) return NextResponse.json({ error: result.error.message }, { status: 500 });
             return NextResponse.json({ success: true });
         }

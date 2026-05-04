@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { pool, query } from '@/lib/admin/local-db';
 import { suggestEventWithGemini } from '@/lib/market-creation/ai-suggestion';
+import { requireAdminUser } from '@/lib/admin/admin-auth';
 
 async function getUserFromToken(token: string): Promise<string | null> {
     const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
@@ -22,15 +23,11 @@ async function getUserFromToken(token: string): Promise<string | null> {
  */
 export async function POST(req: NextRequest) {
     try {
-        const authHeader = req.headers.get('authorization');
-        const token = authHeader?.replace('Bearer ', '');
-        if (!token) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
-        const userId = await getUserFromToken(token);
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        // Auth via requireAdminUser (local JWT validation)
+    const authResult = await requireAdminUser(req);
+    if ('error' in authResult) return authResult.error;
+    const { user: adminUser, pool: adminPool } = authResult;
+    const userId = adminUser.id;
         }
 
         const profiles = await query<{ is_admin: boolean; is_super_admin: boolean }>(

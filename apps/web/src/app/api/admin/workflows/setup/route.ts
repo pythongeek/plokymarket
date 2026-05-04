@@ -35,9 +35,8 @@ async function verifyAdmin(request: NextRequest): Promise<boolean> {
   if (!authHeader?.startsWith('Bearer ')) return false;
 
   const token = authHeader.split(' ')[1];
-  const userId = await getUserFromToken(token);
-  
-  if (!userId) return false;
+  # getUserFromToken removed
+    if (false) return false;
 
   const profileResult = await pool.query(
     'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',

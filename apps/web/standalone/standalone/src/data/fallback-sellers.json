@@ -1,0 +1,26 @@
+{
+    "bkash": [
+        {
+            "seller_id": "fallback_1",
+            "nickname": "TrustedSeller_DH",
+            "price_bdt": 122.80,
+            "available_usdt": "10,000 USDT",
+            "limits": "1,000 - 100,000 BDT",
+            "completion_rate": "99.2%",
+            "verified": true,
+            "is_fallback": true
+        }
+    ],
+    "nagad": [
+        {
+            "seller_id": "fallback_1",
+            "nickname": "FastNagad_TR",
+            "price_bdt": 123.00,
+            "available_usdt": "5,000 USDT",
+            "limits": "500 - 50,000 BDT",
+            "completion_rate": "98.8%",
+            "verified": true,
+            "is_fallback": true
+        }
+    ]
+}

@@ -1,0 +1,38 @@
+{
+  "app/(dashboard)/layout.tsx -> @/components/trading/BetSlip": {
+    "id": 79005,
+    "files": [
+      "static/chunks/4497-a6d64eec96c9b74a.js",
+      "static/chunks/3919.f1dcf0b236047dcb.js",
+      "static/chunks/9005.410898423cf0441c.js"
+    ]
+  },
+  "hooks/useAIAgents.ts -> @/lib/ai-agents": {
+    "id": 51489,
+    "files": [
+      "static/chunks/1489.a45dd5f4df6d18f1.js"
+    ]
+  },
+  "hooks/useMarketProposals.ts -> @/lib/ai-agents/market-proposal-agent": {
+    "id": 15922,
+    "files": []
+  },
+  "lib/ai-agents/content-agent.ts -> ./vertex-content-agent": {
+    "id": 21463,
+    "files": [
+      "static/chunks/1463.8f461b346cabb478.js"
+    ]
+  },
+  "lib/ai-agents/market-logic-agent.ts -> ./vertex-quant-logic-agent": {
+    "id": 93370,
+    "files": [
+      "static/chunks/3370.46105da76bc516ee.js"
+    ]
+  },
+  "lib/ai-agents/timing-agent.ts -> ./vertex-timing-agent": {
+    "id": 1784,
+    "files": [
+      "static/chunks/1784.9a288aca73c493f3.js"
+    ]
+  }
+}
