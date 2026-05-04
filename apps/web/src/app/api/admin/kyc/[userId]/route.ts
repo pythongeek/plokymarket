@@ -1,44 +1,23 @@
 // @ts-nocheck
+/**
+ * KYC Admin API — per-user KYC details and actions
+ * Auth: Local JWT validated via requireAdminUser (jose)
+ */
+
 import { pool, query } from '@/lib/admin/local-db';
+import { requireAdminUser } from '@/lib/admin/admin-auth';
 import { NextRequest, NextResponse } from 'next/server';
 
-async function getUserFromToken(token: string): Promise<string | null> {
-    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
-    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'apikey': process.env.SUPABASE_ANON_KEY || ''
-        }
-    });
-    if (!cloudRes.ok) return null;
-    const userData = await cloudRes.json();
-    return userData?.id || null;
-}
-
-// GET /api/admin/kyc/[userId] - Get specific user's KYC details
+// GET /api/admin/kyc/[userId] — Get specific user's KYC details
 export async function GET(
     req: NextRequest,
     { params }: { params: Promise<{ userId: string }> }
 ) {
     try {
-        const authHeader = req.headers.get('authorization');
-        const token = authHeader?.replace('Bearer ', '');
-        if (!token) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
-        const adminUserId = await getUserFromToken(token);
-        if (!adminUserId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
-        const profiles = await query<{ is_admin: boolean; is_super_admin: boolean }>(
-            'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
-            [adminUserId]
-        );
-        if (!profiles[0]?.is_admin && !profiles[0]?.is_super_admin) {
-            return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
-        }
+        // ─── AUTH (local JWT) ─────────────────────────────────────────────
+        const authResult = await requireAdminUser(req);
+        if ('error' in authResult) return authResult.error;
+        // adminUserId is the admin performing the action (not the target userId)
 
         const { userId } = await params;
 
@@ -60,7 +39,7 @@ export async function GET(
             [userId]
         );
 
-        // Get gate status - call RPC if available
+        // Get gate status
         let gate = {
             needs_kyc: false,
             reason: 'error',
@@ -96,30 +75,16 @@ export async function GET(
     }
 }
 
-// POST /api/admin/kyc/[userId] - Perform KYC action (approve/reject/force/waive/override)
+// POST /api/admin/kyc/[userId] — Perform KYC action (approve/reject/force/waive/override)
 export async function POST(
     req: NextRequest,
     { params }: { params: Promise<{ userId: string }> }
 ) {
     try {
-        const authHeader = req.headers.get('authorization');
-        const token = authHeader?.replace('Bearer ', '');
-        if (!token) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
-        const adminUserId = await getUserFromToken(token);
-        if (!adminUserId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
-        const profiles = await query<{ is_admin: boolean; is_super_admin: boolean }>(
-            'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
-            [adminUserId]
-        );
-        if (!profiles[0]?.is_admin && !profiles[0]?.is_super_admin) {
-            return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
-        }
+        // ─── AUTH (local JWT) ─────────────────────────────────────────────
+        const authResult = await requireAdminUser(req);
+        if ('error' in authResult) return authResult.error;
+        const adminUserId = authResult.user.id;
 
         const { userId } = await params;
         const body = await req.json();

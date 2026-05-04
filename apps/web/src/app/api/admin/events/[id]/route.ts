@@ -1,27 +1,19 @@
 // @ts-nocheck
 import { pool, query } from '@/lib/admin/local-db';
+import { requireAdminUser } from '@/lib/admin/admin-auth';
 import { NextResponse } from 'next/server';
-
-async function getUserFromToken(token: string): Promise<string | null> {
-    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
-    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'apikey': process.env.SUPABASE_ANON_KEY || ''
-        }
-    });
-    if (!cloudRes.ok) return null;
-    const userData = await cloudRes.json();
-    return userData?.id || null;
-}
 
 export async function GET(
     request: Request,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    const { id } = await params;
-
     try {
+        // Admin auth
+        const authResult = await requireAdminUser(request as unknown as import('next/server').NextRequest);
+        if ('error' in authResult) return authResult.error;
+        const userId = authResult.user.id;
+        void userId;
+
         // Try events table first (events created via the event creation flow)
         const eventResult = await pool.query(
             'SELECT * FROM events WHERE id = $1',
@@ -80,17 +72,10 @@ export async function PATCH(
 ) {
     const { id } = await params;
 
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.replace('Bearer ', '');
-    if (!token) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // Verify token against cloud Supabase
-    const userId = await getUserFromToken(token);
-    if (!userId) {
-        return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
-    }
+    // Admin auth
+    const authResult = await requireAdminUser(request as unknown as import('next/server').NextRequest);
+    if ('error' in authResult) return authResult.error;
+    const userId = authResult.user.id;
 
     try {
         const body = await request.json();
@@ -158,17 +143,10 @@ export async function DELETE(
 ) {
     const { id } = await params;
 
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.replace('Bearer ', '');
-    if (!token) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // Verify token
-    const userId = await getUserFromToken(token);
-    if (!userId) {
-        return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
-    }
+    // Admin auth
+    const authResult = await requireAdminUser(request as unknown as import('next/server').NextRequest);
+    if ('error' in authResult) return authResult.error;
+    const userId = authResult.user.id;
 
     try {
         // events is a VIEW over event_definitions+markets

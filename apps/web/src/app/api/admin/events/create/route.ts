@@ -1,35 +1,16 @@
 // @ts-nocheck
 /**
  * Event Creation API (POST only)
- * 
+ *
  * DELEGATES to the atomic RPC: create_event_complete()
  * which handles event_definitions + markets creation in one transaction.
- * 
- * Previously broken: INSERT INTO events (VIEW), undefined userId, wrong columns.
- * Fixed: Uses the RPC function that was corrected in migration 9998.
- * 
- * Auth: Cloud Supabase JWT validated against sltcfmqefujecqfbmkvz.supabase.co
+ *
+ * Auth: Local JWT validated via requireAdminUser (jose)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-
-async function getUserFromToken(token: string): Promise<string | null> {
-    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
-    const { pool } = await import('@/lib/admin/local-db');
-    try {
-        const res = await fetch(`${cloudUrl}/auth/v1/user`, {
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-            }
-        });
-        if (!res.ok) return null;
-        const user = await res.json();
-        return user?.id || null;
-    } catch {
-        return null;
-    }
-}
+import { pool } from '@/lib/admin/local-db';
+import { requireAdminUser } from '@/lib/admin/admin-auth';
 
 function validateEvent(body: any) {
     if (!body.title?.trim() || body.title.trim().length < 5)
@@ -47,22 +28,10 @@ function validateEvent(body: any) {
 }
 
 export async function POST(req: NextRequest) {
-    // Auth
-    const authHeader = req.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer '))
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    const token = authHeader.split(' ')[1];
-    const userId = await getUserFromToken(token);
-    if (!userId)
-        return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
-
-    // Admin check
-    const { pool } = await import('@/lib/admin/local-db');
-    const profileResult = await pool.query(
-        'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1', [userId]
-    );
-    if (!profileResult.rows[0]?.is_admin && !profileResult.rows[0]?.is_super_admin)
-        return NextResponse.json({ error: 'Admin required' }, { status: 403 });
+    // ─── AUTH (local JWT) ─────────────────────────────────────────────────────
+    const authResult = await requireAdminUser(req);
+    if ('error' in authResult) return authResult.error;
+    const userId = authResult.user.id;
 
     // Validate
     const body = await req.json().catch(() => null);

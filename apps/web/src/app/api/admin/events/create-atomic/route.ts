@@ -4,61 +4,28 @@
  * Uses PostgreSQL RPC to ensure event and market are created together
  * Prevents partial data (event without market)
  *
- * Features:
- * - Slug uniqueness check with fallback (handled in RPC)
- * - Asia/Dhaka timezone handling
- * - Atomic transaction (rollback on failure)
- * - Comprehensive error handling
- *
- * BUG FIX (Phase 1): Fixed two critical issues:
- * 1. `if (false)` block bypassed auth entirely — userId was undefined causing ReferenceError
- * 2. RPC returns jsonb column `create_event_complete`, not individual columns —
- *    was accessing resultData.event_id which was undefined
+ * Auth: Local JWT validated via requireAdminUser (jose)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { pool } from '@/lib/admin/local-db';
+import { requireAdminUser } from '@/lib/admin/admin-auth';
 import { preFlightCheck, generateUniqueSlug } from '@/lib/events/slug-utils';
 import { convertToUTC } from '@/lib/utils/timezone';
-
-async function getUserFromToken(token: string): Promise<string | null> {
-    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
-    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'apikey': process.env.SUPABASE_ANON_KEY || ''
-        }
-    });
-    if (!cloudRes.ok) return null;
-    const userData = await cloudRes.json();
-    return userData?.id || null;
-}
 
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   try {
-    // ─── AUTH ────────────────────────────────────────────────────────────────
-    const authHeader = req.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json(
-        { error: 'Unauthorized', message: 'Please sign in to create events' },
-        { status: 401 }
-      );
-    }
-    const token = authHeader.split(' ')[1];
-
-    // BUG FIX #1: Actually call getUserFromToken instead of if(false) bypass
-    const userId = await getUserFromToken(token);
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'Unauthorized', message: 'Invalid or expired token' },
-        { status: 401 }
-      );
-    }
+    // ─── AUTH (local JWT) ────────────────────────────────────────────────────
+    const authResult = await requireAdminUser(req);
+    if ('error' in authResult) return authResult.error;
+    const userId = authResult.user.id;
 
     // ─── PERMISSION CHECK ────────────────────────────────────────────────────
+    // requireAdminUser already verified is_admin/is_super_admin.
+    // Check additional can_create_events flag if needed.
     const profileResult = await pool.query(
       'SELECT is_admin, can_create_events FROM user_profiles WHERE id = $1',
       [userId]
@@ -100,7 +67,7 @@ export async function POST(req: NextRequest) {
 
     // Double-check slug uniqueness (RPC also checks, but we do it early)
     const slugCheck = await pool.query(
-      'SELECT id FROM events WHERE slug = $1',
+      'SELECT id FROM event_definitions WHERE slug = $1',
       [finalSlug]
     );
 
@@ -108,7 +75,6 @@ export async function POST(req: NextRequest) {
       // Slug collision — generate unique one
       const uniqueSlug = await generateUniqueSlug(event_data.title);
       console.warn(`[Create Event] Slug collision detected, using: ${uniqueSlug}`);
-      // Override the slug used in the event
       event_data.slug = uniqueSlug;
     } else {
       event_data.slug = finalSlug;
@@ -138,7 +104,6 @@ export async function POST(req: NextRequest) {
       image_url: event_data.image_url || '',
       trading_closes_at: tradingClosesAtUTC,
       resolution_delay_hours: event_data.resolution_delay_hours || 24,
-      // Normalize resolution_method to match DB CHECK constraint
       resolution_method: normalizeResolutionMethod(event_data.resolution_method),
       resolution_source: event_data.resolution_source || '',
       answer_type: 'binary',
@@ -156,7 +121,6 @@ export async function POST(req: NextRequest) {
     console.log('[Create Event] eventDataForRPC:', JSON.stringify(eventDataForRPC, null, 2));
 
     // ─── CALL RPC ───────────────────────────────────────────────────────────
-    // BUG FIX #2: The RPC returns jsonb — access result.rows[0].create_event_complete
     const rpcResult = await pool.query(
       'SELECT create_event_complete($1, $2) AS result',
       [JSON.stringify(eventDataForRPC), userId]
@@ -174,7 +138,6 @@ export async function POST(req: NextRequest) {
 
     console.log('[Create Event] RPC result:', JSON.stringify(rpcOutput, null, 2));
 
-    // The RPC returns { success, event_id, slug, message }
     if (!rpcOutput.success) {
       return NextResponse.json(
         { error: 'Creation Failed', message: rpcOutput.message || 'Unknown RPC error' },
@@ -186,7 +149,7 @@ export async function POST(req: NextRequest) {
 
     // Get the created event to return its linked market_id
     const eventResult = await pool.query(
-      'SELECT id, market_id, slug FROM events WHERE id = $1',
+      'SELECT id, market_id, slug FROM event_definitions WHERE id = $1',
       [rpcOutput.event_id]
     );
     const event = eventResult.rows[0];
@@ -234,7 +197,6 @@ function normalizeResolutionMethod(method: string | undefined): string {
   if (m === 'EXTERNAL' || m === 'EXTERNAL_API') return 'external_api';
   if (m === 'COMMUNITY' || m === 'COMMUNITY_VOTE') return 'community_vote';
 
-  // Default: if it looks like a DB value, use it; else manual_admin
   const validMethods = [
     'manual_admin', 'ai_oracle', 'expert_panel',
     'external_api', 'community_vote', 'hybrid'
