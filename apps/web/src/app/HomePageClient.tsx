@@ -194,7 +194,16 @@ export default function HomePageClient({ initialMarkets, hero, categoryTabs, sta
     (!search || m.question.toLowerCase().includes(search.toLowerCase()) || m.tag.includes(search))
   );
 
-  const navTabs = ['ট্রেন্ডিং', 'ব্রেকিং', 'নতুন', 'রাজনীতি', 'খেলাধুলা', 'ক্রিপ্টো', 'অর্থনীতি', 'আরো...'];
+  const navTabs = [
+    { label: 'ট্রেন্ডিং', href: '/' },
+    { label: 'ব্রেকিং', href: '/breaking' },
+    { label: 'নতুন', href: '/markets?sort=new' },
+    { label: 'রাজনীতি', href: '/markets?category=রাজনীতি' },
+    { label: 'খেলাধুলা', href: '/markets?category=খেলাধুলা' },
+    { label: 'ক্রিপ্টো', href: '/markets?category=ক্রিপ্টো' },
+    { label: 'অর্থনীতি', href: '/markets?category=অর্থনীতি' },
+    { label: 'আরো...', href: '/markets' },
+  ];
 
   // Breaking news from top movers
   const breakingNews = initialMarkets.slice(0, 3).map((m, i) => ({
@@ -275,17 +284,18 @@ export default function HomePageClient({ initialMarkets, hero, categoryTabs, sta
         {/* Nav tabs */}
         <div className="hscroll max-w-7xl mx-auto px-4 flex gap-0.5 overflow-x-auto">
           {navTabs.map((t) => (
-            <button
-              key={t}
-              onClick={() => setActiveNav(t)}
+            <Link
+              key={t.label}
+              href={t.href}
               className={`text-[13px] px-3.5 py-2 whitespace-nowrap border-b-2 transition-colors ${
-                activeNav === t
+                activeNav === t.label
                   ? 'text-gray-900 border-blue-500 font-semibold'
                   : 'text-gray-500 border-transparent hover:text-gray-700'
               }`}
+              onClick={() => setActiveNav(t.label)}
             >
-              {t}
-            </button>
+              {t.label}
+            </Link>
           ))}
         </div>
 
