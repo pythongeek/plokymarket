@@ -197,7 +197,7 @@ export default function HomePageClient({ initialMarkets, hero, categoryTabs, sta
   const navTabs = [
     { label: 'ট্রেন্ডিং', href: '/' },
     { label: 'ব্রেকিং', href: '/breaking' },
-    { label: 'নতুন', href: '/markets?sort=new' },
+    { label: 'নতুন', href: '/new' },
     { label: 'রাজনীতি', href: '/markets?category=রাজনীতি' },
     { label: 'খেলাধুলা', href: '/markets?category=খেলাধুলা' },
     { label: 'ক্রিপ্টো', href: '/markets?category=ক্রিপ্টো' },
