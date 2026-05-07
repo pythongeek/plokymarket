@@ -173,7 +173,23 @@ function MarketDialog({ open, onClose, onSaved, editMarket }) {
       let ok;
       if (editMarket) { const r = await updateMarket(editMarket.id, payload); ok = r.success; }
       else { const r = await createMarket(payload); ok = r.success; }
-      if (ok) { toast({ title: editMarket ? "Market updated" : "Market created" }); onSaved(); onClose(); }
+      if (ok) {
+        toast({ title: editMarket ? "Market updated" : "Market created" });
+        // Auto-bootstrap liquidity for new markets
+        if (!editMarket && r?.id) {
+          try {
+            const liqRes = await fetch('/api/admin/markets/bootstrap-liquidity', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ market_id: r.id, initial_liquidity: Number(form.initial_liquidity) || 1000 }),
+            });
+            if (liqRes.ok) {
+              toast({ title: 'Liquidity bootstrapped', description: 'PMF pool created with initial liquidity' });
+            }
+          } catch (e) { /* ignore bootstrap errors */ }
+        }
+        onSaved(); onClose();
+      }
       else { toast({ title: "Error", description: "Failed to save market.", variant: "destructive" }); }
     } finally { setLoading(false); }
   };

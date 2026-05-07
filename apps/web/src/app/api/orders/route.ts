@@ -1,17 +1,32 @@
 // @ts-nocheck
-import { createClient } from '@/lib/supabase/server';
+import { createPublicClient } from '@/lib/supabase/server';
+import { pool } from '@/lib/admin/local-db';
+import { jwtVerify } from 'jose';
 import { NextResponse } from 'next/server';
 import { orderBookService } from '@/lib/services/orderBookService';
 import { ActivityService } from '@/lib/activity';
 import { syncAfterMatch, initializeRealtimeEngine } from '@/lib/realtime/OrderBookBroadcast';
 import { checkTradingRateLimit, addRateLimitHeaders } from '@/lib/upstash/rateLimit';
 
+const JWT_SECRET = new TextEncoder().encode(process.env.NEXT_PUBLIC_JWT_SECRET || 'P10kyM@rket.BD.2026.JWT.SECRET.XX');
+
+async function getUserFromRequest(request: Request) {
+  const cookie = request.headers.get('cookie') || '';
+  const match = cookie.match(/sb-access-token=([^;]+)/);
+  const token = match ? decodeURIComponent(match[1]) : null;
+  if (!token) return null;
+  try {
+    const { payload } = await jwtVerify(token, JWT_SECRET, { clockTolerance: 60 });
+    return { id: payload.sub as string, email: payload.email as string };
+  } catch { return null; }
+}
+
 export async function POST(request: Request) {
     try {
-        const supabase = await createClient();
+        const supabase = createPublicClient();
 
         // Authenticate — all order operations require a logged-in user
-        const { data: { user } } = await supabase.auth.getUser();
+        const user = await getUserFromRequest(request);
         if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
@@ -20,7 +35,7 @@ export async function POST(request: Request) {
         const { market_id, side, outcome, price, quantity, order_type = 'limit' } = body;
 
         // Apply trading-specific rate limiting (per market, 5 trades per 10 seconds)
-        const tradingResult = await checkTradingRateLimit(user.id, market_id);
+        let tradingResult; try { tradingResult = await checkTradingRateLimit(user.id, market_id); } catch { tradingResult = { allowed: true }; }
         
         if (!tradingResult.allowed) {
             const response = NextResponse.json(
@@ -73,20 +88,20 @@ export async function POST(request: Request) {
 
         // ✅ SINGLE ATOMIC RPC — balance check + freeze + order insert
         // Eliminates TOCTOU race condition
-        const { data: rawResult, error: atomicError } = await supabase.rpc('place_order_atomic', {
-            p_user_id: user.id,
-            p_market_id: market_id,
-            p_side: side,
-            p_outcome: outcome,
-            p_price: price,
-            p_quantity: quantity,
-            p_order_type: order_type,
-            p_idempotency_key: idempotencyKey,
-        });
+        const poolResult = await pool.query('SELECT order_id, error FROM place_order_atomic($1, $2, $3, $4, $5, $6, $7, $8)', [
+            user.id,
+            market_id,
+            side,
+            outcome,
+            price,
+            quantity,
+            order_type,
+            idempotencyKey
+        ]);
 
-        const result = rawResult as { error?: string, order_id?: string } | null;
+        const result = poolResult.rows[0] as { error?: string, order_id?: string } | null;
 
-        if (atomicError || result?.error) {
+        if (!result || result?.error) {
             return NextResponse.json(
                 { error: result?.error || 'Order placement failed' },
                 { status: result?.error === 'Insufficient balance' ? 400 : 500 }
@@ -153,10 +168,10 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
     try {
-        const supabase = await createClient();
+        const supabase = createPublicClient();
 
         // Authenticate
-        const { data: { user } } = await supabase.auth.getUser();
+        const user = await getUserFromRequest(request);
         if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
