@@ -511,7 +511,8 @@ export const useMarketStore = create<MarketState & MarketActions>()(
                 if (data) {
                   set((s) => { s.isPlatformPaused = data.value === true; });
                 }
-              });
+              })
+              .catch(() => { /* table may not exist */ });
 
             // 2. Initial Fetch for Category Settings
             supabase
@@ -528,7 +529,8 @@ export const useMarketStore = create<MarketState & MarketActions>()(
                     });
                   });
                 }
-              });
+              })
+              .catch(() => { /* table may not exist */ });
 
             // 3. Real-time Subscription for Platform Settings
             const platformSub = supabase

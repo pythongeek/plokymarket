@@ -61,7 +61,7 @@ export function MarketStatusDisplay({ market, oracleConfidence, isPaused }: Mark
     };
 
     const currentPhase = isPaused ? 'HALTED' : (market.trading_phase || 'CONTINUOUS');
-    const config = phaseConfig[currentPhase];
+    const config = phaseConfig[currentPhase] || phaseConfig['CONTINUOUS'];
     const nextPhaseTime = market.next_phase_time ? new Date(market.next_phase_time) : null;
 
     // Countdown timer effect
