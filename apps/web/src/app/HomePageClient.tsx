@@ -198,7 +198,7 @@ export default function HomePageClient({ initialMarkets, hero, categoryTabs, sta
     { label: 'ট্রেন্ডিং', href: '/' },
     { label: 'ব্রেকিং', href: '/breaking' },
     { label: 'নতুন', href: '/new' },
-    { label: 'রাজনীতি', href: '/markets?category=রাজনীতি' },
+    { label: 'রাজনীতি', href: '/politics' },
     { label: 'খেলাধুলা', href: '/markets?category=খেলাধুলা' },
     { label: 'ক্রিপ্টো', href: '/markets?category=ক্রিপ্টো' },
     { label: 'অর্থনীতি', href: '/markets?category=অর্থনীতি' },
