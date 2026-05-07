@@ -1,18 +1,10 @@
 import type { Metadata } from 'next';
-import { createClient as createAdminClient } from '@supabase/supabase-js';
+import { createPublicClient } from '@/lib/supabase/server';
 import { MarketPageClient } from './MarketPageClient';
-
-// Use admin client to bypass RLS for public market pages
-const getAdminClient = () => createAdminClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY!
-);
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
-  const supabase = getAdminClient();
 
-  // Validate ID exists
   if (!id) {
     return {
       title: 'মার্কেট পাওয়া যায়নি — Plokymarket',
@@ -20,40 +12,18 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     };
   }
 
-  // Try to find market by ID first, then by event_id (safer than .or())
-  let market = null;
+  const client = createPublicClient();
+  let market: any = null;
 
-  // First try by market ID
-  const { data: marketById } = await supabase
-    .from('markets')
-    .select('*')
-    .eq('id', id)
-    .maybeSingle();
-
-  if (marketById) {
-    market = marketById;
-  } else {
-    // Try by event_id
-    const { data: marketByEventId } = await supabase
-      .from('markets')
-      .select('*')
-      .eq('event_id', id)
-      .maybeSingle();
-
-    if (marketByEventId) {
-      market = marketByEventId;
+  try {
+    const byId = await client.from('markets').select('*').eq('id', id).maybeSingle().then((r: any) => r.data);
+    if (byId) market = byId;
+    else {
+      const byEvent = await client.from('markets').select('*').eq('event_id', id).maybeSingle().then((r: any) => r.data);
+      if (byEvent) market = byEvent;
     }
-  }
-
-  // If market has event_id, try to fetch event name separately
-  let eventData = null;
-  if (market?.event_id) {
-    const { data: evt } = await supabase
-      .from('events')
-      .select('title, question, description')
-      .eq('id', market.event_id)
-      .maybeSingle();
-    eventData = evt;
+  } catch (e) {
+    // silent fail, return fallback metadata
   }
 
   if (!market) {
@@ -63,9 +33,8 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     };
   }
 
-  // Market name is usually the question, but we use the provided logic
   const marketName = market.question || 'Market Detail';
-  const price = Math.round((market.yes_price ?? 0.5) * 100);
+  const price = Math.round((Number(market.yes_price) || 0.5) * 100);
   const description = `${marketName} — বর্তমান YES মূল্য: ${price}¢. ট্রেড করুন Plokymarket-এ।`;
 
   return {
@@ -88,33 +57,23 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 export default async function MarketDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const supabase = getAdminClient();
 
   if (!id) {
     return <MarketPageClient initialMarket={null} />;
   }
 
-  // Fetch initial data for the client component - try by ID first, then by event_id
-  let market = null;
+  const client = createPublicClient();
+  let market: any = null;
 
-  const { data: marketById } = await supabase
-    .from('markets')
-    .select('*')
-    .eq('id', id)
-    .maybeSingle();
-
-  if (marketById) {
-    market = marketById;
-  } else {
-    const { data: marketByEventId } = await supabase
-      .from('markets')
-      .select('*')
-      .eq('event_id', id)
-      .maybeSingle();
-
-    if (marketByEventId) {
-      market = marketByEventId;
+  try {
+    const byId = await client.from('markets').select('*').eq('id', id).maybeSingle().then((r: any) => r.data);
+    if (byId) market = byId;
+    else {
+      const byEvent = await client.from('markets').select('*').eq('event_id', id).maybeSingle().then((r: any) => r.data);
+      if (byEvent) market = byEvent;
     }
+  } catch (e) {
+    // silent fail, client will fetch
   }
 
   return <MarketPageClient initialMarket={market as any} />;
