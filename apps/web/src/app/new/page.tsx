@@ -1,6 +1,6 @@
 /**
  * New Markets Page — নতুন মার্কেট
- * Polymarket-style new markets feed with Bengali content
+ * Polymarket-style grid card layout
  */
 import { createPublicClient } from '@/lib/supabase/server';
 import NewPageClient from './NewPageClient';
@@ -8,26 +8,16 @@ import NewPageClient from './NewPageClient';
 export const revalidate = 60;
 
 const CATEGORY_MAP: Record<string, { bn: string }> = {
-  politics: { bn: 'রাজনীতি' },
-  Politics: { bn: 'রাজনীতি' },
-  sports: { bn: 'খেলাধুলা' },
-  Sports: { bn: 'খেলাধুলা' },
-  crypto: { bn: 'ক্রিপ্টো' },
-  Crypto: { bn: 'ক্রিপ্টো' },
-  technology: { bn: 'প্রযুক্তি' },
-  Technology: { bn: 'প্রযুক্তি' },
-  economy: { bn: 'অর্থনীতি' },
-  Economy: { bn: 'অর্থনীতি' },
-  general: { bn: 'সাধারণ' },
-  General: { bn: 'সাধারণ' },
-  space: { bn: 'মহাকাশ' },
-  Space: { bn: 'মহাকাশ' },
-  automotive: { bn: 'যানবাহন' },
-  Automotive: { bn: 'যানবাহন' },
-  entertainment: { bn: 'বিনোদন' },
-  Entertainment: { bn: 'বিনোদন' },
-  infrastructure: { bn: 'অবকাঠামো' },
-  Infrastructure: { bn: 'অবকাঠামো' },
+  politics: { bn: 'রাজনীতি' }, Politics: { bn: 'রাজনীতি' },
+  sports: { bn: 'খেলাধুলা' }, Sports: { bn: 'খেলাধুলা' },
+  crypto: { bn: 'ক্রিপ্টো' }, Crypto: { bn: 'ক্রিপ্টো' },
+  technology: { bn: 'প্রযুক্তি' }, Technology: { bn: 'প্রযুক্তি' },
+  economy: { bn: 'অর্থনীতি' }, Economy: { bn: 'অর্থনীতি' },
+  general: { bn: 'সাধারণ' }, General: { bn: 'সাধারণ' },
+  space: { bn: 'মহাকাশ' }, Space: { bn: 'মহাকাশ' },
+  automotive: { bn: 'যানবাহন' }, Automotive: { bn: 'যানবাহন' },
+  entertainment: { bn: 'বিনোদন' }, Entertainment: { bn: 'বিনোদন' },
+  infrastructure: { bn: 'অবকাঠামো' }, Infrastructure: { bn: 'অবকাঠামো' },
 };
 
 function getCatBn(cat: string | null) {
@@ -66,29 +56,29 @@ function timeAgoBn(dateStr: string): string {
 }
 
 const DEFAULT_IMAGES: Record<string, string> = {
-  politics: 'https://images.unsplash.com/photo-1529107386315-e1a2ed48a620?w=600',
-  Politics: 'https://images.unsplash.com/photo-1529107386315-e1a2ed48a620?w=600',
-  sports: 'https://images.unsplash.com/photo-1461896836934-voices-80474205a63b?w=600',
-  Sports: 'https://images.unsplash.com/photo-1461896836934-voices-80474205a63b?w=600',
-  crypto: 'https://images.unsplash.com/photo-1518546305927-5a555bb7020d?w=600',
-  Crypto: 'https://images.unsplash.com/photo-1518546305927-5a555bb7020d?w=600',
-  technology: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=600',
-  Technology: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=600',
-  economy: 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=600',
-  Economy: 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=600',
-  entertainment: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=600',
-  Entertainment: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=600',
-  space: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=600',
-  Space: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=600',
-  infrastructure: 'https://images.unsplash.com/photo-1555883038-73599d14a51e?w=600',
-  Infrastructure: 'https://images.unsplash.com/photo-1555883038-73599d14a51e?w=600',
-  automotive: 'https://images.unsplash.com/photo-1494976388531-d1058494cdd8?w=600',
-  Automotive: 'https://images.unsplash.com/photo-1494976388531-d1058494cdd8?w=600',
+  politics: 'https://images.unsplash.com/photo-1529107386315-e1a2ed48a620?w=400',
+  Politics: 'https://images.unsplash.com/photo-1529107386315-e1a2ed48a620?w=400',
+  sports: 'https://images.unsplash.com/photo-1461896836934-voices-80474205a63b?w=400',
+  Sports: 'https://images.unsplash.com/photo-1461896836934-voices-80474205a63b?w=400',
+  crypto: 'https://images.unsplash.com/photo-1518546305927-5a555bb7020d?w=400',
+  Crypto: 'https://images.unsplash.com/photo-1518546305927-5a555bb7020d?w=400',
+  technology: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=400',
+  Technology: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=400',
+  economy: 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=400',
+  Economy: 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=400',
+  entertainment: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=400',
+  Entertainment: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=400',
+  space: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=400',
+  Space: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=400',
+  infrastructure: 'https://images.unsplash.com/photo-1555883038-73599d14a51e?w=400',
+  Infrastructure: 'https://images.unsplash.com/photo-1555883038-73599d14a51e?w=400',
+  automotive: 'https://images.unsplash.com/photo-1494976388531-d1058494cdd8?w=400',
+  Automotive: 'https://images.unsplash.com/photo-1494976388531-d1058494cdd8?w=400',
 };
 
 function getImage(e: { category?: string; image_url?: string }) {
   if (e.image_url) return e.image_url;
-  return DEFAULT_IMAGES[e.category || 'general'] || 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=600';
+  return DEFAULT_IMAGES[e.category || 'general'] || 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=400';
 }
 
 export default async function NewPage() {
@@ -132,16 +122,5 @@ export default async function NewPage() {
     };
   });
 
-  const totalVol = (events || []).reduce((s, e) => s + Number(e.total_volume || 0), 0);
-
-  return (
-    <NewPageClient
-      items={items}
-      stats={{
-        totalItems: toBengaliNum(items.length),
-        totalVolume: formatVolumeBn(totalVol),
-        activeNow: toBengaliNum(items.filter((_, i) => i < 5).length),
-      }}
-    />
-  );
+  return <NewPageClient items={items} />;
 }
