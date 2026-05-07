@@ -125,6 +125,8 @@ function MarketDialog({ open, onClose, onSaved, editMarket }) {
     source_url: "", trading_closes_at: "", event_date: "",
     is_featured: false, initial_liquidity: "1000",
     answer_type: "binary", resolution_method: "manual_admin",
+    publish_status: "draft", starts_at: "",
+    answers: ["YES", "NO"],
   });
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
@@ -145,9 +147,14 @@ function MarketDialog({ open, onClose, onSaved, editMarket }) {
         initial_liquidity: "1000",
         answer_type: editMarket.answer_type || "binary",
         resolution_method: editMarket.resolution_method || "manual_admin",
+        publish_status: editMarket.publish_status || "draft",
+        starts_at: editMarket.starts_at ? new Date(editMarket.starts_at).toISOString().slice(0, 16) : "",
+        answers: editMarket.answer_type === 'multi_choice' && editMarket.answers
+          ? editMarket.answers
+          : [editMarket.answer1 || "YES", editMarket.answer2 || "NO"],
       });
     } else {
-      setForm({ title: "", question: "", description: "", category: "general", tags: "", image_url: "", source_url: "", trading_closes_at: "", event_date: "", is_featured: false, initial_liquidity: "1000", answer_type: "binary", resolution_method: "manual_admin" });
+      setForm({ title: "", question: "", description: "", category: "general", tags: "", image_url: "", source_url: "", trading_closes_at: "", event_date: "", is_featured: false, initial_liquidity: "1000", answer_type: "binary", resolution_method: "manual_admin", publish_status: "draft", starts_at: "", answers: ["YES", "NO"] });
     }
   }, [editMarket, open]);
 
@@ -155,7 +162,14 @@ function MarketDialog({ open, onClose, onSaved, editMarket }) {
     e.preventDefault();
     setLoading(true);
     try {
-      const payload = { ...form, tags: form.tags ? form.tags.split(",").map(t => t.trim()).filter(Boolean) : [] };
+      const payload = {
+        ...form,
+        tags: form.tags ? form.tags.split(",").map(t => t.trim()).filter(Boolean) : [],
+        answer1: form.answers[0] || "YES",
+        answer2: form.answers[1] || "NO",
+        answer3: form.answers[2] || null,
+        answer4: form.answers[3] || null,
+      };
       let ok;
       if (editMarket) { const r = await updateMarket(editMarket.id, payload); ok = r.success; }
       else { const r = await createMarket(payload); ok = r.success; }
@@ -210,6 +224,67 @@ function MarketDialog({ open, onClose, onSaved, editMarket }) {
                 <option value="hybrid">Hybrid</option>
               </select>
             </div>
+            <div>
+              <Label className="text-slate-400 text-xs uppercase">Publish Status</Label>
+              <select value={form.publish_status} onChange={field("publish_status")}
+                className="w-full bg-slate-900/60 border border-slate-700 text-slate-100 mt-1 rounded-md px-3 py-2 text-sm">
+                <option value="draft">Draft</option>
+                <option value="scheduled">Scheduled</option>
+                <option value="active">Active Now</option>
+              </select>
+            </div>
+            {form.publish_status === 'scheduled' && (
+              <div>
+                <Label className="text-slate-400 text-xs uppercase">Publish At (Starts)</Label>
+                <Input type="datetime-local" value={form.starts_at} onChange={field("starts_at")}
+                  className="bg-slate-900/60 border-slate-700 text-slate-100 mt-1" />
+              </div>
+            )}
+            <div>
+              <Label className="text-slate-400 text-xs uppercase">Answer Type</Label>
+              <select value={form.answer_type} onChange={e => {
+                const val = e.target.value;
+                setForm(f => ({
+                  ...f,
+                  answer_type: val,
+                  answers: val === 'multi_choice' ? ['Option 1', 'Option 2', 'Option 3'] : ['YES', 'NO']
+                }));
+              }}
+                className="w-full bg-slate-900/60 border border-slate-700 text-slate-100 mt-1 rounded-md px-3 py-2 text-sm">
+                <option value="binary">Binary (Yes/No)</option>
+                <option value="multi_choice">Multi-Choice (3+ options)</option>
+              </select>
+            </div>
+            {form.answer_type === 'multi_choice' && (
+              <div className="col-span-2">
+                <Label className="text-slate-400 text-xs uppercase">Answer Options</Label>
+                <div className="space-y-2 mt-1">
+                  {form.answers.map((ans, i) => (
+                    <div key={i} className="flex gap-2">
+                      <Input value={ans} onChange={e => {
+                        const newAnswers = [...form.answers];
+                        newAnswers[i] = e.target.value;
+                        setForm(f => ({ ...f, answers: newAnswers }));
+                      }}
+                        placeholder={`Option ${i + 1}`}
+                        className="bg-slate-900/60 border-slate-700 text-slate-100 flex-1" />
+                      {form.answers.length > 2 && (
+                        <Button type="button" variant="ghost" size="sm" className="text-red-400"
+                          onClick={() => setForm(f => ({ ...f, answers: f.answers.filter((_, idx) => idx !== i) }))}>
+                          ✕
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                  {form.answers.length < 6 && (
+                    <Button type="button" variant="outline" size="sm" className="border-slate-700 text-slate-400"
+                      onClick={() => setForm(f => ({ ...f, answers: [...f.answers, `Option ${f.answers.length + 1}`] }))}>
+                      + Add Option
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
             <div>
               <Label className="text-slate-400 text-xs uppercase">Trading Closes At</Label>
               <Input type="datetime-local" value={form.trading_closes_at} onChange={field("trading_closes_at")}
@@ -277,6 +352,13 @@ function ResolveDialog({ open, onClose, onResolved, market }) {
     } finally { setLoading(false); }
   };
 
+  const getOutcomes = () => {
+    if (market?.event_answer_type === 'multi_choice' || market?.answer_type === 'multi_choice') {
+      return [market?.answer1, market?.answer2, market?.answer3, market?.answer4].filter(Boolean);
+    }
+    return ["YES", "NO"];
+  };
+
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="bg-[#0a0f1e] border-slate-800 text-slate-100">
@@ -284,15 +366,18 @@ function ResolveDialog({ open, onClose, onResolved, market }) {
         <div className="space-y-4">
           <div className="p-3 bg-slate-900/60 rounded-lg border border-slate-800">
             <p className="text-sm text-slate-300 font-medium">{market?.title || market?.question}</p>
+            <Badge variant="outline" className="mt-1 text-xs border-slate-700">
+              {(market?.event_answer_type || market?.answer_type) === 'multi_choice' ? 'Multi-Choice' : 'Binary'}
+            </Badge>
           </div>
           <div>
             <Label className="text-slate-400 text-xs uppercase mb-2 block">Winning Outcome *</Label>
-            <div className="grid grid-cols-2 gap-3">
-              {["YES", "NO"].map(o => (
+            <div className={"grid gap-3 " + (getOutcomes().length > 2 ? "grid-cols-2" : "grid-cols-2")}>
+              {getOutcomes().map(o => (
                 <button key={o} onClick={() => setOutcome(o)}
                   className={"p-3 rounded-lg border text-sm font-semibold transition-all " + (
                     outcome === o
-                      ? o === "YES" ? "border-green-500 bg-green-500/10 text-green-400" : "border-red-500 bg-red-500/10 text-red-400"
+                      ? "border-emerald-500 bg-emerald-500/10 text-emerald-400"
                       : "border-slate-700 bg-slate-900/40 text-slate-400 hover:border-slate-600")}>
                   {o}
                 </button>
@@ -342,6 +427,11 @@ function MarketCard({ market, onEdit, onDelete, onResolve }) {
               <StatusIcon className="w-3 h-3" /><span>{st.label}</span>
             </Badge>
             {market.is_featured && <Badge variant="outline" className="text-xs text-amber-400 border-amber-400/40">⭐ Featured</Badge>}
+            {market.publish_status && market.publish_status !== 'active' && (
+              <Badge variant="outline" className="text-xs text-slate-400 border-slate-600">
+                {market.publish_status === 'draft' ? '📝 Draft' : market.publish_status === 'scheduled' ? '⏰ Scheduled' : market.publish_status}
+              </Badge>
+            )}
           </div>
           <div className="relative">
             <button onClick={() => setMenuOpen(!menuOpen)}
@@ -354,6 +444,13 @@ function MarketCard({ market, onEdit, onDelete, onResolve }) {
                   className="absolute right-0 top-8 bg-[#111827] border border-slate-700 rounded-lg shadow-xl z-50 py-1 w-40">
                   <button onClick={() => { onEdit(market); setMenuOpen(false); }}
                     className="w-full flex items-center gap-2 px-3 py-2 text-xs text-slate-300 hover:bg-slate-800"><Edit2 className="w-3.5 h-3.5" /> Edit</button>
+                  {market.publish_status === 'draft' && (
+                    <button onClick={async () => {
+                      await updateMarket(market.id, { status: 'active', publish_status: 'active' });
+                      setMenuOpen(false); window.location.reload();
+                    }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-xs text-emerald-400 hover:bg-slate-800"><Play className="w-3.5 h-3.5" /> Publish Now</button>
+                  )}
                   <button onClick={() => { onResolve(market); setMenuOpen(false); }}
                     className="w-full flex items-center gap-2 px-3 py-2 text-xs text-blue-400 hover:bg-slate-800"><Gavel className="w-3.5 h-3.5" /> Resolve</button>
                   <Separator className="my-1 border-slate-800" />
@@ -367,17 +464,27 @@ function MarketCard({ market, onEdit, onDelete, onResolve }) {
         <h3 className="text-sm font-semibold text-slate-100 line-clamp-2 leading-snug mb-1">
           {market.title || market.question}
         </h3>
-        <div className="mt-3">
-          <div className="flex justify-between text-xs text-slate-400 mb-1">
-            <span className="text-green-400 font-semibold">YES {yesPct.toFixed(1)}%</span>
-            <span className="text-slate-500">vs</span>
-            <span className="text-red-400 font-semibold">NO {noPct.toFixed(1)}%</span>
+        {(market.event_answer_type === 'multi_choice' || market.answer_type === 'multi_choice') ? (
+          <div className="mt-3 flex flex-wrap gap-1">
+            {[market.answer1, market.answer2, market.answer3, market.answer4].filter(Boolean).map((ans, i) => (
+              <Badge key={i} variant="outline" className="text-xs border-slate-700 text-slate-300">
+                {ans}
+              </Badge>
+            ))}
           </div>
-          <div className="h-2 rounded-full overflow-hidden flex">
-            <div className="bg-green-500/80 h-full" style={{ width: yesPct + "%" }} />
-            <div className="bg-red-500/80 h-full" style={{ width: noPct + "%" }} />
+        ) : (
+          <div className="mt-3">
+            <div className="flex justify-between text-xs text-slate-400 mb-1">
+              <span className="text-green-400 font-semibold">YES {yesPct.toFixed(1)}%</span>
+              <span className="text-slate-500">vs</span>
+              <span className="text-red-400 font-semibold">NO {noPct.toFixed(1)}%</span>
+            </div>
+            <div className="h-2 rounded-full overflow-hidden flex">
+              <div className="bg-green-500/80 h-full" style={{ width: yesPct + "%" }} />
+              <div className="bg-red-500/80 h-full" style={{ width: noPct + "%" }} />
+            </div>
           </div>
-        </div>
+        )}
       </div>
       <div className="px-4 pb-4 grid grid-cols-3 gap-2">
         <div className="bg-slate-900/50 rounded-lg p-2 text-center">

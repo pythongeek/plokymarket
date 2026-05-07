@@ -72,7 +72,13 @@ export async function GET(req: NextRequest) {
       m.updated_at,
       m.event_answer_type                           AS answer_type,
       m.event_source_url                            AS source_url,
-      m.event_slug
+      m.event_slug,
+      m.publish_status,
+      m.starts_at,
+      m.answer1,
+      m.answer2,
+      m.answer3,
+      m.answer4
     FROM markets m
     ${where}
     ORDER BY m.created_at DESC
