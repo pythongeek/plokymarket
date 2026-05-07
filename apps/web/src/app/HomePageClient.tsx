@@ -317,6 +317,32 @@ export default function HomePageClient({ initialMarkets, hero, categoryTabs, sta
           {/* ── Left Column ── */}
           <div className="flex-1 min-w-0">
 
+            {/* Breaking News Banner */}
+            <Link
+              href="/breaking"
+              className="block mb-4 rounded-xl bg-gradient-to-r from-red-600 via-red-500 to-orange-500 p-4 text-white shadow-md hover:shadow-lg transition-shadow group"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="bg-white/20 rounded-lg p-2">
+                    <Zap className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-extrabold bg-white text-red-600 px-2 py-0.5 rounded-full">
+                        LIVE
+                      </span>
+                      <span className="text-sm font-bold">ব্রেকিং নিউজ মার্কেট</span>
+                    </div>
+                    <p className="text-[11px] text-white/80 mt-0.5">
+                      বাংলাদেশ ও বিশ্বের সর্বশেষ ঘটনাপ্রবাহ অনুযায়ী প্রেডিক্ট করুন
+                    </p>
+                  </div>
+                </div>
+                <ChevronRight className="w-5 h-5 text-white/70 group-hover:translate-x-1 transition-transform" />
+              </div>
+            </Link>
+
             {/* Hero */}
             {hero && (
               <div className="bg-white rounded-2xl border border-gray-200 p-5 mb-6 shadow-sm">

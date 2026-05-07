@@ -1,14 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
 import {
   LineChart, Line, ResponsiveContainer, Tooltip,
 } from 'recharts';
 import {
   Search, Zap, TrendingUp, Clock, BarChart3, ChevronRight,
-  Newspaper, ArrowUpRight, ArrowDownRight, Activity,
+  Newspaper, ArrowUpRight, ArrowDownRight, Activity, LayoutGrid,
+  Filter, Sparkles, List, Flame,
 } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────
@@ -44,6 +44,17 @@ const toBengali = (n: number | string): string => {
   return String(n).replace(/[0-9.]/g, (d) => map[d] || d);
 };
 
+const CATEGORIES = [
+  { label: 'সব', key: 'সব', icon: LayoutGrid },
+  { label: 'রাজনীতি', key: 'রাজনীতি', icon: Flame },
+  { label: 'খেলাধুলা', key: 'খেলাধুলা', icon: Zap },
+  { label: 'ক্রিপ্টো', key: 'ক্রিপ্টো', icon: TrendingUp },
+  { label: 'অর্থনীতি', key: 'অর্থনীতি', icon: BarChart3 },
+  { label: 'প্রযুক্তি', key: 'প্রযুক্তি', icon: Sparkles },
+  { label: 'বিনোদন', key: 'বিনোদন', icon: Newspaper },
+  { label: 'অবকাঠামো', key: 'অবকাঠামো', icon: Activity },
+];
+
 function MiniSpark({ value, color }: { value: number; color: string }) {
   const data = Array.from({ length: 20 }, (_, i) => ({
     t: i,
@@ -67,7 +78,39 @@ function MiniSpark({ value, color }: { value: number; color: string }) {
   );
 }
 
-// ── Featured Hero Card ─────────────────────────────────
+// ── Section Header Component ──────────────────────────
+function SectionHeader({ icon: Icon, title, count, action }: {
+  icon: React.ElementType;
+  title: string;
+  count?: string;
+  action?: { label: string; href: string };
+}) {
+  return (
+    <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center gap-2">
+        <div className="bg-blue-50 rounded-lg p-1.5">
+          <Icon className="w-4 h-4 text-blue-600" />
+        </div>
+        <h2 className="text-base font-extrabold text-gray-900">{title}</h2>
+        {count && (
+          <span className="text-xs font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+            {count}
+          </span>
+        )}
+      </div>
+      {action && (
+        <Link
+          href={action.href}
+          className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-0.5"
+        >
+          {action.label} <ChevronRight className="w-3.5 h-3.5" />
+        </Link>
+      )}
+    </div>
+  );
+}
+
+// ── Featured Hero Card ─────────────────────────────────────────────
 function FeaturedCard({ item }: { item: BreakingItem }) {
   const color = item.prob >= 50 ? '#16a34a' : '#dc2626';
   return (
@@ -77,35 +120,38 @@ function FeaturedCard({ item }: { item: BreakingItem }) {
     >
       <div className="flex flex-col md:flex-row">
         {/* Image */}
-        <div className="relative w-full md:w-[340px] h-[200px] md:h-[220px] shrink-0 bg-gray-100 overflow-hidden">
+        <div className="relative w-full md:w-[380px] h-[200px] md:h-[240px] shrink-0 bg-gray-100 overflow-hidden">
           <img
             src={item.image}
             alt={item.question}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
           />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
           <div className="absolute top-3 left-3 flex gap-2">
-            <span className="bg-red-600 text-white text-[11px] font-extrabold px-2.5 py-1 rounded-full flex items-center gap-1">
+            <span className="bg-red-600 text-white text-[11px] font-extrabold px-2.5 py-1 rounded-full flex items-center gap-1 shadow-lg">
               <Zap className="w-3 h-3" /> ব্রেকিং
             </span>
             <span className="bg-black/60 text-white text-[11px] font-semibold px-2 py-1 rounded-full backdrop-blur-sm">
               {item.category}
             </span>
           </div>
+          <div className="absolute bottom-3 left-3 right-3">
+            <div className="flex items-center gap-2 text-[11px] text-white/90">
+              <Clock className="w-3 h-3" /> {item.timeAgo}
+              <span className="mx-1">•</span>
+              <BarChart3 className="w-3 h-3" /> {item.volume} ভলিউম
+            </div>
+          </div>
         </div>
 
         {/* Content */}
         <div className="flex-1 p-5 flex flex-col justify-between">
           <div>
-            <div className="flex items-center gap-2 text-[11px] text-gray-400 mb-2">
-              <Clock className="w-3 h-3" /> {item.timeAgo}
-              <span className="mx-1">•</span>
-              <BarChart3 className="w-3 h-3" /> {item.volume} ভলিউম
-            </div>
             <h3 className="text-base md:text-lg font-extrabold text-gray-900 leading-snug mb-2 line-clamp-2">
               {item.question}
             </h3>
             <p className="text-[13px] text-gray-500 leading-relaxed line-clamp-2 mb-3">
-              {item.description || `${item.category} বিষয়ক একটি গুরুত্বপূর্ণ প্রেডিকশন মার্কেট। বাজারের প্রবণতা অনুযায়ী আপনার পজিশন নিন।`}
+              {item.description || `${item.category} বিষয়ক একটি গুরুত্বপূর্ণ প্রেডিকশন মার্কেত। বাজারের প্রবণতা অনুযায়ী আপনার পজিশন নিন।`}
             </p>
           </div>
 
@@ -115,7 +161,7 @@ function FeaturedCard({ item }: { item: BreakingItem }) {
                 <div className="text-3xl font-black" style={{ color }}>
                   {toBengali(item.prob)}%
                 </div>
-                <div className="text-[11px] text-gray-400">
+                <div className="text-[11px] text-gray-400 mt-0.5">
                   {item.prob >= 50 ? (
                     <span className="text-green-600 font-bold flex items-center gap-0.5">
                       <ArrowUpRight className="w-3 h-3" /> হ্যাঁ জয়ী
@@ -127,7 +173,7 @@ function FeaturedCard({ item }: { item: BreakingItem }) {
                   )}
                 </div>
               </div>
-              <div className="w-24">
+              <div className="w-28">
                 <MiniSpark value={item.prob} color={color} />
               </div>
             </div>
@@ -147,7 +193,7 @@ function FeaturedCard({ item }: { item: BreakingItem }) {
   );
 }
 
-// ── Regular List Card ──────────────────────────────────
+// ── Regular List Card ──────────────────────────────────────────────
 function ListCard({ item, index }: { item: BreakingItem; index: number }) {
   const color = item.prob >= 50 ? '#16a34a' : '#dc2626';
   return (
@@ -205,7 +251,7 @@ function ListCard({ item, index }: { item: BreakingItem; index: number }) {
   );
 }
 
-// ── Sidebar Mover Card ─────────────────────────────────
+// ── Sidebar Mover Card ──────────────────────────────────────────
 function MoverCard({ item, index }: { item: BreakingItem; index: number }) {
   const color = item.prob >= 50 ? '#16a34a' : '#dc2626';
   const up = index % 2 === 0;
@@ -230,16 +276,35 @@ function MoverCard({ item, index }: { item: BreakingItem; index: number }) {
   );
 }
 
-// ── Main Component ─────────────────────────────────────
+// ── Main Component ─────────────────────────────────────────────
 export default function BreakingPageClient({ items, topMovers, stats }: Props) {
   const [search, setSearch] = useState('');
+  const [activeCat, setActiveCat] = useState('সব');
 
-  const filtered = items.filter((m) =>
-    !search || m.question.toLowerCase().includes(search.toLowerCase()) || m.category.includes(search)
-  );
+  const filtered = useMemo(() => {
+    let result = items;
+    if (activeCat !== 'সব') {
+      result = result.filter((m) => m.category === activeCat);
+    }
+    if (search) {
+      result = result.filter((m) =>
+        m.question.toLowerCase().includes(search.toLowerCase()) || m.category.includes(search)
+      );
+    }
+    return result;
+  }, [items, activeCat, search]);
 
   const featured = filtered[0];
   const rest = filtered.slice(1);
+
+  // Category counts
+  const catCounts = useMemo(() => {
+    const counts: Record<string, number> = { 'সব': items.length };
+    items.forEach((m) => {
+      counts[m.category] = (counts[m.category] || 0) + 1;
+    });
+    return counts;
+  }, [items]);
 
   return (
     <div className="min-h-screen bg-gray-50" style={{ fontFamily: "'Noto Sans Bengali', 'Hind Siliguri', sans-serif" }}>
@@ -247,7 +312,7 @@ export default function BreakingPageClient({ items, topMovers, stats }: Props) {
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;500;600;700;800;900&display=swap');
       `}</style>
 
-      {/* Header */}
+      {/* ── Header ── */}
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 py-8">
           <div className="flex flex-wrap items-end justify-between gap-4">
@@ -280,42 +345,86 @@ export default function BreakingPageClient({ items, topMovers, stats }: Props) {
             </div>
           </div>
 
-          {/* Search bar */}
-          <div className="mt-6 max-w-md relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="ব্রেকিং মার্কেট খুঁজুন..."
-              className="w-full bg-gray-100 text-gray-900 text-sm rounded-xl py-2.5 pl-10 pr-4 border border-gray-200 outline-none focus:border-blue-500 focus:bg-white transition-colors"
-            />
+          {/* Search + Category tabs row */}
+          <div className="mt-6 flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+            <div className="relative max-w-sm w-full">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="ব্রেকিং মার্কেট খুঁজুন..."
+                className="w-full bg-gray-100 text-gray-900 text-sm rounded-xl py-2.5 pl-10 pr-4 border border-gray-200 outline-none focus:border-blue-500 focus:bg-white transition-colors"
+              />
+            </div>
+            <div className="hscroll flex gap-1.5 overflow-x-auto w-full sm:w-auto pb-1">
+              {CATEGORIES.map((cat) => {
+                const isActive = activeCat === cat.key;
+                const count = catCounts[cat.key] || 0;
+                return (
+                  <button
+                    key={cat.key}
+                    onClick={() => setActiveCat(cat.key)}
+                    className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-[12px] font-semibold whitespace-nowrap border transition-all ${
+                      isActive
+                        ? 'bg-gray-900 text-white border-gray-900'
+                        : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <cat.icon className="w-3 h-3" />
+                    {cat.label}
+                    {count > 0 && (
+                      <span className={`ml-0.5 text-[10px] px-1 py-0 rounded-full ${isActive ? 'bg-white/20' : 'bg-gray-100'}`}>
+                        {toBengali(count)}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Content */}
+      {/* ── Content ── */}
       <div className="max-w-7xl mx-auto px-4 py-6">
         <div className="flex gap-6">
 
           {/* Main Feed */}
           <div className="flex-1 min-w-0">
+
+            {/* Featured Section */}
             {featured && (
-              <div className="mb-5">
+              <div className="mb-6">
+                <SectionHeader
+                  icon={Sparkles}
+                  title="শীর্ষ ব্রেকিং মার্কেট"
+                  action={{ label: 'সব দেখুন', href: '/markets' }}
+                />
                 <FeaturedCard item={featured} />
               </div>
             )}
 
-            {/* List */}
-            <div className="space-y-3">
-              {rest.map((item, i) => (
-                <ListCard key={item.id} item={item} index={i + 1} />
-              ))}
-            </div>
+            {/* List Section */}
+            {rest.length > 0 && (
+              <div className="mb-6">
+                <SectionHeader
+                  icon={List}
+                  title="সর্বশেষ মার্কেট"
+                  count={toBengali(rest.length)}
+                />
+                <div className="space-y-3">
+                  {rest.map((item, i) => (
+                    <ListCard key={item.id} item={item} index={i + 1} />
+                  ))}
+                </div>
+              </div>
+            )}
 
             {filtered.length === 0 && (
               <div className="text-center py-16 text-gray-400">
                 <Newspaper className="w-12 h-12 mx-auto mb-3 text-gray-300" />
                 <p className="text-base font-semibold">কোনো ব্রেকিং মার্কেট পাওয়া যায়নি</p>
+                <p className="text-sm text-gray-400 mt-1">অন্য ক্যাটেগরি চয়ন করুন বা অনুসন্ধান করুন</p>
               </div>
             )}
           </div>
@@ -326,7 +435,9 @@ export default function BreakingPageClient({ items, topMovers, stats }: Props) {
             {/* Top Movers */}
             <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
               <div className="flex items-center gap-2 mb-3">
-                <TrendingUp className="w-4 h-4 text-blue-600" />
+                <div className="bg-blue-50 rounded-lg p-1.5">
+                  <TrendingUp className="w-4 h-4 text-blue-600" />
+                </div>
                 <span className="font-extrabold text-sm text-gray-900">টপ মুভার্স</span>
               </div>
               <div className="divide-y divide-gray-50">
@@ -345,7 +456,10 @@ export default function BreakingPageClient({ items, topMovers, stats }: Props) {
             {/* Live Stats */}
             <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-4 text-white">
               <div className="font-extrabold text-sm mb-3 flex items-center gap-2">
-                <Activity className="w-4 h-4 text-green-400" /> লাইভ পরিসংখ্যান
+                <div className="bg-white/10 rounded-lg p-1.5">
+                  <Activity className="w-4 h-4 text-green-400" />
+                </div>
+                লাইভ পরিসংখ্যান
               </div>
               <div className="grid grid-cols-2 gap-2">
                 {[
@@ -364,16 +478,36 @@ export default function BreakingPageClient({ items, topMovers, stats }: Props) {
 
             {/* Categories */}
             <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
-              <div className="font-extrabold text-sm text-gray-900 mb-3">ক্যাটেগরি</div>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="bg-purple-50 rounded-lg p-1.5">
+                  <Filter className="w-4 h-4 text-purple-600" />
+                </div>
+                <span className="font-extrabold text-sm text-gray-900">ক্যাটেগরি ফিল্টার</span>
+              </div>
               <div className="flex flex-wrap gap-2">
-                {['সব', 'রাজনীতি', 'খেলাধুলা', 'ক্রিপ্টো', 'অর্থনীতি', 'প্রযুক্তি'].map((cat) => (
-                  <button
-                    key={cat}
-                    className="text-xs font-semibold px-3 py-1.5 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
-                  >
-                    {cat}
-                  </button>
-                ))}
+                {CATEGORIES.slice(1).map((cat) => {
+                  const count = catCounts[cat.key] || 0;
+                  const isActive = activeCat === cat.key;
+                  return (
+                    <button
+                      key={cat.key}
+                      onClick={() => setActiveCat(cat.key)}
+                      className={`flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-full transition-colors ${
+                        isActive
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      <cat.icon className="w-3 h-3" />
+                      {cat.label}
+                      {count > 0 && (
+                        <span className={`text-[10px] px-1 py-0 rounded-full ${isActive ? 'bg-white/20' : 'bg-white'}`}>
+                          {toBengali(count)}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
