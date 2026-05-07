@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { createClient } from '@/lib/supabase/server';
+import { createPublicClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { checkWithdrawalRateLimit, addRateLimitHeaders } from '@/lib/upstash/rateLimit';
 
@@ -7,7 +7,7 @@ import { checkWithdrawalRateLimit, addRateLimitHeaders } from '@/lib/upstash/rat
 // Create a new withdrawal request
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient();
+    const supabase = await createPublicClient();
 
     // Get user session
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -211,7 +211,7 @@ export async function POST(request: Request) {
 // Get user's withdrawal requests
 export async function GET(request: Request) {
   try {
-    const supabase = await createClient();
+    const supabase = await createPublicClient();
 
     // Get user session
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -284,7 +284,7 @@ export async function GET(request: Request) {
 // Cancel a pending withdrawal request
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const supabase = await createClient();
+    const supabase = await createPublicClient();
 
     // Get user session
     const { data: { user }, error: authError } = await supabase.auth.getUser();

@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { createClient } from '@/lib/supabase/server';
+import { createPublicClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { pmfService } from '@/lib/services/pmfService';
 
@@ -11,7 +11,7 @@ import { pmfService } from '@/lib/services/pmfService';
 // GET /api/pmf/admin/liquidations - Get liquidation candidates
 export async function GET(request: Request) {
     try {
-        const supabase = await createClient();
+        const supabase = await createPublicClient();
 
         // Authenticate admin user
         const { data: { user } } = await supabase.auth.getUser();
@@ -82,7 +82,7 @@ export async function GET(request: Request) {
 // POST /api/pmf/admin/liquidations - Execute liquidation actions
 export async function POST(request: Request) {
     try {
-        const supabase = await createClient();
+        const supabase = await createPublicClient();
 
         // Authenticate admin user
         const { data: { user } } = await supabase.auth.getUser();

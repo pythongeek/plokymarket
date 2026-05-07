@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { createClient } from '@/lib/supabase/server';
+import { createPublicClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { pmfService, MarginSummary, PositionMargin, MarginHistory } from '@/lib/services/pmfService';
 
@@ -11,7 +11,7 @@ import { pmfService, MarginSummary, PositionMargin, MarginHistory } from '@/lib/
 // GET /api/pmf - Get margin summary and positions
 export async function GET(request: Request) {
     try {
-        const supabase = await createClient();
+        const supabase = await createPublicClient();
 
         // Authenticate user
         const { data: { user } } = await supabase.auth.getUser();
@@ -92,7 +92,7 @@ export async function GET(request: Request) {
 // POST /api/pmf - Perform margin operations
 export async function POST(request: Request) {
     try {
-        const supabase = await createClient();
+        const supabase = await createPublicClient();
 
         // Authenticate user
         const { data: { user } } = await supabase.auth.getUser();

@@ -10,7 +10,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createPublicClient } from '@/lib/supabase/server';
 import type { UnifiedEvent } from '@/types/unified';
 
 export const runtime = 'edge';
@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(parseInt(searchParams.get('limit') || '5'), 20);
     const userId = searchParams.get('userId') || null;
 
-    const supabase = createClient();
+    const supabase = createPublicClient();
 
     // Build query based on tab
     let query = supabase
@@ -60,8 +60,8 @@ export async function GET(request: NextRequest) {
       case 'personalized':
       default:
         // For personalized, we'd normally use ML/AI to score
-        // For now, combine trending + recent high volume
-        query = query.or('is_trending.eq.true,total_volume.gt.10000');
+        // For now, just return active events ordered by created_at
+        query = query.order('created_at', { ascending: false });
         break;
     }
 

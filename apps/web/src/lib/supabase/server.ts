@@ -62,6 +62,58 @@ class PostgrestQueryBuilder {
     return this;
   }
 
+  range(from: number, to: number) {
+    this.queryParams.push(`offset=${from}&limit=${to - from + 1}`);
+    return this;
+  }
+
+  gt(column: string, value: number) {
+    this.queryParams.push(`${encodeURIComponent(column)}=gt.${value}`);
+    return this;
+  }
+
+  lt(column: string, value: number) {
+    this.queryParams.push(`${encodeURIComponent(column)}=lt.${value}`);
+    return this;
+  }
+
+  gte(column: string, value: number) {
+    this.queryParams.push(`${encodeURIComponent(column)}=gte.${value}`);
+    return this;
+  }
+
+  lte(column: string, value: number) {
+    this.queryParams.push(`${encodeURIComponent(column)}=lte.${value}`);
+    return this;
+  }
+
+  neq(column: string, value: string | number) {
+    this.queryParams.push(`${encodeURIComponent(column)}=neq.${encodeURIComponent(String(value))}`);
+    return this;
+  }
+
+  is(column: string, value: null | boolean) {
+    const v = value === null ? 'null' : String(value);
+    this.queryParams.push(`${encodeURIComponent(column)}=is.${v}`);
+    return this;
+  }
+
+  in(column: string, values: (string | number)[]) {
+    const vals = values.map(v => encodeURIComponent(String(v))).join(',');
+    this.queryParams.push(`${encodeURIComponent(column)}=in.(${vals})`);
+    return this;
+  }
+
+  or(conditions: string) {
+    this.queryParams.push(`or=(${encodeURIComponent(conditions)})`);
+    return this;
+  }
+
+  not(column: string, operator: string, value: string | number) {
+    this.queryParams.push(`${encodeURIComponent(column)}=not.${operator}.${encodeURIComponent(String(value))}`);
+    return this;
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async then<TResult1 = any[], TResult2 = any>(
     onfulfilled?: ((value: { data: TResult1; error: null }) => TResult1 | Promise<TResult1>) | null,

@@ -1,11 +1,11 @@
-import { createClient } from '@/lib/supabase/server';
+import { createPublicClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 
 // POST /api/withdrawals/verify
 // Verify OTP and finalize the withdrawal request
 export async function POST(request: Request) {
     try {
-        const supabase = await createClient();
+        const supabase = await createPublicClient();
 
         // 1. Auth Check
         const { data: { user }, error: authError } = await supabase.auth.getUser();

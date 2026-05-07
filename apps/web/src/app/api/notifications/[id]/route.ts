@@ -7,7 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createPublicClient } from '@/lib/supabase/server';
 import { verifyAuth } from '@/lib/auth/verifyAuth';
 
 interface RouteParams {
@@ -18,7 +18,7 @@ interface RouteParams {
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
-    const supabase = await createClient();
+    const supabase = await createPublicClient();
     const { data: { user } } = await supabase.auth.getUser();
     
     if (!user) {
@@ -68,7 +68,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
-    const supabase = await createClient();
+    const supabase = await createPublicClient();
     const { data: { user } } = await supabase.auth.getUser();
     
     if (!user) {

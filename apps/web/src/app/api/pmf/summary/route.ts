@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { createClient } from '@/lib/supabase/server';
+import { createPublicClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { pmfService } from '@/lib/services/pmfService';
 
@@ -10,7 +10,7 @@ import { pmfService } from '@/lib/services/pmfService';
 // GET /api/pmf/summary - Get user's margin summary
 export async function GET(request: Request) {
     try {
-        const supabase = await createClient();
+        const supabase = await createPublicClient();
 
         // Authenticate user
         const { data: { user } } = await supabase.auth.getUser();

@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { createClient } from '@/lib/supabase/server';
+import { createPublicClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { pmfService } from '@/lib/services/pmfService';
 
@@ -13,7 +13,7 @@ export async function GET(
     { params }: { params: Promise<{ marketId: string }> }
 ) {
     try {
-        const supabase = await createClient();
+        const supabase = await createPublicClient();
 
         // Authenticate user
         const { data: { user } } = await supabase.auth.getUser();

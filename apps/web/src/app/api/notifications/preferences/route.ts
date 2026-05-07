@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createPublicClient } from '@/lib/supabase/server';
 
 // GET /api/notifications/preferences - Get user's notification preferences
 export async function GET() {
   try {
-    const supabase = await createClient();
+    const supabase = await createPublicClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     
     if (authError || !user) {
@@ -68,7 +68,7 @@ export async function PUT(req: NextRequest) {
   try {
     const body = await req.json();
     
-    const supabase = await createClient();
+    const supabase = await createPublicClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     
     if (authError || !user) {
