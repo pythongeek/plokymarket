@@ -220,46 +220,44 @@ export default function HomePageClient({ initialMarkets, hero, categoryTabs, sta
       `}</style>
 
       {/* ═════ Navbar ═════ */}
-      <nav className="sticky top-0 z-50 bg-[#0d1117] border-b border-[#21262d]">
+      <nav className="sticky top-0 z-50 bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 h-14 flex items-center gap-4">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 shrink-0">
-            <div className="w-7 h-7 bg-gradient-to-br from-blue-500 to-blue-700 rounded-lg flex items-center justify-center text-sm">
-              🇧🇩
-            </div>
-            <span className="text-lg font-black text-white tracking-tight hidden sm:block">
-              পলিমার্কেট বিডি
+            <span className="text-xl font-black text-gray-900 tracking-tight hidden sm:block">
+              পলিমার্কেট
             </span>
+            <img src="/bd-flag.png" alt="BD" className="w-6 h-4 rounded-sm object-cover" />
           </Link>
 
           {/* Search */}
           <div className="flex-1 max-w-sm mx-3 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="মার্কেট খুঁজুন..."
-              className="w-full bg-[#161b22] text-gray-200 text-sm rounded-lg py-2 pl-9 pr-3 border border-[#30363d] outline-none focus:border-blue-500 transition-colors"
+              className="w-full bg-gray-100 text-gray-900 text-sm rounded-lg py-2 pl-9 pr-3 border border-gray-200 outline-none focus:border-blue-500 focus:bg-white transition-colors"
             />
           </div>
 
           {/* Desktop Nav */}
           <div className="hidden md:flex items-center gap-3 ml-auto">
-            <Link href="/markets" className="text-gray-400 text-sm hover:text-white transition-colors">
+            <Link href="/markets" className="text-gray-600 text-sm hover:text-gray-900 transition-colors font-medium">
               মার্কেট
             </Link>
-            <Link href="/how-it-works" className="text-gray-400 text-sm hover:text-white transition-colors">
+            <Link href="/how-it-works" className="text-gray-600 text-sm hover:text-gray-900 transition-colors font-medium">
               কীভাবে কাজ করে
             </Link>
             <Link
               href="/auth-portal-3m5n8"
-              className="flex items-center gap-1.5 text-sm text-gray-300 px-3.5 py-1.5 rounded-lg border border-[#30363d] hover:border-gray-500 transition-colors"
+              className="flex items-center gap-1.5 text-sm text-gray-700 px-3.5 py-1.5 rounded-lg border border-gray-300 hover:border-gray-400 hover:bg-gray-50 transition-colors font-medium"
             >
               <LogIn className="w-3.5 h-3.5" /> লগইন
             </Link>
             <Link
               href="/auth-portal-3m5n8?tab=register"
-              className="flex items-center gap-1.5 text-sm font-bold text-white px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 transition-colors"
+              className="flex items-center gap-1.5 text-sm font-bold text-white px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 transition-colors"
             >
               <UserPlus className="w-3.5 h-3.5" /> সাইন আপ
             </Link>
@@ -267,7 +265,7 @@ export default function HomePageClient({ initialMarkets, hero, categoryTabs, sta
 
           {/* Mobile menu button */}
           <button
-            className="md:hidden text-gray-400 ml-auto"
+            className="md:hidden text-gray-600 ml-auto"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           >
             {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
@@ -282,8 +280,8 @@ export default function HomePageClient({ initialMarkets, hero, categoryTabs, sta
               onClick={() => setActiveNav(t)}
               className={`text-[13px] px-3.5 py-2 whitespace-nowrap border-b-2 transition-colors ${
                 activeNav === t
-                  ? 'text-white border-blue-500'
-                  : 'text-gray-500 border-transparent hover:text-gray-300'
+                  ? 'text-gray-900 border-blue-500 font-semibold'
+                  : 'text-gray-500 border-transparent hover:text-gray-700'
               }`}
             >
               {t}
@@ -293,11 +291,11 @@ export default function HomePageClient({ initialMarkets, hero, categoryTabs, sta
 
         {/* Mobile menu */}
         {mobileMenuOpen && (
-          <div className="md:hidden bg-[#161b22] border-t border-[#30363d] px-4 py-3 space-y-2">
-            <Link href="/markets" className="block text-gray-300 py-2">মার্কেট</Link>
-            <Link href="/how-it-works" className="block text-gray-300 py-2">কীভাবে কাজ করে</Link>
-            <Link href="/auth-portal-3m5n8" className="block text-gray-300 py-2">লগইন</Link>
-            <Link href="/auth-portal-3m5n8?tab=register" className="block text-blue-400 py-2">সাইন আপ</Link>
+          <div className="md:hidden bg-white border-t border-gray-200 px-4 py-3 space-y-2 shadow-lg">
+            <Link href="/markets" className="block text-gray-700 py-2 font-medium">মার্কেট</Link>
+            <Link href="/how-it-works" className="block text-gray-700 py-2 font-medium">কীভাবে কাজ করে</Link>
+            <Link href="/auth-portal-3m5n8" className="block text-gray-700 py-2 font-medium">লগইন</Link>
+            <Link href="/auth-portal-3m5n8?tab=register" className="block text-blue-600 py-2 font-bold">সাইন আপ</Link>
           </div>
         )}
       </nav>
@@ -564,8 +562,8 @@ export default function HomePageClient({ initialMarkets, hero, categoryTabs, sta
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-8 mb-8">
             <div className="col-span-2 sm:col-span-1">
               <div className="flex items-center gap-2 mb-3">
-                <span className="text-white font-black text-base">পলিমার্কেট বিডি</span>
-                <span>🇧🇩</span>
+                <span className="text-gray-900 font-black text-base">পলিমার্কেট</span>
+                <img src="/bd-flag.png" alt="BD" className="w-5 h-3 rounded-sm object-cover" />
               </div>
               <p className="text-xs text-gray-500 leading-relaxed">
                 বাংলাদেশের সেরা প্রেডিকশন মার্কেট। তথ্য দিয়ে টাকা আয় করুন।
