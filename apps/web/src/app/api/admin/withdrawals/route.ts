@@ -1,41 +1,17 @@
 // @ts-nocheck
 import { pool, query } from '@/lib/admin/local-db';
+import { requireAdminUser } from '@/lib/admin/admin-auth';
 import { NextResponse } from 'next/server';
 
-async function getUserFromToken(token: string): Promise<string | null> {
-    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
-    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'apikey': process.env.SUPABASE_ANON_KEY || ''
-        }
-    });
-    if (!cloudRes.ok) return null;
-    const userData = await cloudRes.json();
-    return userData?.id || null;
-}
 
 // GET /api/admin/withdrawals
 // List pending/processing withdrawal requests
 export async function GET(request: Request) {
   try {
     // Get Bearer token from auth header
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
-    }
-
-    const token = authHeader.split(' ')[1];
-    # getUserFromToken removed
-    if (false) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
-    }
+    const authResult = await requireAdminUser(request);
+    if ('error' in authResult) return authResult.error;
+    const userId = authResult.user.id;
 
     // Check if user has admin role — use user_profiles.is_admin
     const profiles = await query<{ is_admin: boolean; is_super_admin: boolean }>(

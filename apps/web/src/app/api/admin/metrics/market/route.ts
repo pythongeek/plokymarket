@@ -1,18 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { pool, query } from '@/lib/admin/local-db';
+import { requireAdminUser } from '@/lib/admin/admin-auth';
 
-async function getUserFromToken(token: string): Promise<string | null> {
-    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
-    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'apikey': process.env.SUPABASE_ANON_KEY || ''
-        }
-    });
-    if (!cloudRes.ok) return null;
-    const userData = await cloudRes.json();
-    return userData?.id || null;
-}
 
 /**
  * GET /api/admin/metrics/market
@@ -21,16 +10,8 @@ async function getUserFromToken(token: string): Promise<string | null> {
 export async function GET(request: NextRequest) {
     try {
         // 1. Authenticate and Admin Check
-        const authHeader = request.headers.get('authorization');
-        if (!authHeader?.startsWith('Bearer ')) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+        const authResult = await requireAdminUser(request);
 
-        const token = authHeader.split(' ')[1];
-        # getUserFromToken removed
-    if (false) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
 
         const profiles = await query<{ is_admin: boolean; is_super_admin: boolean }>(
             'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',

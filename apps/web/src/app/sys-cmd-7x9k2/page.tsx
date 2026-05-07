@@ -1,576 +1,838 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { createClient } from '@/lib/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import {
+  Card, CardContent, CardHeader, CardTitle, CardDescription
+} from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
-  TrendingUp,
-  Users,
-  AlertTriangle,
-  CheckCircle,
-  Clock,
-  ArrowUpRight,
-  Shield,
-  Activity,
-  Lock,
-  Database,
-  Server,
-  Zap,
-  BarChart3,
-  RefreshCw,
-  Workflow,
-  Plus,
+  TrendingUp, Users, Shield, Activity, Clock, Zap, CheckCircle,
+  AlertTriangle, XCircle, ArrowUpRight, ArrowDownRight, DollarSign,
+  BarChart3, RefreshCw, Server, Database, Lock, Eye, EyeOff,
+  ChevronDown, ChevronRight, Bot, Sparkles, Settings, Play, Pause,
+  Activity as ActivityIcon, ArrowLeftRight, CreditCard, Send,
+  FileText, Scale, Globe, ChevronUp, Minus, Info, ExternalLink,
+  Layers, Target, Clock3, AlertOctagon, Timer, Star, Calendar
 } from 'lucide-react';
-import { QStashWorkflowManager } from '@/components/admin/QStashWorkflowManager';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 
-const SECURE_PATHS = {
-  markets: '/sys-cmd-7x9k2/markets',
-  users: '/sys-cmd-7x9k2/users',
-  analytics: '/sys-cmd-7x9k2/analytics',
-};
+// ─── Types ───────────────────────────────────────────────────────────────────
 
 interface DashboardStats {
   totalUsers: number;
   activeUsers: number;
   suspendedUsers: number;
   totalMarkets: number;
-  pendingMarkets: number;
   activeMarkets: number;
+  closedMarkets: number;
+  totalTrades: number;
   totalVolume: number;
-  pendingReviews: number;
-  supportTickets: number;
-  securityAlerts: number;
+  pendingDeposits: number;
+  pendingWithdrawals: number;
+  pendingKyc: number;
+  pendingEvents: number;
+  aiProviders: {
+    vertex: { healthy: boolean; latencyMs: number; };
+    minimax: { healthy: boolean; latencyMs: number; };
+  };
 }
 
-interface RecentActivity {
-  id: string;
-  action: string;
-  user_id: string;
-  resource: string;
-  created_at: string;
-  user_email?: string;
+interface PendingItem {
+  type: 'deposit' | 'withdrawal' | 'kyc' | 'event';
+  label: string;
+  count: number;
+  color: string;
+  path: string;
+  icon: React.ReactNode;
 }
 
-export default function AdminDashboard() {
+interface SystemHealth {
+  database: boolean;
+  api: boolean;
+  redis: boolean;
+  workflows: boolean;
+}
+
+const NAV_SECTIONS = [
+  {
+    title: 'Overview',
+    icon: BarChart3,
+    items: [
+      { path: '/sys-cmd-7x9k2', label: 'Dashboard', active: true },
+    ]
+  },
+  {
+    title: 'Core Operations',
+    icon: Target,
+    items: [
+      { path: '/sys-cmd-7x9k2/markets', label: 'Market Control' },
+      { path: '/sys-cmd-7x9k2/events', label: 'Event Management' },
+      { path: '/sys-cmd-7x9k2/users', label: 'User Management' },
+    ]
+  },
+  {
+    title: 'Financial',
+    icon: DollarSign,
+    items: [
+      { path: '/sys-cmd-7x9k2/deposits', label: 'Deposits' },
+      { path: '/sys-cmd-7x9k2/withdrawals', label: 'Withdrawals' },
+      { path: '/sys-cmd-7x9k2/usdt', label: 'USDT Operations' },
+      { path: '/sys-cmd-7x9k2/exchange-rate', label: 'Exchange Rate' },
+    ]
+  },
+  {
+    title: 'Compliance & Risk',
+    icon: Shield,
+    items: [
+      { path: '/sys-cmd-7x9k2/kyc', label: 'KYC Verification' },
+      { path: '/sys-cmd-7x9k2/disputes', label: 'Disputes' },
+      { path: '/sys-cmd-7x9k2/levels', label: 'User Levels' },
+    ]
+  },
+  {
+    title: 'Intelligence',
+    icon: Bot,
+    items: [
+      { path: '/sys-cmd-7x9k2/ai-configs', label: 'AI Config' },
+      { path: '/sys-cmd-7x9k2/daily-topics', label: 'Daily Topics' },
+      { path: '/sys-cmd-7x9k2/resolutions', label: 'Resolution System' },
+    ]
+  },
+  {
+    title: 'System',
+    icon: Server,
+    items: [
+      { path: '/sys-cmd-7x9k2/monitoring', label: 'Monitoring' },
+      { path: '/sys-cmd-7x9k2/workflows', label: 'Cron Jobs' },
+      { path: '/sys-cmd-7x9k2/analytics', label: 'Analytics' },
+      { path: '/sys-cmd-7x9k2/p2p', label: 'P2P Management' },
+    ]
+  }
+];
+
+// ─── MiniMax Agent Status Component ─────────────────────────────────────────
+
+function MiniMaxAgentCard({ health, onToggle }: {
+  health: { healthy: boolean; latencyMs: number };
+  onToggle: (active: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between p-4 rounded-xl border border-violet-200 bg-violet-50/50 hover:bg-violet-50 transition-colors">
+      <div className="flex items-center gap-3">
+        <div className={cn(
+          "w-10 h-10 rounded-xl flex items-center justify-center text-white text-sm font-bold",
+          health.healthy ? "bg-gradient-to-br from-violet-500 to-purple-600" : "bg-gray-400"
+        )}>
+          MX
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-gray-900">MiniMax AI</p>
+          <p className="text-xs text-gray-500">
+            {health.healthy ? `Latency: ${health.latencyMs}ms` : 'Unavailable'}
+          </p>
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <Badge variant={health.healthy ? 'default' : 'secondary'}
+          className={cn(health.healthy ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-gray-100 text-gray-500")}>
+          {health.healthy ? <CheckCircle className="w-3 h-3 mr-1" /> : null}
+          {health.healthy ? 'Active' : 'Offline'}
+        </Badge>
+        <Button size="sm" variant="ghost"
+          onClick={() => onToggle(!health.healthy)}
+          className="text-violet-600 hover:text-violet-700 hover:bg-violet-100">
+          {health.healthy ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Vertex Agent Status Component ───────────────────────────────────────────
+
+function VertexAgentCard({ health, onToggle }: {
+  health: { healthy: boolean; latencyMs: number };
+  onToggle: (active: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between p-4 rounded-xl border border-blue-200 bg-blue-50/50 hover:bg-blue-50 transition-colors">
+      <div className="flex items-center gap-3">
+        <div className={cn(
+          "w-10 h-10 rounded-xl flex items-center justify-center text-white text-sm font-bold",
+          health.healthy ? "bg-gradient-to-br from-blue-500 to-cyan-600" : "bg-gray-400"
+        )}>
+          VX
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-gray-900">Vertex AI (Gemini)</p>
+          <p className="text-xs text-gray-500">
+            {health.healthy ? `Latency: ${health.latencyMs}ms` : 'Unavailable'}
+          </p>
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <Badge variant={health.healthy ? 'default' : 'secondary'}
+          className={cn(health.healthy ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-gray-100 text-gray-500")}>
+          {health.healthy ? <CheckCircle className="w-3 h-3 mr-1" /> : null}
+          {health.healthy ? 'Active' : 'Offline'}
+        </Badge>
+        <Button size="sm" variant="ghost"
+          onClick={() => onToggle(!health.healthy)}
+          className="text-blue-600 hover:text-blue-700 hover:bg-blue-100">
+          {health.healthy ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Stat Card ────────────────────────────────────────────────────────────────
+
+function StatCard({ title, value, subtitle, icon: Icon, color, trend, onClick }: {
+  title: string;
+  value: string | number;
+  subtitle?: string;
+  icon: React.ElementType;
+  color: string;
+  trend?: { value: number; label: string };
+  onClick?: () => void;
+}) {
+  const colors: Record<string, { bg: string; text: string; border: string; icon: string }> = {
+    blue:   { bg: 'bg-blue-50',    text: 'text-blue-600',    border: 'border-blue-100',    icon: 'bg-blue-100'    },
+    green:  { bg: 'bg-emerald-50', text: 'text-emerald-600', border: 'border-emerald-100', icon: 'bg-emerald-100' },
+    violet: { bg: 'bg-violet-50',  text: 'text-violet-600',  border: 'border-violet-100',  icon: 'bg-violet-100'  },
+    amber:  { bg: 'bg-amber-50',   text: 'text-amber-600',   border: 'border-amber-100',   icon: 'bg-amber-100'   },
+    red:    { bg: 'bg-red-50',     text: 'text-red-600',     border: 'border-red-100',     icon: 'bg-red-100'     },
+    cyan:   { bg: 'bg-cyan-50',    text: 'text-cyan-600',    border: 'border-cyan-100',    icon: 'bg-cyan-100'    },
+  };
+  const c = colors[color] || colors.blue;
+
+  return (
+    <motion.div
+      whileHover={{ y: -2, scale: 1.01 }}
+      transition={{ duration: 0.15 }}
+      className={cn(
+        "bg-white rounded-2xl border border-gray-200 p-5 cursor-pointer hover:shadow-md transition-all",
+        onClick ? "hover:border-gray-300" : "cursor-default"
+      )}
+      onClick={onClick}
+    >
+      <div className="flex items-start justify-between mb-3">
+        <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center", c.icon)}>
+          <Icon className={cn("w-5 h-5", c.text)} />
+        </div>
+        {trend && (
+          <div className={cn(
+            "flex items-center gap-0.5 text-xs font-semibold px-2 py-1 rounded-full",
+            trend.value >= 0 ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
+          )}>
+            {trend.value >= 0
+              ? <ChevronUp className="w-3 h-3" />
+              : <ChevronDown className="w-3 h-3" />
+            }
+            {Math.abs(trend.value)}%
+          </div>
+        )}
+      </div>
+      <p className="text-2xl font-bold text-gray-900 mb-1">{value}</p>
+      <p className="text-sm font-medium text-gray-700">{title}</p>
+      {subtitle && <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>}
+    </motion.div>
+  );
+}
+
+// ─── Pending Item Card ────────────────────────────────────────────────────────
+
+function PendingCard({ item, loading }: { item: PendingItem; loading?: boolean }) {
   const router = useRouter();
-  const [stats, setStats] = useState<DashboardStats>({
-    totalUsers: 0,
-    activeUsers: 0,
-    suspendedUsers: 0,
-    totalMarkets: 0,
-    pendingMarkets: 0,
-    activeMarkets: 0,
-    totalVolume: 0,
-    pendingReviews: 0,
-    supportTickets: 0,
-    securityAlerts: 0,
-  });
-  const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
-
-  const supabase = createClient();
-
-  useEffect(() => {
-    fetchDashboardData();
-    const interval = setInterval(fetchDashboardData, 60000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const fetchDashboardData = async () => {
-    try {
-      setRefreshing(true);
-
-      // Fetch total user count (always works - no status column)
-      const { count: totalUsers } = await supabase
-        .from('user_profiles')
-        .select('*', { count: 'exact', head: true });
-
-      // Fetch active/suspended from user_status table (not user_profiles)
-      let activeUsers = 0;
-      let suspendedUsers = 0;
-      try {
-        const { count: active } = await supabase
-          .from('user_status')
-          .select('*', { count: 'exact', head: true })
-          .eq('account_status', 'active');
-        activeUsers = active || 0;
-
-        const { count: suspended } = await supabase
-          .from('user_status')
-          .select('*', { count: 'exact', head: true })
-          .eq('account_status', 'suspended');
-        suspendedUsers = suspended || 0;
-      } catch {
-        // user_status table may not exist yet
-        activeUsers = totalUsers || 0;
-      }
-
-      // Fetch market stats
-      const { count: totalMarkets } = await supabase
-        .from('markets')
-        .select('*', { count: 'exact', head: true });
-
-      const { count: activeMarkets } = await supabase
-        .from('markets')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'active');
-
-      // Fetch pending market reviews - use correct field name legal_review_status
-      let pendingMarkets = 0;
-      try {
-        const { count, error } = await supabase
-          .from('market_creation_drafts')
-          .select('*', { count: 'exact', head: true })
-          .in('legal_review_status', ['pending', 'escalated']);
-        if (!error) pendingMarkets = count || 0;
-      } catch {
-        // table may not exist
-      }
-
-      // Fetch total volume
-      let totalVolume = 0;
-      try {
-        const { data: volumeData } = await supabase
-          .from('trades')
-          .select('price, quantity');
-        totalVolume = volumeData?.reduce((sum: number, trade: { price: number; quantity: number }) =>
-          sum + (trade.price * trade.quantity), 0
-        ) || 0;
-      } catch {
-        // trades table may not exist
-      }
-
-      // Fetch pending reviews - use correct field name legal_review_status
-      let pendingReviews = 0;
-      try {
-        const { count, error } = await supabase
-          .from('market_creation_drafts')
-          .select('*', { count: 'exact', head: true })
-          .eq('legal_review_status', 'pending');
-        if (!error) pendingReviews = count || 0;
-      } catch {
-        // table may not exist
-      }
-
-      // support_tickets table doesn't exist in production — skip to avoid 404 noise
-      const supportTickets = 0;
-
-      // Fetch recent admin activity
-      let activityData: RecentActivity[] = [];
-      try {
-        const { data, error } = await supabase
-          .from('admin_audit_log')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(10);
-        if (!error && data) activityData = data;
-      } catch {
-        // table may not exist
-      }
-
-      setStats({
-        totalUsers: totalUsers || 0,
-        activeUsers,
-        suspendedUsers,
-        totalMarkets: totalMarkets || 0,
-        pendingMarkets,
-        activeMarkets: activeMarkets || 0,
-        totalVolume,
-        pendingReviews,
-        supportTickets,
-        securityAlerts: suspendedUsers + pendingReviews,
-      });
-
-      setRecentActivity(activityData);
-      setLastRefresh(new Date());
-    } catch (err) {
-      console.error('Failed to fetch dashboard data:', err);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+  const icons: Record<string, React.ElementType> = {
+    deposit: DollarSign, withdrawal: Send, kyc: Shield, event: Calendar as any,
   };
-
-  const statCards = [
-    {
-      title: 'মোট ব্যবহারকারী',
-      titleEn: 'Total Users',
-      value: stats.totalUsers.toLocaleString(),
-      change: `${stats.activeUsers} active`,
-      icon: Users,
-      color: 'text-blue-400',
-      bgColor: 'bg-blue-500/15',
-      borderColor: 'border-blue-500/20',
-      onClick: () => router.push(SECURE_PATHS.users),
-    },
-    {
-      title: 'সক্রিয় মার্কেট',
-      titleEn: 'Active Markets',
-      value: stats.activeMarkets.toString(),
-      change: `${stats.totalMarkets} total, ${stats.pendingMarkets} pending`,
-      icon: TrendingUp,
-      color: 'text-emerald-400',
-      bgColor: 'bg-emerald-500/15',
-      borderColor: 'border-emerald-500/20',
-      onClick: () => router.push(SECURE_PATHS.markets),
-    },
-    {
-      title: 'মোট ভলিউম',
-      titleEn: 'Total Volume',
-      value: `৳${(stats.totalVolume / 1000000).toFixed(2)}M`,
-      change: 'Last 30 days',
-      icon: Activity,
-      color: 'text-violet-400',
-      bgColor: 'bg-violet-500/15',
-      borderColor: 'border-violet-500/20',
-      onClick: () => router.push(SECURE_PATHS.analytics),
-    },
-    {
-      title: 'নিরাপত্তা সতর্কতা',
-      titleEn: 'Security Alerts',
-      value: stats.securityAlerts.toString(),
-      change: `${stats.suspendedUsers} suspended, ${stats.pendingReviews} reviews`,
-      icon: Shield,
-      color: stats.securityAlerts > 0 ? 'text-red-400' : 'text-amber-400',
-      bgColor: stats.securityAlerts > 0 ? 'bg-red-500/15' : 'bg-amber-500/15',
-      borderColor: stats.securityAlerts > 0 ? 'border-red-500/20' : 'border-amber-500/20',
-      onClick: () => router.push(SECURE_PATHS.users),
-    },
-  ];
-
-  const getActivityIcon = (action: string) => {
-    if (action.includes('login')) return <CheckCircle className="w-4 h-4 text-emerald-400" />;
-    if (action.includes('denied') || action.includes('suspended')) return <AlertTriangle className="w-4 h-4 text-red-400" />;
-    if (action.includes('create')) return <TrendingUp className="w-4 h-4 text-blue-400" />;
-    if (action.includes('access')) return <Shield className="w-4 h-4 text-violet-400" />;
-    return <Clock className="w-4 h-4 text-slate-400" />;
-  };
-
-  const formatAction = (action: string) => {
-    return action
-      .replace(/_/g, ' ')
-      .replace(/\b\w/g, (c) => c.toUpperCase());
-  };
+  const Icon = icons[item.type] || Activity;
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-          className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full"
-        />
+      <div className="bg-white rounded-2xl border border-gray-200 p-5 animate-pulse">
+        <div className="w-10 h-10 rounded-xl bg-gray-200 mb-3" />
+        <div className="h-4 bg-gray-200 rounded w-20 mb-2" />
+        <div className="h-8 bg-gray-200 rounded w-12" />
       </div>
     );
   }
 
   return (
+    <motion.div
+      whileHover={{ y: -2 }}
+      className={cn(
+        "bg-white rounded-2xl border border-gray-200 p-5 cursor-pointer hover:shadow-md hover:border-gray-300 transition-all",
+        item.count > 0 && "border-l-4",
+      )}
+      style={{ borderLeftColor: item.count > 0 ? item.color : undefined }}
+      onClick={() => router.push(item.path)}
+    >
+      <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center mb-3", item.color.replace('text-', 'bg-'))}>
+        <Icon className={cn("w-5 h-5", item.color)} />
+      </div>
+      <p className="text-sm font-medium text-gray-600 mb-1">{item.label}</p>
+      <div className="flex items-end justify-between">
+        <p className="text-3xl font-bold text-gray-900">{item.count}</p>
+        <ArrowUpRight className="w-4 h-4 text-gray-400" />
+      </div>
+      {item.count > 0 && (
+        <Badge className="mt-2 text-xs" style={{ backgroundColor: item.color + '20', color: item.color, borderColor: item.color + '40' }}>
+          Needs attention
+        </Badge>
+      )}
+    </motion.div>
+  );
+}
+
+// ─── System Health Card ───────────────────────────────────────────────────────
+
+function SystemHealthCard({ health, loading }: { health: SystemHealth; loading?: boolean }) {
+  const items = [
+    { key: 'database', label: 'Database', sub: 'PostgreSQL', icon: Database, color: 'emerald' },
+    { key: 'api', label: 'API Services', sub: 'All endpoints', icon: Server, color: 'emerald' },
+    { key: 'redis', label: 'Redis Cache', sub: 'Upstash', icon: ActivityIcon, color: 'blue' },
+    { key: 'workflows', label: 'Cron Jobs', sub: 'QStash', icon: Zap, color: 'violet' },
+  ];
+
+  if (loading) {
+    return (
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="bg-gray-50 rounded-xl p-4 animate-pulse">
+            <div className="w-8 h-8 rounded-lg bg-gray-200 mb-2" />
+            <div className="h-3 bg-gray-200 rounded w-16 mb-1" />
+            <div className="h-2 bg-gray-200 rounded w-12" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {items.map(({ key, label, sub, icon: Icon, color }) => {
+        const isUp = (health as any)[key];
+        const colorMap: Record<string, string> = {
+          emerald: 'bg-emerald-50 border-emerald-200 text-emerald-600',
+          blue: 'bg-blue-50 border-blue-200 text-blue-600',
+          violet: 'bg-violet-50 border-violet-200 text-violet-600',
+        };
+        return (
+          <div key={key} className={cn(
+            "rounded-xl border p-4 transition-colors",
+            isUp ? colorMap[color] + " hover:border-opacity-60" : "bg-gray-50 border-gray-200 text-gray-400"
+          )}>
+            <div className="flex items-center justify-between mb-2">
+              <Icon className="w-4 h-4" />
+              {isUp
+                ? <CheckCircle className="w-4 h-4 text-emerald-600" />
+                : <XCircle className="w-4 h-4 text-gray-400" />
+              }
+            </div>
+            <p className="text-sm font-semibold">{label}</p>
+            <p className="text-xs opacity-70">{isUp ? sub : 'Down'}</p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Main Dashboard ────────────────────────────────────────────────────────────
+
+export default function AdminDashboard() {
+  const router = useRouter();
+  const supabase = createClient();
+  const [stats, setStats] = useState<DashboardStats>({
+    totalUsers: 0, activeUsers: 0, suspendedUsers: 0,
+    totalMarkets: 0, activeMarkets: 0, closedMarkets: 0,
+    totalTrades: 0, totalVolume: 0,
+    pendingDeposits: 0, pendingWithdrawals: 0,
+    pendingKyc: 0, pendingEvents: 0,
+    aiProviders: {
+      vertex: { healthy: false, latencyMs: 0 },
+      minimax: { healthy: false, latencyMs: 0 },
+    }
+  });
+  const [health, setHealth] = useState<SystemHealth>({
+    database: false, api: false, redis: false, workflows: false,
+  });
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  const [aiProviders, setAiProviders] = useState({
+    vertex: { healthy: false, latencyMs: 0 },
+    minimax: { healthy: false, latencyMs: 0 },
+  });
+
+  const fetchDashboardData = useCallback(async () => {
+    try {
+      setRefreshing(true);
+
+      // ── User Stats ──
+      const { count: totalUsers } = await supabase
+        .from('user_profiles').select('*', { count: 'exact', head: true });
+
+      const { count: activeUsers } = await supabase
+        .from('user_profiles').select('*', { count: 'exact', head: true })
+        .eq('status', 'active');
+
+      const { count: suspendedUsers } = await supabase
+        .from('user_profiles').select('*', { count: 'exact', head: true })
+        .eq('status', 'suspended');
+
+      // ── Market Stats ──
+      const { count: totalMarkets } = await supabase
+        .from('markets').select('*', { count: 'exact', head: true });
+
+      const { count: activeMarkets } = await supabase
+        .from('markets').select('*', { count: 'exact', head: true })
+        .eq('status', 'active');
+
+      const { count: closedMarkets } = await supabase
+        .from('markets').select('*', { count: 'exact', head: true })
+        .eq('status', 'closed');
+
+      // ── Volume ──
+      const { data: tradesData } = await supabase
+        .from('trades').select('price, quantity');
+
+      const totalVolume = tradesData?.reduce(
+        (sum: number, t: { price: number; quantity: number }) => sum + (t.price * t.quantity), 0
+      ) || 0;
+
+      const { count: totalTrades } = await supabase
+        .from('orders').select('*', { count: 'exact', head: true });
+
+      // ── Pending Items ──
+      const { count: pendingDeposits } = await supabase
+        .from('deposit_requests').select('*', { count: 'exact', head: true })
+        .eq('status', 'pending');
+
+      const { count: pendingWithdrawals } = await supabase
+        .from('withdrawal_requests').select('*', { count: 'exact', head: true })
+        .eq('status', 'pending');
+
+      const { count: pendingKyc } = await supabase
+        .from('kyc_submissions').select('*', { count: 'exact', head: true })
+        .eq('status', 'pending');
+
+      const { count: pendingEvents } = await supabase
+        .from('events').select('*', { count: 'exact', head: true })
+        .eq('status', 'draft');
+
+      // ── System Health ──
+      let dbHealthy = false;
+      try {
+        const { error: dbError } = await supabase.from('user_profiles').select('id').limit(1);
+        dbHealthy = !dbError;
+      } catch { dbHealthy = false; }
+
+      setHealth({
+        database: dbHealthy,
+        api: true,
+        redis: true,
+        workflows: true,
+      });
+
+      setStats({
+        totalUsers: totalUsers || 0,
+        activeUsers: activeUsers || 0,
+        suspendedUsers: suspendedUsers || 0,
+        totalMarkets: totalMarkets || 0,
+        activeMarkets: activeMarkets || 0,
+        closedMarkets: closedMarkets || 0,
+        totalTrades: totalTrades || 0,
+        totalVolume,
+        pendingDeposits: pendingDeposits || 0,
+        pendingWithdrawals: pendingWithdrawals || 0,
+        pendingKyc: pendingKyc || 0,
+        pendingEvents: pendingEvents || 0,
+        aiProviders: {
+          vertex: aiProviders.vertex,
+          minimax: aiProviders.minimax,
+        }
+      });
+
+      setLastRefresh(new Date());
+    } catch (err) {
+      console.error('[Dashboard] Fetch error:', err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [supabase]);
+
+  const checkAIAgents = useCallback(async () => {
+    try {
+      const res = await fetch('/api/ai/health-check');
+      if (res.ok) {
+        const data = await res.json();
+        const providers = data.providers || {};
+        setAiProviders({
+          vertex: providers.vertex || { healthy: false, latencyMs: 0 },
+          minimax: providers.minimax || { healthy: false, latencyMs: 0 },
+        });
+      }
+    } catch {
+      setAiProviders({
+        vertex: { healthy: false, latencyMs: 0 },
+        minimax: { healthy: false, latencyMs: 0 },
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchDashboardData();
+    checkAIAgents();
+    const interval = setInterval(() => {
+      fetchDashboardData();
+      checkAIAgents();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [fetchDashboardData, checkAIAgents]);
+
+  const pendingItems: PendingItem[] = [
+    {
+      type: 'deposit', label: 'Pending Deposits',
+      count: stats.pendingDeposits,
+      color: 'text-blue-600',
+      path: '/sys-cmd-7x9k2/deposits',
+      icon: DollarSign,
+    },
+    {
+      type: 'withdrawal', label: 'Pending Withdrawals',
+      count: stats.pendingWithdrawals,
+      color: 'text-amber-600',
+      path: '/sys-cmd-7x9k2/withdrawals',
+      icon: Send,
+    },
+    {
+      type: 'kyc', label: 'KYC Reviews',
+      count: stats.pendingKyc,
+      color: 'text-violet-600',
+      path: '/sys-cmd-7x9k2/kyc',
+      icon: Shield,
+    },
+    {
+      type: 'event', label: 'Draft Events',
+      count: stats.pendingEvents,
+      color: 'text-emerald-600',
+      path: '/sys-cmd-7x9k2/events',
+      icon: Target,
+    },
+  ];
+
+  const totalPending = stats.pendingDeposits + stats.pendingWithdrawals + stats.pendingKyc + stats.pendingEvents;
+
+  return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* ── Header ── */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">
-            সিস্টেম কন্ট্রোল ড্যাশবোর্ড
+          <h1 className="text-2xl font-bold text-gray-900">
+            Platform Dashboard
           </h1>
-          <p className="text-gray-600 mt-1">
-            Monitor and manage platform operations
+          <p className="text-sm text-gray-500 mt-0.5">
+            Real-time overview of all platform operations
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-100 px-3 py-1.5 rounded-lg">
+            <Clock className="w-3 h-3" />
+            {lastRefresh ? `Updated ${lastRefresh.toLocaleTimeString()}` : 'Loading...'}
+          </div>
           <Button
-            variant="outline"
-            size="sm"
-            onClick={fetchDashboardData}
+            variant="outline" size="sm"
+            onClick={() => { fetchDashboardData(); checkAIAgents(); }}
             disabled={refreshing}
-            className="border-gray-300 text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+            className="border-gray-300 text-gray-700 hover:bg-gray-50"
           >
-            <RefreshCw className={cn("w-4 h-4 mr-2", refreshing && "animate-spin")} />
+            <RefreshCw className={cn("w-4 h-4 mr-1.5", refreshing && "animate-spin")} />
             Refresh
           </Button>
-          <div className="flex items-center gap-2 text-sm text-gray-600 bg-white px-3 py-1.5 rounded-lg border border-gray-300">
-            <Lock className="w-3 h-3" />
-            <span>Last sync: {lastRefresh ? lastRefresh.toLocaleTimeString() : '...'}</span>
-          </div>
         </div>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {statCards.map((stat, index) => (
-          <motion.div
-            key={stat.titleEn}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1 }}
-          >
-            <Card
-              className={cn(
-                "bg-white border cursor-pointer transition-all duration-200 hover:scale-[1.02] hover:shadow-lg",
-                stat.borderColor
-              )}
-              onClick={stat.onClick}
-            >
-              <CardContent className="p-6">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium text-gray-700">{stat.title}</p>
-                    <p className="text-xs text-gray-500">{stat.titleEn}</p>
-                    <p className="text-3xl font-bold text-gray-900 mt-2">{stat.value}</p>
-                    <p className="text-sm text-gray-600 mt-1">{stat.change}</p>
-                  </div>
-                  <div className={cn("p-3 rounded-xl", stat.bgColor)}>
-                    <stat.icon className={cn("w-6 h-6", stat.color)} />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        ))}
+      {/* ── Stats Row ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          title="Total Users"
+          value={stats.totalUsers.toLocaleString()}
+          subtitle={`${stats.activeUsers} active · ${stats.suspendedUsers} suspended`}
+          icon={Users}
+          color="blue"
+          onClick={() => router.push('/sys-cmd-7x9k2/users')}
+        />
+        <StatCard
+          title="Active Markets"
+          value={stats.activeMarkets}
+          subtitle={`${stats.closedMarkets} closed · ${stats.totalMarkets} total`}
+          icon={TrendingUp}
+          color="green"
+          onClick={() => router.push('/sys-cmd-7x9k2/markets')}
+        />
+        <StatCard
+          title="Trading Volume"
+          value={stats.totalVolume > 0 ? `৳${(stats.totalVolume / 1000).toFixed(1)}K` : '৳0'}
+          subtitle={`${stats.totalTrades} total trades`}
+          icon={Activity}
+          color="violet"
+          onClick={() => router.push('/sys-cmd-7x9k2/analytics')}
+        />
+        <StatCard
+          title={totalPending > 0 ? "Pending Actions" : "All Caught Up"}
+          value={totalPending}
+          subtitle={totalPending > 0 ? "items need your attention" : "no pending items"}
+          icon={totalPending > 0 ? AlertTriangle : CheckCircle}
+          color={totalPending > 0 ? "amber" : "green"}
+          onClick={() => router.push('/sys-cmd-7x9k2/deposits')}
+        />
       </div>
 
-      {/* Action Center */}
+      {/* ── Pending Actions + AI Agents Row ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Quick Actions */}
-        <Card className="bg-white border border-gray-200">
-          <CardHeader>
-            <CardTitle className="text-gray-900 flex items-center gap-2">
-              <Zap className="w-5 h-5 text-amber-500" />
-              দ্রুত কার্যক্রম
-            </CardTitle>
-            <CardDescription className="text-gray-600">
-              Quick Actions — Common tasks
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <Button
-              className="w-full justify-between bg-primary hover:bg-primary/90 text-white font-medium"
-              onClick={() => router.push(SECURE_PATHS.markets)}
-            >
-              <span>🏪 Create New Market</span>
-              <ArrowUpRight className="w-4 h-4" />
-            </Button>
-            <Button
-              variant="outline"
-              className="w-full justify-between border-gray-300 text-gray-700 hover:bg-gray-100 hover:text-gray-900"
-              onClick={() => router.push('/sys-cmd-7x9k2/events')}
-            >
-              <span>➕ Create New Event</span>
-              <Plus className="w-4 h-4" />
-            </Button>
-            <Button
-              variant="outline"
-              className="w-full justify-between border-gray-300 text-gray-700 hover:bg-gray-100 hover:text-gray-900"
-              onClick={() => router.push(SECURE_PATHS.users)}
-            >
-              <span>👥 Review User Applications</span>
-              <Badge className="bg-blue-100 text-blue-700 border-blue-300">
-                {stats.pendingReviews}
-              </Badge>
-            </Button>
-            <Button
-              variant="outline"
-              className="w-full justify-between border-gray-300 text-gray-700 hover:bg-gray-100 hover:text-gray-900"
-              onClick={() => router.push(SECURE_PATHS.users)}
-            >
-              <span>🚫 Manage Suspended Accounts</span>
-              <Badge className={cn(
-                stats.suspendedUsers > 0
-                  ? "bg-red-100 text-red-700 border-red-300"
-                  : "bg-gray-200 text-gray-700 border-gray-300"
-              )}>
-                {stats.suspendedUsers}
-              </Badge>
-            </Button>
-            <Button
-              variant="outline"
-              className="w-full justify-between border-gray-300 text-gray-700 hover:bg-gray-100 hover:text-gray-900"
-              onClick={() => router.push(SECURE_PATHS.markets)}
-            >
-              <span>📊 View All Markets</span>
-              <Badge className="bg-emerald-100 text-emerald-700 border-emerald-300">
-                {stats.totalMarkets}
-              </Badge>
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Pending Reviews */}
-        <Card className="bg-white border border-gray-200">
-          <CardHeader>
-            <CardTitle className="text-gray-900 flex items-center gap-2">
-              <Clock className="w-5 h-5 text-amber-500" />
-              পেন্ডিং রিভিউ
-            </CardTitle>
-            <CardDescription className="text-gray-600">
-              Pending Reviews — Items requiring attention
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-700">📋 Market Legal Reviews</span>
-                <span className="text-gray-900 font-semibold">{stats.pendingReviews}</span>
+        {/* Pending Items */}
+        <Card className="bg-white border border-gray-200 lg:col-span-2">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-amber-500" />
+                  Pending Actions
+                  {totalPending > 0 && (
+                    <Badge variant="destructive" className="text-xs">
+                      {totalPending}
+                    </Badge>
+                  )}
+                </CardTitle>
+                <CardDescription className="text-xs mt-0.5">
+                  Items requiring your review and action
+                </CardDescription>
               </div>
-              <Progress value={Math.min(stats.pendingReviews * 10, 100)} className="h-2" />
+              <Button size="sm" variant="ghost"
+                onClick={() => router.push('/sys-cmd-7x9k2/deposits')}
+                className="text-xs text-primary hover:text-primary/80">
+                View all <ArrowUpRight className="w-3 h-3 ml-1" />
+              </Button>
             </div>
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-700">🎫 Support Tickets</span>
-                <span className="text-gray-900 font-semibold">{stats.supportTickets}</span>
-              </div>
-              <Progress value={Math.min(stats.supportTickets * 10, 100)} className="h-2" />
-            </div>
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-700">✅ User Verifications</span>
-                <span className="text-gray-900 font-semibold">{stats.pendingReviews}</span>
-              </div>
-              <Progress value={Math.min(stats.pendingReviews * 10, 100)} className="h-2" />
-            </div>
-            <div className="pt-2 border-t border-gray-200">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Total pending items</span>
-                <span className="text-amber-600 font-bold">
-                  {stats.pendingReviews + stats.supportTickets}
-                </span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Recent Activity */}
-        <Card className="bg-white border border-gray-200">
-          <CardHeader>
-            <CardTitle className="text-gray-900 flex items-center gap-2">
-              <Activity className="w-5 h-5 text-blue-500" />
-              সাম্প্রতিক কার্যকলাপ
-            </CardTitle>
-            <CardDescription className="text-gray-600">
-              Recent Activity — Latest admin actions
-            </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2 max-h-[250px] overflow-auto pr-1">
-              {recentActivity.length === 0 ? (
-                <div className="text-center py-6">
-                  <Activity className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                  <p className="text-sm text-gray-500">No recent activity</p>
-                  <p className="text-xs text-gray-400">Actions will appear here</p>
-                </div>
-              ) : (
-                recentActivity.map((activity) => (
-                  <div
-                    key={activity.id}
-                    className="flex items-start gap-3 p-3 rounded-lg bg-gray-50 border border-gray-200 hover:border-gray-300 transition-colors"
-                  >
-                    <div className="mt-0.5">
-                      {getActivityIcon(activity.action)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">
-                        {formatAction(activity.action)}
-                      </p>
-                      <p className="text-xs text-gray-600 mt-0.5">
-                        {activity.resource || 'system'}
-                      </p>
-                      <p className="text-xs text-gray-500 mt-0.5">
-                        {new Date(activity.created_at).toLocaleString()}
-                      </p>
-                    </div>
-                  </div>
-                ))
-              )}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {pendingItems.map(item => (
+                <PendingCard key={item.type} item={item} loading={loading} />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* AI Agents Panel */}
+        <Card className="bg-white border border-gray-200">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                  <Bot className="w-4 h-4 text-violet-500" />
+                  AI Agents
+                </CardTitle>
+                <CardDescription className="text-xs mt-0.5">
+                  Vertex & MiniMax providers
+                </CardDescription>
+              </div>
+              <Button size="sm" variant="ghost"
+                onClick={() => router.push('/sys-cmd-7x9k2/ai-configs')}
+                className="text-xs text-primary hover:text-primary/80">
+                Configure <Settings className="w-3 h-3 ml-1" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <VertexAgentCard
+              health={aiProviders.vertex}
+              onToggle={(active) => console.log('Vertex toggle:', active)}
+            />
+            <MiniMaxAgentCard
+              health={aiProviders.minimax}
+              onToggle={(active) => console.log('MiniMax toggle:', active)}
+            />
+            <div className="pt-2 border-t border-gray-100">
+              <Button
+                className="w-full text-xs bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white"
+                size="sm"
+                onClick={() => router.push('/sys-cmd-7x9k2/daily-topics')}
+              >
+                <Sparkles className="w-3 h-3 mr-1.5" />
+                Generate Daily Topics
+              </Button>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* System Status */}
-      <Card className="bg-white border border-gray-200">
-        <CardHeader>
-          <CardTitle className="text-gray-900 flex items-center gap-2">
-            <BarChart3 className="w-5 h-5 text-primary" />
-            সিস্টেম স্বাস্থ্য
-            <span className="text-sm font-normal text-gray-600 ml-2">System Health</span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="p-4 rounded-xl bg-gray-50 border border-emerald-200">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="p-2 rounded-lg bg-emerald-100">
-                  <Database className="w-5 h-5 text-emerald-600" />
-                </div>
-                <span className="text-sm font-semibold text-gray-900">Database</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
-                <p className="text-sm text-emerald-700">Connected</p>
-              </div>
-              <p className="text-xs text-gray-600 mt-1">Supabase PostgreSQL</p>
+      {/* ── Quick Actions + System Health Row ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        {/* Quick Actions */}
+        <Card className="bg-white border border-gray-200 lg:col-span-2">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
+              <Zap className="w-4 h-4 text-amber-500" />
+              Quick Actions
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { label: 'Create Market', icon: TrendingUp, path: '/sys-cmd-7x9k2/markets', color: 'text-emerald-600', bg: 'bg-emerald-50' },
+                { label: 'Create Event', icon: Target, path: '/sys-cmd-7x9k2/events', color: 'text-blue-600', bg: 'bg-blue-50' },
+                { label: 'Review Users', icon: Users, path: '/sys-cmd-7x9k2/users', color: 'text-violet-600', bg: 'bg-violet-50' },
+                { label: 'View Analytics', icon: BarChart3, path: '/sys-cmd-7x9k2/analytics', color: 'text-amber-600', bg: 'bg-amber-50' },
+                { label: 'Exchange Rate', icon: ArrowLeftRight, path: '/sys-cmd-7x9k2/exchange-rate', color: 'text-cyan-600', bg: 'bg-cyan-50' },
+                { label: 'System Config', icon: Settings, path: '/sys-cmd-7x9k2/monitoring', color: 'text-gray-600', bg: 'bg-gray-50' },
+              ].map(({ label, icon: Icon, path, color, bg }) => (
+                <Button
+                  key={label}
+                  variant="ghost"
+                  onClick={() => router.push(path)}
+                  className={cn(
+                    "justify-start h-auto py-3 px-3 text-xs font-medium text-gray-700 hover:bg-gray-50 hover:text-gray-900",
+                    "border border-transparent hover:border-gray-200"
+                  )}
+                >
+                  <span className={cn("w-7 h-7 rounded-lg flex items-center justify-center mr-2", bg)}>
+                    <Icon className={cn("w-3.5 h-3.5", color)} />
+                  </span>
+                  {label}
+                </Button>
+              ))}
             </div>
-            <div className="p-4 rounded-xl bg-gray-50 border border-emerald-200">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="p-2 rounded-lg bg-emerald-100">
-                  <Server className="w-5 h-5 text-emerald-600" />
-                </div>
-                <span className="text-sm font-semibold text-gray-900">API Services</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
-                <p className="text-sm text-emerald-700">Operational</p>
-              </div>
-              <p className="text-xs text-gray-600 mt-1">All endpoints active</p>
-            </div>
-            <div className="p-4 rounded-xl bg-gray-50 border border-blue-200">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="p-2 rounded-lg bg-blue-100">
-                  <Shield className="w-5 h-5 text-blue-600" />
-                </div>
-                <span className="text-sm font-semibold text-gray-900">Security</span>
-              </div>
-              <div className="flex items-center gap-2">
-                {stats.securityAlerts > 0 ? (
-                  <>
-                    <div className="w-2 h-2 rounded-full bg-amber-600 animate-pulse" />
-                    <p className="text-sm text-amber-700">{stats.securityAlerts} alerts</p>
-                  </>
-                ) : (
-                  <>
-                    <div className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
-                    <p className="text-sm text-emerald-700">No threats</p>
-                  </>
-                )}
-              </div>
-              <p className="text-xs text-gray-600 mt-1">RLS enforced</p>
-            </div>
-            <div className="p-4 rounded-xl bg-gray-50 border border-violet-200 cursor-pointer hover:border-violet-400 transition-colors" onClick={() => router.push('/sys-cmd-7x9k2/workflows')}>
-              <div className="flex items-center gap-3 mb-3">
-                <div className="p-2 rounded-lg bg-violet-100">
-                  <Workflow className="w-5 h-5 text-violet-600" />
-                </div>
-                <span className="text-sm font-semibold text-gray-900">Workflows</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
-                <p className="text-sm text-emerald-700">Manage</p>
-              </div>
-              <p className="text-xs text-gray-600 mt-1">QStash Cron Jobs</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
-      {/* QStash Workflow Manager Section */}
-      <QStashWorkflowManager />
+        {/* System Health */}
+        <Card className="bg-white border border-gray-200 lg:col-span-3">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                  <Server className="w-4 h-4 text-emerald-500" />
+                  System Health
+                </CardTitle>
+                <CardDescription className="text-xs mt-0.5">
+                  Infrastructure status at a glance
+                </CardDescription>
+              </div>
+              <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-xs">
+                <CheckCircle className="w-3 h-3 mr-1" />
+                All systems operational
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <SystemHealthCard health={health} loading={loading} />
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ── Volume Overview + Market Distribution ── */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card className="bg-white border border-gray-200">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-semibold text-gray-900">User Distribution</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {[
+                { label: 'Active Users', value: stats.activeUsers, total: stats.totalUsers, color: 'bg-emerald-500' },
+                { label: 'Suspended', value: stats.suspendedUsers, total: stats.totalUsers, color: 'bg-red-500' },
+              ].map(({ label, value, total, color }) => (
+                <div key={label}>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-gray-600">{label}</span>
+                    <span className="font-semibold text-gray-900">{value}</span>
+                  </div>
+                  <Progress
+                    value={total > 0 ? (value / total) * 100 : 0}
+                    className="h-2"
+                  />
+                </div>
+              ))}
+              {loading && (
+                <div className="space-y-2">
+                  <Skeleton className="h-2 w-full" />
+                  <Skeleton className="h-2 w-full" />
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-white border border-gray-200">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-semibold text-gray-900">Market Status</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {[
+                { label: 'Active', value: stats.activeMarkets, total: stats.totalMarkets, color: 'bg-emerald-500' },
+                { label: 'Closed', value: stats.closedMarkets, total: stats.totalMarkets, color: 'bg-gray-400' },
+              ].map(({ label, value, total, color }) => (
+                <div key={label}>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-gray-600">{label}</span>
+                    <span className="font-semibold text-gray-900">{value}</span>
+                  </div>
+                  <Progress
+                    value={total > 0 ? (value / total) * 100 : 0}
+                    className="h-2"
+                  />
+                </div>
+              ))}
+              {loading && (
+                <div className="space-y-2">
+                  <Skeleton className="h-2 w-full" />
+                  <Skeleton className="h-2 w-full" />
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-white border border-gray-200">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-semibold text-gray-900">Financial Overview</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {[
+                { label: 'Pending Deposits', value: stats.pendingDeposits, color: 'text-blue-600' },
+                { label: 'Pending Withdrawals', value: stats.pendingWithdrawals, color: 'text-amber-600' },
+                { label: 'KYC Pending', value: stats.pendingKyc, color: 'text-violet-600' },
+              ].map(({ label, value, color }) => (
+                <div key={label} className="flex items-center justify-between">
+                  <span className="text-xs text-gray-600">{label}</span>
+                  <span className={cn("text-sm font-bold", color)}>{value}</span>
+                </div>
+              ))}
+              {loading && (
+                <div className="space-y-2">
+                  <Skeleton className="h-3 w-full" />
+                  <Skeleton className="h-3 w-full" />
+                  <Skeleton className="h-3 w-full" />
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

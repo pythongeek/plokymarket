@@ -33,7 +33,7 @@ export default async function HomePageServer() {
     const { data: tickerData } = await supabase
       .from('events')
       .select(`
-        id, title, question, total_volume, current_yes_price, current_no_price, price_24h_change
+        id, title, question, total_volume, current_yes_price, current_no_price, price_change_24h
       `)
       .eq('status', 'active')
       .order('total_volume', { ascending: false })
@@ -45,7 +45,7 @@ export default async function HomePageServer() {
       question: fixBengaliEncoding(event.question) || '',
       yes_price: event.current_yes_price || 0.5,
       no_price: event.current_no_price || 0.5,
-      change_24h: event.price_24h_change || 0,
+      change_24h: event.price_change_24h || 0,
       volume: event.total_volume || 0
     }));
 

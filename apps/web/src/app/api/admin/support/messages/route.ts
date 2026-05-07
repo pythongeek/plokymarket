@@ -1,33 +1,14 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
 import { pool } from '@/lib/admin/local-db';
+import { requireAdminUser } from '@/lib/admin/admin-auth';
 
-async function getUserFromToken(token: string): Promise<string | null> {
-    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
-    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'apikey': process.env.SUPABASE_ANON_KEY || ''
-        }
-    });
-    if (!cloudRes.ok) return null;
-    const userData = await cloudRes.json();
-    return userData?.id || null;
-}
 
 // GET /api/admin/support/messages?ticket_id=xxx - Get ticket messages
 export async function GET(req: NextRequest) {
   try {
-    const authHeader = req.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    const token = authHeader.split(' ')[1];
+    const authResult = await requireAdminUser(req);
 
-    # getUserFromToken removed
-    if (false) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
 
     // Check admin status
     const profileResult = await pool.query(
@@ -69,17 +50,9 @@ export async function GET(req: NextRequest) {
 // POST /api/admin/support/messages - Add message
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const authHeader = req.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    const token = authHeader.split(' ')[1];
-
-    # getUserFromToken removed
-    if (false) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+        const authResult = await requireAdminUser(req);
+    if ('error' in authResult) return authResult.error;
+    const userId = authResult.user.id;
 
     // Check admin status
     const profileResult = await pool.query(

@@ -108,12 +108,12 @@ export interface AgentOrchestrationResult {
   metadata: {
     totalTime: number;
     agentsUsed: AgentType[];
-    providerUsed: 'vertex' | 'kimi' | 'rule-based';
+    providerUsed: 'vertex' | 'kimi' | 'minimax' | 'rule-based';
   };
 }
 
 export interface ProviderConfig {
-  name: 'vertex' | 'kimi';
+  name: 'vertex' | 'kimi' | 'minimax';
   priority: number;
   isAvailable: boolean;
   lastError?: string;

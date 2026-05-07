@@ -4,20 +4,9 @@
  */
 // @ts-nocheck
 import { pool, query } from '@/lib/admin/local-db';
+import { requireAdminUser } from '@/lib/admin/admin-auth';
 import { NextRequest, NextResponse } from 'next/server';
 
-async function getUserFromToken(token: string): Promise<string | null> {
-    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
-    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'apikey': process.env.SUPABASE_ANON_KEY || ''
-        }
-    });
-    if (!cloudRes.ok) return null;
-    const userData = await cloudRes.json();
-    return userData?.id || null;
-}
 
 const CRONJOB_API_BASE = 'https://api.cron-job.org/jobs';
 
@@ -69,16 +58,9 @@ async function cronJobApiRequest(endpoint: string, method: string = 'GET', body?
 // GET /api/admin/cron-jobs - List all cron jobs
 export async function GET(request: NextRequest) {
     try {
-        const authHeader = request.headers.get('authorization');
-        const token = authHeader?.replace('Bearer ', '');
-        if (!token) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
-        # getUserFromToken removed
-    if (false) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+        const authResult = await requireAdminUser(request);
+        if ('error' in authResult) return authResult.error;
+        const userId = authResult.user.id;
 
         const profiles = await query<{ is_admin: boolean; is_super_admin: boolean }>(
             'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
@@ -142,16 +124,9 @@ export async function GET(request: NextRequest) {
 // POST /api/admin/cron-jobs - Create a new cron job
 export async function POST(request: NextRequest) {
     try {
-        const authHeader = request.headers.get('authorization');
-        const token = authHeader?.replace('Bearer ', '');
-        if (!token) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
-        # getUserFromToken removed
-    if (false) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+        const authResult = await requireAdminUser(request);
+        if ('error' in authResult) return authResult.error;
+        const userId = authResult.user.id;
 
         const profiles = await query<{ is_admin: boolean; is_super_admin: boolean }>(
             'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',

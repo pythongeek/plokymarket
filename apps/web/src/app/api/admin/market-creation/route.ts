@@ -1,28 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { pool, query } from '@/lib/admin/local-db';
+import { requireAdminUser } from '@/lib/admin/admin-auth';
 
-async function getUserFromToken(token: string): Promise<string | null> {
-    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
-    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'apikey': process.env.SUPABASE_ANON_KEY || ''
-        }
-    });
-    if (!cloudRes.ok) return null;
-    const userData = await cloudRes.json();
-    return userData?.id || null;
-}
 
 // GET /api/admin/market-creation - List drafts or get single draft
 export async function GET(req: NextRequest) {
   try {
-    const authHeader = req.headers.get('Authorization');
-    const token = authHeader?.split(' ')[1] || '';
-    # getUserFromToken removed
-    if (false) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const authResult = await requireAdminUser(req);
+
 
     const { searchParams } = new URL(req.url);
     const draftId = searchParams.get('id');
@@ -71,12 +56,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const authHeader = req.headers.get('Authorization');
-    const token = authHeader?.split(' ')[1] || '';
-    # getUserFromToken removed
-    if (false) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const authResult = await requireAdminUser(req);
+    if ('error' in authResult) return authResult.error;
+    const userId = authResult.user.id;
 
     const profileResult = await pool.query(
       'SELECT is_admin FROM user_profiles WHERE id = $1',
@@ -108,12 +90,9 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
-    const authHeader = req.headers.get('Authorization');
-    const token = authHeader?.split(' ')[1] || '';
-    # getUserFromToken removed
-    if (false) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const authResult = await requireAdminUser(req);
+    if ('error' in authResult) return authResult.error;
+    const userId = authResult.user.id;
 
     const { draft_id, stage, stage_data } = body;
 
@@ -146,12 +125,9 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'Draft ID required' }, { status: 400 });
     }
 
-    const authHeader = req.headers.get('Authorization');
-    const token = authHeader?.split(' ')[1] || '';
-    # getUserFromToken removed
-    if (false) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const authResult = await requireAdminUser(req);
+    if ('error' in authResult) return authResult.error;
+    const userId = authResult.user.id;
 
     const profileResult = await pool.query(
       'SELECT is_admin FROM user_profiles WHERE id = $1',

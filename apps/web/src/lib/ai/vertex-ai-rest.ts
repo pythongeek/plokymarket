@@ -1,7 +1,7 @@
 /**
  * Vertex AI REST API Client
  * Uses direct REST API calls with API key authentication
- * Works on Vercel without Docker
+ * Works on any deployment with Docker/Node.js
  */
 
 const VERTEX_API_BASE = 'https://asia-south1-aiplatform.googleapis.com/v1';

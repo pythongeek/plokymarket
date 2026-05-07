@@ -1,30 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { pool, query } from '@/lib/admin/local-db';
+import { requireAdminUser } from '@/lib/admin/admin-auth';
 import { marketService } from '@/lib/services/MarketService';
 
-async function getUserFromToken(token: string): Promise<string | null> {
-    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
-    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'apikey': process.env.SUPABASE_ANON_KEY || ''
-        }
-    });
-    if (!cloudRes.ok) return null;
-    const userData = await cloudRes.json();
-    return userData?.id || null;
-}
 
 // POST /api/admin/market-creation/deploy - Deploy market to production
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const authHeader = req.headers.get('Authorization');
-    const token = authHeader?.split(' ')[1] || '';
-    # getUserFromToken removed
-    if (false) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const authResult = await requireAdminUser(req);
+
 
     const profileResult = await pool.query(
       'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',

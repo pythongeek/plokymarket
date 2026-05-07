@@ -9,18 +9,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { pool } from '@/lib/admin/local-db';
 import { QStashClient } from '@/lib/upstash/workflows';
 
-async function getUserFromToken(token: string): Promise<string | null> {
-    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
-    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'apikey': process.env.SUPABASE_ANON_KEY || ''
-        }
-    });
-    if (!cloudRes.ok) return null;
-    const userData = await cloudRes.json();
-    return userData?.id || null;
-}
 
 export const runtime = 'nodejs';
 
@@ -32,11 +20,9 @@ const getQStashClient = () => {
 
 async function verifyAdmin(request: NextRequest): Promise<boolean> {
   const authHeader = request.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) return false;
-
-  const token = authHeader.split(' ')[1];
-  # getUserFromToken removed
-    if (false) return false;
+  const authResult = await requireAdminUser(request);
+  if ('error' in authResult) return authResult.error;
+  const userId = authResult.user.id;
 
   const profileResult = await pool.query(
     'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',

@@ -13,23 +13,26 @@ import { ProviderConfig } from './types';
 const providers: Map<string, ProviderConfig> = new Map([
   ['vertex', { name: 'vertex', priority: 1, isAvailable: true }],
   ['kimi', { name: 'kimi', priority: 2, isAvailable: true }],
+  ['minimax', { name: 'minimax', priority: 3, isAvailable: true }],
 ]);
 
 // Rate limiting tracking
 const rateLimitTracker = {
   vertex: { requests: 0, resetTime: Date.now() },
   kimi: { requests: 0, resetTime: Date.now() },
+  minimax: { requests: 0, resetTime: Date.now() },
 };
 
 const RATE_LIMITS = {
   vertex: { requestsPerMinute: 60 },
   kimi: { requestsPerMinute: 100 },
+  minimax: { requestsPerMinute: 80 },
 };
 
 /**
  * Check if provider is within rate limits
  */
-function isWithinRateLimit(provider: 'vertex' | 'kimi'): boolean {
+function isWithinRateLimit(provider: 'vertex' | 'kimi' | 'minimax'): boolean {
   const tracker = rateLimitTracker[provider];
   const now = Date.now();
   const oneMinute = 60 * 1000;
@@ -46,7 +49,7 @@ function isWithinRateLimit(provider: 'vertex' | 'kimi'): boolean {
 /**
  * Increment request counter for provider
  */
-export function trackRequest(provider: 'vertex' | 'kimi'): void {
+export function trackRequest(provider: 'vertex' | 'kimi' | 'minimax'): void {
   rateLimitTracker[provider].requests++;
 }
 
@@ -54,7 +57,7 @@ export function trackRequest(provider: 'vertex' | 'kimi'): void {
  * Mark provider as unavailable
  */
 export function markProviderUnavailable(
-  provider: 'vertex' | 'kimi',
+  provider: 'vertex' | 'kimi' | 'minimax',
   error?: string
 ): void {
   const config = providers.get(provider);
@@ -78,7 +81,7 @@ export function markProviderUnavailable(
 /**
  * Get the best available provider
  */
-export function getBestProvider(): 'vertex' | 'kimi' | null {
+export function getBestProvider(): 'vertex' | 'kimi' | 'minimax' | null {
   const sortedProviders = Array.from(providers.values())
     .filter(p => p.isAvailable && isWithinRateLimit(p.name))
     .sort((a, b) => a.priority - b.priority);
@@ -93,8 +96,9 @@ export function getBestProvider(): 'vertex' | 'kimi' | null {
 export async function executeWithFailover<T>(
   vertexFn: () => Promise<T>,
   kimiFn: () => Promise<T>,
+  minimaxFn?: () => Promise<T>,
   ruleBasedFn?: () => T
-): Promise<{ result: T; provider: 'vertex' | 'kimi' | 'rule-based' }> {
+): Promise<{ result: T; provider: 'vertex' | 'kimi' | 'minimax' | 'rule-based' }> {
   const provider = getBestProvider();
   
   // Try Vertex AI first if available
@@ -120,7 +124,19 @@ export async function executeWithFailover<T>(
       markProviderUnavailable('kimi', String(error));
     }
   }
-  
+
+  // Fallback to MiniMax
+  if (minimaxFn && providers.get('minimax')?.isAvailable) {
+    try {
+      trackRequest('minimax');
+      const result = await minimaxFn();
+      return { result, provider: 'minimax' };
+    } catch (error) {
+      console.warn('[ProviderSwitcher] MiniMax failed:', error);
+      markProviderUnavailable('minimax', String(error));
+    }
+  }
+
   // Final fallback to rule-based
   if (ruleBasedFn) {
     console.warn('[ProviderSwitcher] Using rule-based fallback');
@@ -140,7 +156,7 @@ export function getProviderHealth(): ProviderConfig[] {
 /**
  * Force provider rotation
  */
-export function rotateProvider(): 'vertex' | 'kimi' {
+export function rotateProvider(): 'vertex' | 'kimi' | 'minimax' {
   const current = getBestProvider();
   return current === 'vertex' ? 'kimi' : 'vertex';
 }

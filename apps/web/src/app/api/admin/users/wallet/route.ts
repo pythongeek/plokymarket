@@ -1,38 +1,13 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
 import { pool } from '@/lib/admin/local-db';
+import { requireAdminUser } from '@/lib/admin/admin-auth';
 
-async function getUserFromToken(token: string): Promise<string | null> {
-    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
-    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'apikey': process.env.SUPABASE_ANON_KEY || ''
-        }
-    });
-    if (!cloudRes.ok) return null;
-    const userData = await cloudRes.json();
-    return userData?.id || null;
-}
 
 export async function POST(request: NextRequest) {
     try {
-        const authHeader = request.headers.get('authorization');
-        if (!authHeader?.startsWith('Bearer ')) {
-            return NextResponse.json(
-                { success: false, error: 'Unauthorized' },
-                { status: 401 }
-            );
-        }
-        const token = authHeader.split(' ')[1];
+        const authResult = await requireAdminUser(request);
 
-        # getUserFromToken removed
-    if (false) {
-            return NextResponse.json(
-                { success: false, error: 'Unauthorized' },
-                { status: 401 }
-            );
-        }
 
         // Verify admin status
         const adminResult = await pool.query(
@@ -118,18 +93,10 @@ export async function GET(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url);
         const targetUserId = searchParams.get('user_id');
-        const authHeader = request.headers.get('authorization');
-        
-        if (!authHeader?.startsWith('Bearer ')) {
-            return NextResponse.json(
-                { success: false, error: 'Unauthorized' },
-                { status: 401 }
-            );
-        }
-        const token = authHeader.split(' ')[1];
-
-        # getUserFromToken removed
-    if (false) {
+        const authResult = await requireAdminUser(request);
+        if ('error' in authResult) return authResult.error;
+        const userId = authResult.user.id;
+        if (!userId) {
             return NextResponse.json(
                 { success: false, error: 'Unauthorized' },
                 { status: 401 }

@@ -1,19 +1,8 @@
 // @ts-nocheck
 import { pool, query } from '@/lib/admin/local-db';
+import { requireAdminUser } from '@/lib/admin/admin-auth';
 import { NextRequest, NextResponse } from 'next/server';
 
-async function getUserFromToken(token: string): Promise<string | null> {
-    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
-    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'apikey': process.env.SUPABASE_ANON_KEY || ''
-        }
-    });
-    if (!cloudRes.ok) return null;
-    const userData = await cloudRes.json();
-    return userData?.id || null;
-}
 
 /**
  * GET /api/admin/exchange-rate-config
@@ -105,16 +94,9 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
     try {
-        const authHeader = request.headers.get('authorization');
-        const token = authHeader?.replace('Bearer ', '');
-        if (!token) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
-        # getUserFromToken removed
-    if (false) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+        const authResult = await requireAdminUser(request);
+        if ('error' in authResult) return authResult.error;
+        const userId = authResult.user.id;
 
         // Check admin - use profiles table since that seems to be what exchange-rate-config uses
         const profiles = await query<{ is_admin: boolean }>(

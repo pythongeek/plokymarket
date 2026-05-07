@@ -1,20 +1,9 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
 import { pool } from '@/lib/admin/local-db';
+import { requireAdminUser } from '@/lib/admin/admin-auth';
 import { inngest } from '@/lib/inngest/client';
 
-async function getUserFromToken(token: string): Promise<string | null> {
-    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
-    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'apikey': process.env.SUPABASE_ANON_KEY || ''
-        }
-    });
-    if (!cloudRes.ok) return null;
-    const userData = await cloudRes.json();
-    return userData?.id || null;
-}
 
 /**
  * POST /api/admin/resolution/resolve
@@ -24,16 +13,8 @@ async function getUserFromToken(token: string): Promise<string | null> {
 export async function POST(request: NextRequest) {
     try {
         // 1. Authenticate and Admin Check
-        const authHeader = request.headers.get('authorization');
-        if (!authHeader?.startsWith('Bearer ')) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-        const token = authHeader.split(' ')[1];
+        const authResult = await requireAdminUser(request);
 
-        # getUserFromToken removed
-    if (false) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
 
         const profileResult = await pool.query(
             'SELECT id, is_admin, is_super_admin FROM user_profiles WHERE id = $1',

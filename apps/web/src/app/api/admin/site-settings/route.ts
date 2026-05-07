@@ -4,20 +4,9 @@
  */
 // @ts-nocheck
 import { pool } from '@/lib/admin/local-db';
+import { requireAdminUser } from '@/lib/admin/admin-auth';
 import { NextRequest, NextResponse } from 'next/server';
 
-async function getUserFromToken(token: string): Promise<string | null> {
-    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
-    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'apikey': process.env.SUPABASE_ANON_KEY || ''
-        }
-    });
-    if (!cloudRes.ok) return null;
-    const userData = await cloudRes.json();
-    return userData?.id || null;
-}
 
 // GET /api/admin/site-settings - Get all site settings
 export async function GET() {
@@ -41,16 +30,9 @@ export async function GET() {
 // PUT /api/admin/site-settings - Update site settings
 export async function PUT(req: NextRequest) {
     try {
-        const authHeader = req.headers.get('authorization');
-        if (!authHeader?.startsWith('Bearer ')) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-        const token = authHeader.split(' ')[1];
-
-        # getUserFromToken removed
-    if (false) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+        const authResult = await requireAdminUser(req);
+        if ('error' in authResult) return authResult.error;
+        const userId = authResult.user.id;
         
         // Check admin permissions
         const profileResult = await pool.query(

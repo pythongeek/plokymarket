@@ -2,31 +2,16 @@
 // Get unlinked events (events without markets) for EventLinkingPanel
 // @ts-nocheck
 import { pool, query } from '@/lib/admin/local-db';
-import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminUser } from '@/lib/admin/admin-auth';
+import { NextRequest, NextResponse } from 'next/server';
 
-async function getUserFromToken(token: string): Promise<string | null> {
-    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
-    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'apikey': process.env.SUPABASE_ANON_KEY || ''
-        }
-    });
-    if (!cloudRes.ok) return null;
-    const userData = await cloudRes.json();
-    return userData?.id || null;
-}
 
 // GET /api/admin/events/unlinked - Get events that don't have markets
 export async function GET(req: NextRequest) {
   try {
-    // Auth via requireAdminUser (local JWT validation)
     const authResult = await requireAdminUser(req);
     if ('error' in authResult) return authResult.error;
-    const { user: adminUser, pool: adminPool } = authResult;
-    const userId = adminUser.id;
-    }
+    const userId = authResult.user.id;
 
     const profiles = await query<{ is_admin: boolean; is_super_admin: boolean }>(
       'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',

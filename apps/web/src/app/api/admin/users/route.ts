@@ -1,35 +1,18 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
 import { pool, query, ensureAdminProfile } from '@/lib/admin/local-db';
+import { requireAdminUser } from '@/lib/admin/admin-auth';
 
 /**
  * Auth helper: validate token against cloud Supabase, return user ID.
  */
-async function getUserFromToken(token: string): Promise<string | null> {
-    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
-    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'apikey': process.env.SUPABASE_ANON_KEY || ''
-        }
-    });
-    if (!cloudRes.ok) return null;
-    const userData = await cloudRes.json();
-    return userData?.id || null;
-}
 
 // GET /api/admin/users - List/search users via pg
 export async function GET(req: NextRequest) {
     try {
-        const authHeader = req.headers.get('authorization');
-        if (!authHeader?.startsWith('Bearer ')) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
-        const userId = await getUserFromToken(authHeader.split(' ')[1]);
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+        const authResult = await requireAdminUser(req);
+        if ('error' in authResult) return authResult.error;
+        const userId = authResult.user.id;
 
         // Check admin in local DB
         const profiles = await query<{ is_admin: boolean }>(
@@ -62,9 +45,9 @@ export async function GET(req: NextRequest) {
                     u.id as user_id,
                     u.email,
                     up.full_name,
-                    up.account_status,
+                    up.status,
                     up.kyc_status,
-                    up.verification_tier,
+                    up.status AS account_status,
                     u.created_at
                 FROM auth.users u
                 LEFT JOIN user_profiles up ON up.id = u.id
@@ -78,7 +61,7 @@ export async function GET(req: NextRequest) {
                 i++;
             }
             if (status) {
-                sql += ` AND up.account_status = $${i++}`;
+                sql += ` AND up.status = $${i++}`;
                 params.push(status);
             }
             if (kyc) {
@@ -107,15 +90,9 @@ export async function GET(req: NextRequest) {
 // PATCH /api/admin/users - Update user status via pg
 export async function PATCH(req: NextRequest) {
     try {
-        const authHeader = req.headers.get('authorization');
-        if (!authHeader?.startsWith('Bearer ')) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
-        const userId = await getUserFromToken(authHeader.split(' ')[1]);
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+        const authResult = await requireAdminUser(req);
+        if ('error' in authResult) return authResult.error;
+        const userId = authResult.user.id;
 
         const profiles = await query<{ is_admin: boolean }>(
             'SELECT is_admin FROM user_profiles WHERE id = $1',
@@ -143,21 +120,9 @@ export async function PATCH(req: NextRequest) {
             const updates: string[] = [];
             const values: any[] = [];
             let i = 1;
-            if (status_changes.account_status !== undefined) {
-                updates.push(`account_status = $${i++}`);
-                values.push(status_changes.account_status);
-            }
-            if (status_changes.can_trade !== undefined) {
-                updates.push(`can_trade = $${i++}`);
-                values.push(status_changes.can_trade);
-            }
-            if (status_changes.can_deposit !== undefined) {
-                updates.push(`can_deposit = $${i++}`);
-                values.push(status_changes.can_deposit);
-            }
-            if (status_changes.can_withdraw !== undefined) {
-                updates.push(`can_withdraw = $${i++}`);
-                values.push(status_changes.can_withdraw);
+            if (status_changes.status !== undefined) {
+                updates.push(`status = $${i++}`);
+                values.push(status_changes.status);
             }
             if (updates.length === 0) {
                 return NextResponse.json({ error: 'No fields to update' }, { status: 400 });

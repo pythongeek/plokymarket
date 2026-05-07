@@ -4,21 +4,9 @@
  */
 // @ts-nocheck
 import { pool, query } from '@/lib/admin/local-db';
-import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminUser } from '@/lib/admin/admin-auth';
+import { NextRequest, NextResponse } from 'next/server';
 
-async function getUserFromToken(token: string): Promise<string | null> {
-    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
-    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'apikey': process.env.SUPABASE_ANON_KEY || ''
-        }
-    });
-    if (!cloudRes.ok) return null;
-    const userData = await cloudRes.json();
-    return userData?.id || null;
-}
 
 // GET /api/admin/announcements - Get all announcements (or active only for non-admin)
 export async function GET(req: NextRequest) {
@@ -55,11 +43,9 @@ export async function GET(req: NextRequest) {
 // POST /api/admin/announcements - Create new announcement
 export async function POST(req: NextRequest) {
     try {
-        // Auth via requireAdminUser (local JWT validation)
-    const authResult = await requireAdminUser(req);
-    if ('error' in authResult) return authResult.error;
-    const { user: adminUser, pool: adminPool } = authResult;
-    const userId = adminUser.id;
+        const authResult = await requireAdminUser(req);
+        if ('error' in authResult) return authResult.error;
+        const userId = authResult.user.id;
 
         const profiles = await query<{ is_admin: boolean; is_super_admin: boolean }>(
             'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
@@ -107,11 +93,9 @@ export async function POST(req: NextRequest) {
 // PUT /api/admin/announcements - Update announcement
 export async function PUT(req: NextRequest) {
     try {
-        // Auth via requireAdminUser (local JWT validation)
-    const authResult = await requireAdminUser(req);
-    if ('error' in authResult) return authResult.error;
-    const { user: adminUser, pool: adminPool } = authResult;
-    const userId = adminUser.id;
+        const authResult = await requireAdminUser(req);
+        if ('error' in authResult) return authResult.error;
+        const userId = authResult.user.id;
 
         const profiles = await query<{ is_admin: boolean; is_super_admin: boolean }>(
             'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
@@ -167,11 +151,9 @@ export async function PUT(req: NextRequest) {
 // DELETE /api/admin/announcements - Delete announcement
 export async function DELETE(req: NextRequest) {
     try {
-        // Auth via requireAdminUser (local JWT validation)
-    const authResult = await requireAdminUser(req);
-    if ('error' in authResult) return authResult.error;
-    const { user: adminUser, pool: adminPool } = authResult;
-    const userId = adminUser.id;
+        const authResult = await requireAdminUser(req);
+        if ('error' in authResult) return authResult.error;
+        const userId = authResult.user.id;
 
         const profiles = await query<{ is_admin: boolean; is_super_admin: boolean }>(
             'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',

@@ -1,19 +1,8 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
 import { pool } from '@/lib/admin/local-db';
+import { requireAdminUser } from '@/lib/admin/admin-auth';
 
-async function getUserFromToken(token: string): Promise<string | null> {
-    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
-    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'apikey': process.env.SUPABASE_ANON_KEY || ''
-        }
-    });
-    if (!cloudRes.ok) return null;
-    const userData = await cloudRes.json();
-    return userData?.id || null;
-}
 
 /**
  * GET /api/admin/verify
@@ -22,22 +11,9 @@ async function getUserFromToken(token: string): Promise<string | null> {
  */
 export async function GET(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json(
-        { error: 'Unauthorized', message: 'দয়া করে অ্যাডমিন অ্যাক্সেসের জন্য লগইন করুন' },
-        { status: 401 }
-      );
-    }
-    const token = authHeader.split(' ')[1];
-
-    # getUserFromToken removed
-    if (false) {
-      return NextResponse.json(
-        { error: 'Unauthorized', message: 'দয়া করে অ্যাডমিন অ্যাক্সেসের জন্য লগইন করুন' },
-        { status: 401 }
-      );
-    }
+    const authResult = await requireAdminUser(request);
+    if ('error' in authResult) return authResult.error;
+    const userId = authResult.user.id;
 
     // লোকাল ডাটাবেস থেকে অ্যাডমিন স্ট্যাটাস চেক করা
     const profileResult = await pool.query(
@@ -47,7 +23,7 @@ export async function GET(request: NextRequest) {
     const profile = profileResult.rows[0];
 
     // বুটস্ট্র্যাপ অ্যাডমিন ইমেইল চেক (একটি অতিরিক্ত নিরাপত্তা স্তর)
-    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://polymarketbd.com';
     const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
         headers: {
             'Authorization': `Bearer ${token}`,

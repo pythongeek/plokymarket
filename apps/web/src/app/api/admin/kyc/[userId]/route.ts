@@ -1,25 +1,29 @@
 // @ts-nocheck
-/**
- * KYC Admin API — per-user KYC details and actions
- * Auth: Local JWT validated via requireAdminUser (jose)
- */
-
 import { pool, query } from '@/lib/admin/local-db';
 import { requireAdminUser } from '@/lib/admin/admin-auth';
 import { NextRequest, NextResponse } from 'next/server';
 
-// GET /api/admin/kyc/[userId] — Get specific user's KYC details
+
+// GET /api/admin/kyc/[userId] - Get specific user's KYC details
 export async function GET(
     req: NextRequest,
     { params }: { params: Promise<{ userId: string }> }
 ) {
     try {
-        // ─── AUTH (local JWT) ─────────────────────────────────────────────
+        const authHeader = req.headers.get('authorization');
         const authResult = await requireAdminUser(req);
         if ('error' in authResult) return authResult.error;
-        // adminUserId is the admin performing the action (not the target userId)
+        const userId = authResult.user.id;
 
-        const { userId } = await params;
+        const profiles = await query<{ is_admin: boolean; is_super_admin: boolean }>(
+            'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
+            [adminUserId]
+        );
+        if (!profiles[0]?.is_admin && !profiles[0]?.is_super_admin) {
+            return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
+        }
+
+        const { userId: targetUserId } = await params;
 
         // Fetch profile
         const profileResult = await pool.query(
@@ -39,7 +43,7 @@ export async function GET(
             [userId]
         );
 
-        // Get gate status
+        // Get gate status - call RPC if available
         let gate = {
             needs_kyc: false,
             reason: 'error',
@@ -75,18 +79,26 @@ export async function GET(
     }
 }
 
-// POST /api/admin/kyc/[userId] — Perform KYC action (approve/reject/force/waive/override)
+// POST /api/admin/kyc/[userId] - Perform KYC action (approve/reject/force/waive/override)
 export async function POST(
     req: NextRequest,
     { params }: { params: Promise<{ userId: string }> }
 ) {
     try {
-        // ─── AUTH (local JWT) ─────────────────────────────────────────────
+        const authHeader = req.headers.get('authorization');
         const authResult = await requireAdminUser(req);
         if ('error' in authResult) return authResult.error;
-        const adminUserId = authResult.user.id;
+        const userId = authResult.user.id;
 
-        const { userId } = await params;
+        const profiles = await query<{ is_admin: boolean; is_super_admin: boolean }>(
+            'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
+            [adminUserId]
+        );
+        if (!profiles[0]?.is_admin && !profiles[0]?.is_super_admin) {
+            return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
+        }
+
+        const { userId: targetUserId } = await params;
         const body = await req.json();
         const { action, reason, rejection_reason } = body;
 

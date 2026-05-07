@@ -59,7 +59,7 @@ export function EventCard({ event, variant = 'default' }: EventCardProps) {
     [event.trading_closes_at, event.ends_at]
   );
 
-  const priceChange = event.price_24h_change || 0;
+  const priceChange = event.price_change_24h || 0;
   const status = statusConfig[event.status || event.trading_status || 'active'] || statusConfig.active;
   const StatusIcon = status.icon;
 

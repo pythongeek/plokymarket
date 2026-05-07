@@ -35,7 +35,6 @@ import {
   DollarSign,
   Wallet,
   CreditCard,
-  CreditCard,
   ArrowLeftRight,
   History,
   Menu,
@@ -252,142 +251,75 @@ export function SecureAdminLayout({
     }
   };
 
-  const navItems = [
-    {
-      path: SECURE_PATHS.dashboard,
-      label: 'ড্যাশবোর্ড',
-      labelEn: 'Dashboard',
-      icon: Shield,
-      requiresSuper: false,
-    },
-    {
-      path: SECURE_PATHS.markets,
-      label: 'মার্কেট কন্ট্রোল',
-      labelEn: 'Market Control',
-      icon: TrendingUp,
-      requiresSuper: false,
-    },
-    {
-      path: SECURE_PATHS.users,
-      label: 'ব্যবহারকারী ব্যবস্থাপনা',
-      labelEn: 'User Management',
-      icon: Users,
-      requiresSuper: false,
-    },
-    {
-      path: SECURE_PATHS.analytics,
-      label: 'বিশ্লেষণ',
-      labelEn: 'Analytics',
-      icon: BarChart3,
-      requiresSuper: true,
-    },
-    {
-      path: SECURE_PATHS.events,
-      label: 'ইভেন্ট তালিকা',
-      labelEn: 'Events',
-      icon: Calendar,
-      requiresSuper: false,
-    },
-    {
-      path: SECURE_PATHS.resolutions,
-      label: 'মার্কেট রেজোলিউশন সিস্টেম',
-      labelEn: 'Resolution System',
-      icon: Gavel,
-      requiresSuper: true,
-    },
-    {
-      path: SECURE_PATHS.dailyTopics,
-      label: 'দৈনিক টপিক্স',
-      labelEn: 'Daily Topics',
-      icon: Calendar,
-      requiresSuper: true,
-    },
-    {
-      path: SECURE_PATHS.aiConfigs,
-      label: 'AI কনফিগ',
-      labelEn: 'AI Configs',
-      icon: Settings,
-      requiresSuper: true,
-    },
-    {
-      path: SECURE_PATHS.kyc,
-      label: 'KYC যাচাইকরণ',
-      labelEn: 'KYC Verification',
-      icon: ShieldCheck,
-      requiresSuper: false,
-    },
-    {
-      path: SECURE_PATHS.p2p,
-      label: 'P2P ব্যবস্থাপনা',
-      labelEn: 'P2P Management',
-      icon: TrendingUp,
-      requiresSuper: true,
-    },
-    {
-      path: SECURE_PATHS.depositSettings,
-      label: 'ডিপোজিট সেটিংস',
-      labelEn: 'Deposit Settings',
-      icon: Settings,
-      requiresSuper: true,
-    },
-    {
-      path: SECURE_PATHS.exchangeRateConfig,
-      label: 'এক্সচেঞ্জ রেট',
-      labelEn: 'Exchange Rate',
-      icon: ArrowLeftRight,
-      requiresSuper: true,
-    },
-    {
-      path: SECURE_PATHS.deposits,
-      label: 'ডিপোজিট ম্যানেজমেন্ট',
-      labelEn: 'Deposits',
-      icon: DollarSign,
-      requiresSuper: false,
-    },
-    {
-      path: SECURE_PATHS.monitoring,
-      label: 'সিস্টেম মনিটরিং',
-      labelEn: 'System Monitoring',
-      icon: Activity,
-      requiresSuper: true,
-    },
-    {
-      path: SECURE_PATHS.workflows,
-      label: 'সিস্টেম ক্রন জবস',
-      labelEn: 'System Cron Jobs',
-      icon: Zap,
-      requiresSuper: true,
-    },
-    // Money Operator Section
-    {
-      path: SECURE_PATHS.moneyOperator,
-      label: 'Money Operator',
-      labelEn: 'Money Operator',
-      icon: Wallet,
-      requiresSuper: false,
-      isSection: true,
-    },
-    {
-      path: SECURE_PATHS.moneyOperator,
-      label: 'USDT ড্যাশবোর্ড',
-      labelEn: 'USDT Dashboard',
-      icon: DollarSign,
-      requiresSuper: false,
-    },
+  // ─── Grouped Navigation Structure ─────────────────────────────────────────────
+  type NavGroup = {
+    title: string;
+    titleBn?: string;
+    icon: React.ElementType;
+    items: {
+      path: string;
+      label: string;
+      labelBn?: string;
+      icon: React.ElementType;
+      badge?: string;
+      requiresSuper?: boolean;
+    }[];
+  };
 
+  const navGroups: NavGroup[] = [
     {
-      path: SECURE_PATHS.moneyOperatorTransactions,
-      label: 'ট্রানজেকশন লগ',
-      labelEn: 'Transactions',
-      icon: History,
-      requiresSuper: false,
+      title: 'Overview',
+      icon: BarChart3,
+      items: [
+        { path: SECURE_PATHS.dashboard, label: 'Dashboard', icon: Shield },
+      ]
     },
     {
-      path: SECURE_PATHS.moneyOperatorSettings,
-      label: 'রেট সেটিংস',
-      labelEn: 'Rate Settings',
-      icon: ArrowLeftRight,
-      requiresSuper: true,
+      title: 'Core Operations',
+      icon: Target,
+      items: [
+        { path: SECURE_PATHS.markets, label: 'Market Control', icon: TrendingUp },
+        { path: SECURE_PATHS.events, label: 'Events', icon: Calendar },
+        { path: SECURE_PATHS.users, label: 'User Management', icon: Users },
+      ]
+    },
+    {
+      title: 'Financial',
+      icon: DollarSign,
+      items: [
+        { path: SECURE_PATHS.deposits, label: 'Deposits', icon: CreditCard },
+        { path: SECURE_PATHS.withdrawals, label: 'Withdrawals', icon: Send },
+        { path: SECURE_PATHS.moneyOperator, label: 'USDT Operations', icon: Wallet },
+        { path: SECURE_PATHS.exchangeRateConfig, label: 'Exchange Rate', icon: ArrowLeftRight },
+      ]
+    },
+    {
+      title: 'Compliance',
+      icon: ShieldCheck,
+      items: [
+        { path: SECURE_PATHS.kyc, label: 'KYC Verification', icon: ShieldCheck },
+        { path: SECURE_PATHS.disputes, label: 'Disputes', icon: Gavel },
+        { path: SECURE_PATHS.levels, label: 'User Levels', icon: Star },
+      ]
+    },
+    {
+      title: 'Intelligence',
+      icon: Bot,
+      items: [
+        { path: SECURE_PATHS.aiConfigs, label: 'AI Config', icon: Settings, requiresSuper: true, badge: '2 AI' },
+        { path: SECURE_PATHS.dailyTopics, label: 'Daily Topics', icon: Sparkles, requiresSuper: true },
+        { path: SECURE_PATHS.resolutions, label: 'Resolution System', icon: Gavel, requiresSuper: true },
+      ]
+    },
+    {
+      title: 'Analytics',
+      icon: BarChart3,
+      items: [
+        { path: SECURE_PATHS.analytics, label: 'Analytics', icon: Activity, requiresSuper: true },
+        { path: SECURE_PATHS.monitoring, label: 'System Monitor', icon: Activity, requiresSuper: true },
+        { path: SECURE_PATHS.workflows, label: 'Cron Jobs', icon: Zap, requiresSuper: true },
+        { path: SECURE_PATHS.p2p, label: 'P2P Management', icon: TrendingUp, requiresSuper: true },
+      ]
     },
   ];
 
@@ -444,11 +376,10 @@ export function SecureAdminLayout({
                 <SheetTitle className="sr-only">এডমিন নেভিগেশন</SheetTitle>
                 <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
                   <NavItemsList
-                    navItems={navItems}
+                    navGroups={navGroups}
                     pathname={pathname}
                     router={router}
                     admin={admin}
-                    mounted={mounted}
                   />
                 </div>
               </SheetContent>
@@ -513,11 +444,10 @@ export function SecureAdminLayout({
         <aside className="hidden md:flex flex-col w-64 h-[calc(100vh-4rem)] border-r border-gray-200 bg-gray-50 overflow-y-auto custom-scrollbar">
           <div className="p-4 flex-1">
             <NavItemsList
-              navItems={navItems}
+              navGroups={navGroups}
               pathname={pathname}
               router={router}
               admin={admin}
-              mounted={mounted}
             />
           </div>
         </aside>
@@ -537,67 +467,103 @@ export function SecureAdminLayout({
   );
 }
 
-// Reusable Navigation List Component
-function NavItemsList({ navItems, pathname, router, admin, mounted }: any) {
+// Reusable Grouped Navigation List Component
+function NavItemsList({ navGroups, pathname, router, admin }: {
+  navGroups: NavGroup[];
+  pathname: string;
+  router: any;
+  admin: any;
+}) {
   return (
-    <>
-      <nav className="space-y-1">
-        {navItems.map((item: any, index: number) => {
-          if (item.requiresSuper && !admin.is_super_admin) return null;
+    <nav className="space-y-5">
+      {navGroups.map((group, gi) => {
+        const GroupIcon = group.icon;
+        return (
+          <div key={group.title}>
+            {/* Section Header */}
+            <div className="flex items-center gap-2 px-3 mb-2">
+              <GroupIcon className="w-3.5 h-3.5 text-primary/60" />
+              <span className="text-[10px] font-bold text-primary/70 uppercase tracking-widest">
+                {group.title}
+              </span>
+            </div>
 
-          // Section header (like Money Operator)
-          if (item.isSection) {
-            return (
-              <div key={item.path + index} className="mt-4 mb-2 px-3">
-                <div className="flex items-center gap-2">
-                  <item.icon className="w-4 h-4 text-primary" />
-                  <span className="text-xs font-bold text-primary uppercase tracking-wider">
-                    {item.label}
-                  </span>
-                </div>
-                <div className="h-px bg-gradient-to-r from-primary/50 to-transparent mt-2" />
-              </div>
-            );
-          }
+            {/* Section Items */}
+            <div className="space-y-0.5">
+              {group.items.map((item) => {
+                if (item.requiresSuper && !admin.is_super_admin) return null;
 
-          const isActive = pathname === item.path || (item.path !== SECURE_PATHS.dashboard && pathname.startsWith(item.path));
-          const Icon = item.icon;
+                const isActive = pathname === item.path ||
+                  (item.path !== '/sys-cmd-7x9k2' && pathname.startsWith(item.path));
+                const ItemIcon = item.icon;
 
-          return (
-            <button
-              key={item.path}
-              onClick={() => router.push(item.path)}
-              className={cn(
-                'w-full flex items-center justify-start text-left gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
-                isActive
-                  ? 'bg-primary/20 text-gray-900 border border-primary/30 shadow-sm shadow-primary/10'
-                  : 'text-gray-700 hover:bg-gray-200 hover:text-gray-900'
-              )}
-            >
-              <Icon className={cn("w-5 h-5 shrink-0", isActive ? "text-primary" : "text-gray-500")} />
-              <div className="flex flex-col items-start justify-center truncate overflow-hidden text-left w-full">
-                <span className="font-semibold truncate w-full text-left text-ellipsis">{item.label}</span>
-                <span className={cn("text-[10px] truncate w-full text-left", isActive ? "text-gray-700" : "text-gray-500")}>{item.labelEn}</span>
-              </div>
-            </button>
-          );
-        })}
-      </nav>
+                return (
+                  <button
+                    key={item.path}
+                    onClick={() => router.push(item.path)}
+                    className={cn(
+                      'w-full flex items-center justify-between text-left gap-2 px-3 py-2 rounded-lg text-sm transition-all duration-150',
+                      isActive
+                        ? 'bg-primary/15 text-primary font-semibold border border-primary/20'
+                        : 'text-gray-600 hover:bg-gray-200 hover:text-gray-900 font-medium'
+                    )}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <ItemIcon className={cn("w-4 h-4 shrink-0", isActive ? "text-primary" : "text-gray-400")} />
+                      <span className="truncate">{item.label}</span>
+                    </div>
+                    {item.badge && (
+                      <span className="text-[10px] bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded-full font-semibold shrink-0">
+                        {item.badge}
+                      </span>
+                    )}
+                    {isActive && (
+                      <ChevronRight className="w-3 h-3 text-primary shrink-0" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+
+      {/* AI Providers Status */}
+      <div className="mt-4 px-3">
+        <div className="flex items-center gap-2 mb-2">
+          <Bot className="w-3.5 h-3.5 text-primary/60" />
+          <span className="text-[10px] font-bold text-primary/70 uppercase tracking-widest">
+            AI Providers
+          </span>
+        </div>
+        <div className="space-y-1">
+          {[
+            { label: 'Vertex AI (Gemini)', color: 'blue', active: false },
+            { label: 'MiniMax AI', color: 'violet', active: false },
+          ].map(({ label, color }) => (
+            <div key={label} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-100">
+              <div className={cn(
+                "w-1.5 h-1.5 rounded-full",
+                color === 'blue' ? "bg-blue-500" : "bg-violet-500"
+              )} />
+              <span className="text-xs font-medium text-gray-700 truncate">{label}</span>
+              <span className="ml-auto text-[10px] text-gray-400">Check</span>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* Security Notice */}
-      <div className="mt-8 p-4 rounded-lg bg-blue-50 border border-blue-200">
+      <div className="mt-6 p-3 rounded-xl bg-blue-50 border border-blue-100">
         <div className="flex items-start gap-2">
-          <Shield className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
-          <div className="text-xs">
-            <p className="font-semibold text-gray-900 mb-1">🔒 নিরাপদ সেশন</p>
-            <p className="text-gray-700 line-clamp-2">All actions are logged and authenticated.</p>
-            <p className="mt-1 text-gray-600">
-              Session: {mounted ? new Date().toLocaleTimeString('bn-BD') : '...'}
-            </p>
+          <Shield className="w-3.5 h-3.5 text-blue-600 mt-0.5 shrink-0" />
+          <div className="text-[11px]">
+            <p className="font-semibold text-gray-900 mb-0.5">Secure Session</p>
+            <p className="text-gray-600">All admin actions are logged and audited.</p>
           </div>
         </div>
       </div>
-    </>
+    </nav>
   );
 }
 

@@ -13,20 +13,9 @@
 // @ts-nocheck
 import { NextResponse } from 'next/server';
 import { pool, query } from '@/lib/admin/local-db';
+import { requireAdminUser } from '@/lib/admin/admin-auth';
 import { createSchedule, listSchedules, deleteSchedule } from '@/lib/qstash/client';
 
-async function getUserFromToken(token: string): Promise<string | null> {
-    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
-    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'apikey': process.env.SUPABASE_ANON_KEY || ''
-        }
-    });
-    if (!cloudRes.ok) return null;
-    const userData = await cloudRes.json();
-    return userData?.id || null;
-}
 
 // Available workflow configurations
 const WORKFLOW_CONFIGS = {
@@ -66,18 +55,8 @@ export const runtime = 'nodejs';
 
 // Verify admin authentication
 async function verifyAdmin(request: Request): Promise<{ isAdmin: boolean; error?: string }> {
-  const authHeader = request.headers.get('authorization');
+  const authResult = await requireAdminUser(request);
 
-  if (!authHeader?.startsWith('Bearer ')) {
-    return { isAdmin: false, error: 'Missing authorization header' };
-  }
-
-  const token = authHeader.split(' ')[1];
-
-  # getUserFromToken removed
-    if (false) {
-    return { isAdmin: false, error: 'Invalid token' };
-  }
 
   // Check if user is admin (canonical user_profiles table)
   const profileResult = await pool.query(

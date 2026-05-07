@@ -18,7 +18,7 @@ async function verifyAdmin(request: Request): Promise<{ isAdmin: boolean; userId
     const token = authHeader.split(' ')[1];
 
     // Validate token against cloud Supabase
-    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://polymarketbd.com';
     const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
         headers: {
             'Authorization': `Bearer ${token}`,

@@ -658,7 +658,7 @@ function recalculateFiltered(state: MarketState) {
       case 'newest':
         return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
       case 'movement':
-        return Math.abs(b.price_24h_change || 0) - Math.abs(a.price_24h_change || 0);
+        return Math.abs(b.price_change_24h || 0) - Math.abs(a.price_change_24h || 0);
       case 'trending':
         if (a.is_trending && !b.is_trending) return -1;
         if (!a.is_trending && b.is_trending) return 1;

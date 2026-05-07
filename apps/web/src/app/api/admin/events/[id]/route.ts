@@ -3,17 +3,14 @@ import { pool, query } from '@/lib/admin/local-db';
 import { requireAdminUser } from '@/lib/admin/admin-auth';
 import { NextResponse } from 'next/server';
 
+
 export async function GET(
     request: Request,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    try {
-        // Admin auth
-        const authResult = await requireAdminUser(request as unknown as import('next/server').NextRequest);
-        if ('error' in authResult) return authResult.error;
-        const userId = authResult.user.id;
-        void userId;
+    const { id } = await params;
 
+    try {
         // Try events table first (events created via the event creation flow)
         const eventResult = await pool.query(
             'SELECT * FROM events WHERE id = $1',
@@ -72,10 +69,9 @@ export async function PATCH(
 ) {
     const { id } = await params;
 
-    // Admin auth
-    const authResult = await requireAdminUser(request as unknown as import('next/server').NextRequest);
-    if ('error' in authResult) return authResult.error;
-    const userId = authResult.user.id;
+    const authResult = await requireAdminUser(request);
+        if ('error' in authResult) return authResult.error;
+        const userId = authResult.user.id;
 
     try {
         const body = await request.json();
@@ -92,20 +88,18 @@ export async function PATCH(
             delete updates.is_active;
         }
 
-        // events is a VIEW over event_definitions+markets
-        // For event updates, use event_definitions (the base table)
+        // Try events table first
         const eventExistsResult = await pool.query(
-            'SELECT id FROM event_definitions WHERE id = $1',
+            'SELECT id FROM events WHERE id = $1',
             [id]
         );
 
         if (eventExistsResult.rows.length > 0) {
-            // Update event_definitions (base table), not events (VIEW)
             const setClause = Object.keys(updates).map((k, i) => `${k} = $${i + 1}`).join(', ');
             const values = [...Object.values(updates), id];
-
+            
             const result = await pool.query(
-                `UPDATE event_definitions SET ${setClause} WHERE id = $${values.length} RETURNING *`,
+                `UPDATE events SET ${setClause} WHERE id = $${values.length} RETURNING *`,
                 values
             );
 
@@ -143,24 +137,21 @@ export async function DELETE(
 ) {
     const { id } = await params;
 
-    // Admin auth
-    const authResult = await requireAdminUser(request as unknown as import('next/server').NextRequest);
-    if ('error' in authResult) return authResult.error;
-    const userId = authResult.user.id;
+    const authResult = await requireAdminUser(request);
+        if ('error' in authResult) return authResult.error;
+        const userId = authResult.user.id;
 
     try {
-        // events is a VIEW over event_definitions+markets
-        // Check event_definitions first
+        // Try events table first
         const eventExistsResult = await pool.query(
-            'SELECT id FROM event_definitions WHERE id = $1',
+            'SELECT id FROM events WHERE id = $1',
             [id]
         );
 
         if (eventExistsResult.rows.length > 0) {
-            // Delete associated markets first (ON DELETE CASCADE should handle this, but be explicit)
+            // Delete associated markets first
             await pool.query('DELETE FROM markets WHERE event_id = $1', [id]);
-            // Delete from event_definitions (base table), not events (VIEW)
-            const result = await pool.query('DELETE FROM event_definitions WHERE id = $1', [id]);
+            const result = await pool.query('DELETE FROM events WHERE id = $1', [id]);
             if (result.error) return NextResponse.json({ error: result.error.message }, { status: 500 });
             return NextResponse.json({ success: true });
         }

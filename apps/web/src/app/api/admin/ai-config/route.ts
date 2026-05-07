@@ -1,26 +1,16 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
 import { pool, query } from '@/lib/admin/local-db';
+import { requireAdminUser } from '@/lib/admin/admin-auth';
 
 /**
  * Auth helper: validate token against cloud Supabase, return user ID.
  */
-async function getUserFromToken(token: string): Promise<string | null> {
-    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
-    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'apikey': process.env.SUPABASE_ANON_KEY || ''
-        }
-    });
-    if (!cloudRes.ok) return null;
-    const userData = await cloudRes.json();
-    return userData?.id || null;
-}
 
 async function checkAdmin(token: string): Promise<{ isSuperAdmin: boolean; userId: string } | null> {
-    # getUserFromToken removed
-    if (false) return null;
+    const authResult = await requireAdminUser(req);
+    if ('error' in authResult) return null;
+    const userId = authResult.user.id;
     const profiles = await query<{ is_super_admin: boolean }>(
         'SELECT is_super_admin FROM user_profiles WHERE id = $1',
         [userId]
@@ -31,15 +21,9 @@ async function checkAdmin(token: string): Promise<{ isSuperAdmin: boolean; userI
 
 export async function GET(req: NextRequest) {
     try {
-        const authHeader = req.headers.get('authorization');
-        if (!authHeader?.startsWith('Bearer ')) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
-        const admin = await checkAdmin(authHeader.split(' ')[1]);
-        if (!admin) {
-            return NextResponse.json({ error: 'Forbidden - Super Admin required' }, { status: 403 });
-        }
+        const authResult = await requireAdminUser(req);
+        if ('error' in authResult) return authResult.error;
+        const userId = authResult.user.id;
 
         // Fetch AI providers
         const providers = await query(
@@ -73,15 +57,9 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
     try {
-        const authHeader = req.headers.get('authorization');
-        if (!authHeader?.startsWith('Bearer ')) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
-        const admin = await checkAdmin(authHeader.split(' ')[1]);
-        if (!admin) {
-            return NextResponse.json({ error: 'Forbidden - Super Admin required' }, { status: 403 });
-        }
+        const authResult = await requireAdminUser(req);
+        if ('error' in authResult) return authResult.error;
+        const userId = authResult.user.id;
 
         const body = await req.json();
         const { type, data } = body;

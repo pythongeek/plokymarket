@@ -26,7 +26,7 @@ interface RealtimePayload {
         total_volume?: number;
         current_yes_price?: number;
         current_no_price?: number;
-        price_24h_change?: number;
+        price_change_24h?: number;
     };
 }
 
@@ -68,7 +68,7 @@ export default function LiveMarketsTicker({ initialMarkets = [] }: LiveMarketsTi
                                 volume: updatedEvent.total_volume ?? m.volume,
                                 yes_price: updatedEvent.current_yes_price ?? m.yes_price,
                                 no_price: updatedEvent.current_no_price ?? m.no_price,
-                                change_24h: updatedEvent.price_24h_change ?? m.change_24h
+                                change_24h: updatedEvent.price_change_24h ?? m.change_24h
                             }
                             : m
                     ));

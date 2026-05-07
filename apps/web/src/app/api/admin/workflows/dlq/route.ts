@@ -6,30 +6,18 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { pool } from '@/lib/admin/local-db';
+import { requireAdminUser } from '@/lib/admin/admin-auth';
 
-async function getUserFromToken(token: string): Promise<string | null> {
-    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
-    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'apikey': process.env.SUPABASE_ANON_KEY || ''
-        }
-    });
-    if (!cloudRes.ok) return null;
-    const userData = await cloudRes.json();
-    return userData?.id || null;
-}
 
 export const runtime = 'nodejs';
 
 // Verify admin access
 async function verifyAdmin(request: NextRequest): Promise<{ isAdmin: boolean; userId?: string }> {
   const authHeader = request.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) return { isAdmin: false };
-
-  const token = authHeader.split(' ')[1];
-  # getUserFromToken removed
-    if (false) return { isAdmin: false };
+  const authResult = await requireAdminUser(request);
+  if ('error' in authResult) return authResult.error;
+  const userId = authResult.user.id;
+  return { isAdmin: true, userId };
 
   const profileResult = await pool.query(
     'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',

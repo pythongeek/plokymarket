@@ -1,20 +1,14 @@
--- Migration: 9998_fix_create_event_complete.sql
--- KEY FIX: events is a VIEW over event_definitions+markets.
--- Original function tried INSERT INTO events (VIEW) → "cannot insert into view"
--- Fixed: INSERT into event_definitions (base table) + markets, then cross-link.
+-- Migration: 9998_fix_create_event_complete.sql (REWRITTEN)
+-- The original version referenced event_definitions (which does NOT exist).
+-- The actual schema has:
+--   events(id, title, slug, question, ..., market_id)   ← primary event table
+--   markets(id, question, ..., event_id)                ← FK to events.id
 --
--- Verified column types on polymarket-prod (127.0.0.1:5433):
---   event_definitions: id=uuid, title=varchar, answer_type=answer_type(custom enum),
---                      description=text, slug=text, category=text, tags=jsonb,
---                      creator_id=uuid, event_id=uuid (nullable)
---   markets:           id=uuid, question=text, creator_id=uuid, event_id=uuid,
---                      trading_closes_at=timestamptz, status=market_status,
---                      initial_liquidity=numeric
---
--- Also fixes:
---   - JSONB tags/ai_keywords/ai_sources (not TEXT[])
---   - Removed non-existent slug_generate() call
---   - Added market_id to return object
+-- This function:
+--   1. Inserts into events
+--   2. Inserts into markets with event_id → events.id
+--   3. Updates events.market_id → markets.id (back-link)
+--   4. Returns { success, event_id, market_id, slug, message }
 
 CREATE OR REPLACE FUNCTION create_event_complete(
     p_event_data JSONB,
@@ -24,32 +18,40 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
-    v_event_def_id  UUID;
-    v_market_id      UUID;
-    v_slug           TEXT;
-    v_title          TEXT;
-    v_question       TEXT;
-    v_category       TEXT;
-    v_trading_closes_at TIMESTAMPTZ;
-    v_resolution_method TEXT;
-    v_initial_liquidity NUMERIC;
-    v_status         TEXT;
-    v_description    TEXT;
-    v_image_url      TEXT;
-    v_answer_type    TEXT;
-    v_existing_id    UUID;
-    v_result         JSONB;
+    v_event_id           UUID;
+    v_market_id          UUID;
+    v_slug               TEXT;
+    v_title              TEXT;
+    v_question           TEXT;
+    v_category           TEXT;
+    v_trading_closes_at  TIMESTAMPTZ;
+    v_resolution_method   TEXT;
+    v_initial_liquidity  NUMERIC;
+    v_status             TEXT;
+    v_description        TEXT;
+    v_image_url          TEXT;
+    v_is_featured        BOOLEAN;
+    v_tags               JSONB;
+    v_ai_keywords        TEXT[];
+    v_ai_sources         TEXT[];
+    v_answer_type        TEXT;
+    v_existing_id        UUID;
+    v_result             JSONB;
 BEGIN
     -- Extract scalar fields from p_event_data JSONB
-    v_title          := COALESCE((p_event_data->>'title')::TEXT,         'Untitled Event');
-    v_question       := COALESCE((p_event_data->>'question')::TEXT,      v_title);
-    v_description    := COALESCE((p_event_data->>'description')::TEXT,  '');
-    v_category       := COALESCE((p_event_data->>'category')::TEXT,     'Other');
-    v_image_url      := COALESCE((p_event_data->>'image_url')::TEXT,   '');
-    v_status         := COALESCE((p_event_data->>'status')::TEXT,      'active');
-    v_initial_liquidity := COALESCE((p_event_data->>'initial_liquidity')::NUMERIC, 1000);
-    v_resolution_method := COALESCE((p_event_data->>'resolution_method')::TEXT, 'manual_admin');
-    v_answer_type    := COALESCE((p_event_data->>'answer_type')::TEXT,  'binary');
+    v_title              := COALESCE((p_event_data->>'title')::TEXT,           'Untitled Event');
+    v_question           := COALESCE((p_event_data->>'question')::TEXT,        v_title);
+    v_description        := COALESCE((p_event_data->>'description')::TEXT,     '');
+    v_category           := COALESCE((p_event_data->>'category')::TEXT,       'other');
+    v_image_url          := COALESCE((p_event_data->>'image_url')::TEXT,      '');
+    v_status             := COALESCE((p_event_data->>'status')::TEXT,        'active');
+    v_initial_liquidity  := COALESCE((p_event_data->>'initial_liquidity')::NUMERIC, 1000);
+    v_resolution_method  := COALESCE((p_event_data->>'resolution_method')::TEXT, 'manual_admin');
+    v_answer_type        := COALESCE((p_event_data->>'answer_type')::TEXT,    'binary');
+    v_is_featured        := COALESCE((p_event_data->>'is_featured')::BOOLEAN, FALSE);
+    v_tags               := COALESCE(p_event_data->'tags', '[]'::jsonb);
+    v_ai_keywords        := COALESCE(p_event_data->'ai_keywords', '[]'::jsonb)->0;
+    v_ai_sources         := COALESCE(p_event_data->'ai_sources',  '[]'::jsonb)->0;
 
     -- trading_closes_at: parse safely
     BEGIN
@@ -72,50 +74,94 @@ BEGIN
             '\s+', '-', 'g')));
     END IF;
 
-    -- Ensure slug uniqueness
-    SELECT id INTO v_existing_id FROM event_definitions WHERE slug = v_slug;
+    -- Ensure slug uniqueness (check both events and markets tables)
+    SELECT id INTO v_existing_id FROM events WHERE slug = v_slug;
     IF v_existing_id IS NOT NULL THEN
         v_slug := v_slug || '-' || substring(replace(gen_random_uuid()::TEXT, '-', ''), 1, 6);
     END IF;
 
-    -- STEP 1: Insert into event_definitions (the real base table)
-    INSERT INTO event_definitions (
-        id, title, answer_type, description, slug, category, tags,
-        image_url, status, creator_id, event_id,
-        starts_at, ends_at, resolves_at,
-        created_at, updated_at
+    -- STEP 1: Insert into events
+    INSERT INTO events (
+        id,
+        title,
+        slug,
+        question,
+        description,
+        category,
+        tags,
+        image_url,
+        status,
+        is_featured,
+        trading_closes_at,
+        resolution_method,
+        initial_liquidity,
+        current_liquidity,
+        total_volume,
+        created_by,
+        created_at,
+        updated_at,
+        ai_keywords,
+        ai_sources,
+        market_id,
+        name,
+        name_en,
+        resolution_outcome
     ) VALUES (
         gen_random_uuid(),
         v_title,
-        v_answer_type::answer_type,
-        v_description,
         v_slug,
+        v_question,
+        v_description,
         v_category,
-        COALESCE(p_event_data->'tags', '[]'::jsonb),
+        v_tags,
         v_image_url,
         v_status::market_status,
+        v_is_featured,
+        v_trading_closes_at,
+        v_resolution_method,
+        v_initial_liquidity,
+        v_initial_liquidity,
+        0,
         p_creator_id,
-        NULL,  -- event_id filled after market creation
         NOW(),
-        v_trading_closes_at,
-        v_trading_closes_at,
         NOW(),
-        NOW()
+        COALESCE(v_ai_keywords, '{}'::TEXT[]),
+        COALESCE(v_ai_sources,  '{}'::TEXT[]),
+        NULL,  -- market_id filled after market creation
+        v_title,  -- name = title for compatibility
+        v_title,
+        NULL
     )
-    RETURNING id INTO v_event_def_id;
+    RETURNING id INTO v_event_id;
 
-    -- STEP 2: Insert into markets (the market for this event)
+    -- STEP 2: Insert into markets (the trading market for this event)
     INSERT INTO markets (
-        id, question, description, category, image_url,
-        creator_id, status,
-        trading_closes_at, event_date,
-        resolved_at, winning_outcome,
-        resolution_source, resolution_details,
-        min_price, max_price, tick_size,
-        fee_percent, initial_liquidity, maker_rebate_percent,
+        id,
+        question,
+        description,
+        category,
+        image_url,
+        creator_id,
+        status,
+        trading_closes_at,
         event_id,
+        initial_liquidity,
+        liquidity,
         total_volume,
-        created_at, updated_at
+        slug,
+        answer_type,
+        is_featured,
+        name,
+        resolution_method,
+        min_price,
+        max_price,
+        tick_size,
+        fee_percent,
+        maker_rebate_percent,
+        created_at,
+        updated_at,
+        tags,
+        created_by
     ) VALUES (
         gen_random_uuid(),
         v_question,
@@ -125,31 +171,36 @@ BEGIN
         p_creator_id,
         v_status::market_status,
         v_trading_closes_at,
-        NULL,
-        NULL,
-        NULL,
+        v_event_id,   -- link market → event
+        v_initial_liquidity,
+        v_initial_liquidity,
+        0,
+        v_slug,
+        v_answer_type,
+        v_is_featured,
+        v_title,
         v_resolution_method,
-        '{}'::jsonb,
         0.001,
         0.999,
         0.01,
         0.02,
-        v_initial_liquidity,
         0.01,
-        v_event_def_id,   -- link market → event_definition
-        0,
         NOW(),
-        NOW()
+        NOW(),
+        COALESCE((
+            SELECT array_agg(jsonb_array_elements_text) FROM jsonb_array_elements_text(v_tags)
+        ), '{}'::TEXT[]),
+        p_creator_id
     )
     RETURNING id INTO v_market_id;
 
-    -- STEP 3: Back-fill cross-links
-    UPDATE event_definitions SET event_id = v_market_id WHERE id = v_event_def_id;
+    -- STEP 3: Back-fill events.market_id (link event → primary market)
+    UPDATE events SET market_id = v_market_id WHERE id = v_event_id;
 
     -- STEP 4: Return success
     v_result := jsonb_build_object(
         'success',   TRUE,
-        'event_id',  v_event_def_id,
+        'event_id',  v_event_id,
         'market_id', v_market_id,
         'slug',      v_slug,
         'message',   'Event and market created successfully'
@@ -158,14 +209,15 @@ BEGIN
 
 EXCEPTION WHEN OTHERS THEN
     RETURN jsonb_build_object(
-        'success',  FALSE,
-        'event_id', NULL,
+        'success',   FALSE,
+        'event_id',  NULL,
         'market_id', NULL,
-        'slug',     NULL,
-        'message',  SQLERRM
+        'slug',      NULL,
+        'message',   SQLERRM
     );
 END;
 $$;
 
 GRANT EXECUTE ON FUNCTION create_event_complete(JSONB, UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION create_event_complete(JSONB, UUID) TO anon;
+GRANT EXECUTE ON FUNCTION create_event_complete(JSONB, UUID) TO service_role;
