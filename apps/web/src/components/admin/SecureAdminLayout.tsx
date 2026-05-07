@@ -48,6 +48,8 @@ import {
   Target,
   Send,
   Bot,
+  BarChart,
+  ChevronRight,
 } from 'lucide-react';
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
