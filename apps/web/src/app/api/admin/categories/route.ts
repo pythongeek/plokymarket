@@ -1,78 +1,66 @@
-/**
- * API Route: /api/admin/categories
- * Get and update category settings (sorting, visibility)
- */
-// @ts-nocheck
-import { pool, query } from '@/lib/admin/local-db';
+import { pool } from '@/lib/admin/local-db';
 import { requireAdminUser } from '@/lib/admin/admin-auth';
 import { NextRequest, NextResponse } from 'next/server';
 
-
-// GET /api/admin/categories - Get all category settings
 export async function GET() {
-    try {
-        const result = await pool.query(
-            'SELECT * FROM category_settings ORDER BY display_order ASC'
-        );
-
-        return NextResponse.json(result.rows || []);
-    } catch (error) {
-        console.error('[Categories GET]', error);
-        return NextResponse.json({ error: 'Failed to fetch categories' }, { status: 500 });
-    }
+  try {
+    const result = await pool.query(
+      `SELECT c.*, (SELECT COUNT(*) FROM markets WHERE market_category = c.slug OR category = c.slug) as market_count
+       FROM custom_categories c ORDER BY sort_order ASC, name ASC`
+    );
+    return NextResponse.json(result.rows || []);
+  } catch (error) {
+    console.error('[Categories GET]', error);
+    return NextResponse.json({ error: 'Failed to fetch categories' }, { status: 500 });
+  }
 }
 
-// PUT /api/admin/categories - Update category settings (bulk)
+export async function POST(req: NextRequest) {
+  const authResult = await requireAdminUser(req);
+  if ('error' in authResult) return authResult.error;
+
+  try {
+    const body = await req.json();
+    const { name, slug, description, icon, color, sort_order } = body;
+    if (!name || !slug) return NextResponse.json({ error: 'name and slug required' }, { status: 400 });
+
+    const result = await pool.query(
+      `INSERT INTO custom_categories (name, slug, description, icon, color, sort_order, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, true) RETURNING *`,
+      [name, slug, description || '', icon || '', color || '#3b82f6', sort_order || 0]
+    );
+    return NextResponse.json(result.rows[0]);
+  } catch (error: any) {
+    console.error('[Categories POST]', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
 export async function PUT(req: NextRequest) {
-    try {
-        const authResult = await requireAdminUser(req);
-        if ('error' in authResult) return authResult.error;
-        const userId = authResult.user.id;
+  const authResult = await requireAdminUser(req);
+  if ('error' in authResult) return authResult.error;
 
-        const profiles = await query<{ is_admin: boolean; is_super_admin: boolean }>(
-            'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
-            [userId]
-        );
-        if (!profiles[0]?.is_admin && !profiles[0]?.is_super_admin) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-        }
+  try {
+    const body = await req.json();
+    const { id, is_active, name, slug } = body;
+    if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
 
-        const body = await req.json();
-        const { categories } = body;
+    const updates: string[] = [];
+    const values: any[] = [];
+    let i = 1;
 
-        if (!categories || !Array.isArray(categories)) {
-            return NextResponse.json({ error: 'Categories array is required' }, { status: 400 });
-        }
+    if (is_active !== undefined) { updates.push(`is_active = $${i++}`); values.push(is_active); }
+    if (name !== undefined) { updates.push(`name = $${i++}`); values.push(name); }
+    if (slug !== undefined) { updates.push(`slug = $${i++}`); values.push(slug); }
 
-        // Update each category
-        for (const cat of categories) {
-            const updates: string[] = [];
-            const values: any[] = [];
-            let paramIndex = 1;
+    if (updates.length === 0) return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
 
-            if (cat.display_name !== undefined) { updates.push(`display_name = $${paramIndex++}`); values.push(cat.display_name); }
-            if (cat.display_order !== undefined) { updates.push(`display_order = $${paramIndex++}`); values.push(cat.display_order); }
-            if (cat.is_visible !== undefined) { updates.push(`is_visible = $${paramIndex++}`); values.push(cat.is_visible); }
-            if (cat.is_featured !== undefined) { updates.push(`is_featured = $${paramIndex++}`); values.push(cat.is_featured); }
-            if (cat.icon_emoji !== undefined) { updates.push(`icon_emoji = $${paramIndex++}`); values.push(cat.icon_emoji); }
-
-            if (updates.length > 0) {
-                values.push(cat.category_key);
-                await pool.query(
-                    `UPDATE category_settings SET ${updates.join(', ')} WHERE category_key = $${paramIndex}`,
-                    values
-                );
-            }
-        }
-
-        // Fetch updated categories
-        const result = await pool.query(
-            'SELECT * FROM category_settings ORDER BY display_order ASC'
-        );
-
-        return NextResponse.json(result.rows);
-    } catch (error) {
-        console.error('[Categories PUT]', error);
-        return NextResponse.json({ error: 'Failed to update categories' }, { status: 500 });
-    }
+    values.push(id);
+    await pool.query(`UPDATE custom_categories SET ${updates.join(', ')} WHERE id = $${i}`, values);
+    const result = await pool.query('SELECT * FROM custom_categories WHERE id = $1', [id]);
+    return NextResponse.json(result.rows[0]);
+  } catch (error: any) {
+    console.error('[Categories PUT]', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 }

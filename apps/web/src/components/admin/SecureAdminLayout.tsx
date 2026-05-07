@@ -39,6 +39,12 @@ import {
   History,
   Menu,
   Zap,
+  FolderOpen,
+  FileText,
+  BookOpen,
+  MessageSquare,
+  Star,
+  Sparkles,
 } from 'lucide-react';
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
@@ -64,6 +70,12 @@ const SECURE_PATHS = {
   moneyOperator: '/sys-cmd-7x9k2/usdt',
   moneyOperatorTransactions: '/sys-cmd-7x9k2/usdt/transactions',
   moneyOperatorSettings: '/sys-cmd-7x9k2/usdt/settings',
+  // New v2 features
+  auditLog: '/sys-cmd-7x9k2/audit-log',
+  comments: '/sys-cmd-7x9k2/comments',
+  orderbook: '/sys-cmd-7x9k2/orderbook',
+  categories: '/sys-cmd-7x9k2/categories',
+  templates: '/sys-cmd-7x9k2/templates',
 };
 
 interface AdminUser {
@@ -281,6 +293,9 @@ export function SecureAdminLayout({
         { path: SECURE_PATHS.markets, label: 'Market Control', icon: TrendingUp },
         { path: SECURE_PATHS.events, label: 'Events', icon: Calendar },
         { path: SECURE_PATHS.users, label: 'User Management', icon: Users },
+        { path: SECURE_PATHS.categories, label: 'Categories', icon: FolderOpen },
+        { path: SECURE_PATHS.templates, label: 'Templates', icon: FileText },
+        { path: SECURE_PATHS.orderbook, label: 'Order Book', icon: BookOpen },
       ]
     },
     {
@@ -300,6 +315,8 @@ export function SecureAdminLayout({
         { path: SECURE_PATHS.kyc, label: 'KYC Verification', icon: ShieldCheck },
         { path: SECURE_PATHS.disputes, label: 'Disputes', icon: Gavel },
         { path: SECURE_PATHS.levels, label: 'User Levels', icon: Star },
+        { path: SECURE_PATHS.comments, label: 'Comments', icon: MessageSquare },
+        { path: SECURE_PATHS.auditLog, label: 'Audit Log', icon: Shield },
       ]
     },
     {
