@@ -42,6 +42,9 @@ import { MultiOutcomeList } from '@/components/market/MultiOutcomeList';
 import { RelatedMarkets } from '@/components/market/RelatedMarkets';
 import { MarketOutcome } from '@/types';
 import { MobileTradingBar } from '@/components/trading/MobileTradingBar';
+import { ProbabilityGauge } from '@/components/market/ProbabilityGauge';
+import { SimpleBetCalculator } from '@/components/market/SimpleBetCalculator';
+import { EnhancedOrderBook } from '@/components/trading/EnhancedOrderBook';
 
 interface MarketPageClientProps {
     initialMarket?: Market | null;
@@ -235,6 +238,12 @@ export function MarketPageClient({ initialMarket }: MarketPageClientProps) {
                 market={market}
             />
 
+            <ProbabilityGauge
+                yesPrice={market.yes_price || 0.5}
+                noPrice={market.no_price || 0.5}
+                uniqueTraders={market.unique_traders || 0}
+            />
+
             <Separator />
 
             {/* Resolved State */}
@@ -276,8 +285,8 @@ export function MarketPageClient({ initialMarket }: MarketPageClientProps) {
                     {/* Price Chart */}
                     <PriceChart marketId={market.id} />
 
-                    {/* Order Book */}
-                    <OrderBook marketId={market.id} />
+                    {/* Enhanced Order Book with visual depth */}
+                    <EnhancedOrderBook marketId={market.id} />
 
                     {/* Advanced Visualizations */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -485,6 +494,11 @@ export function MarketPageClient({ initialMarket }: MarketPageClientProps) {
                                 isPaused={isPlatformPaused || (market ? (categoryPauseStatus.get(market.category)?.paused || market.trading_status === 'paused') : false)}
                             />
                         )}
+                        <SimpleBetCalculator
+                            yesPrice={market.yes_price || 0.5}
+                            noPrice={market.no_price || 0.5}
+                            marketQuestion={market.question}
+                        />
                     </div>
                 </div>
             </div>

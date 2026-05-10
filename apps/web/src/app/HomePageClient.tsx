@@ -116,10 +116,13 @@ function MarketCard({ market }: { market: MarketCardData }) {
 
   return (
     <div
-      className="group relative flex flex-col gap-2.5 rounded-2xl border border-gray-200 bg-white p-3.5 shadow-sm transition-shadow duration-200 hover:shadow-lg"
+      className="group relative flex flex-col gap-2.5 rounded-2xl border border-gray-200 bg-white p-3.5 shadow-sm transition-shadow duration-200 hover:shadow-lg cursor-pointer"
+      onClick={(e) => {
+        // Only navigate if click wasn't on a button
+        if ((e.target as HTMLElement).closest('button')) return;
+        window.location.href = `/markets/${market.slug}`;
+      }}
     >
-      <Link href={`/markets/${market.slug}`} className="absolute inset-0 z-0" />
-
       {/* Header */}
       <div className="relative z-10 flex items-start gap-2">
         <span className="text-xl shrink-0">{market.icon}</span>

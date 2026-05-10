@@ -19,8 +19,12 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     const byId = await client.from('markets').select('*').eq('id', id).maybeSingle().then((r: any) => r.data);
     if (byId) market = byId;
     else {
-      const byEvent = await client.from('markets').select('*').eq('event_id', id).maybeSingle().then((r: any) => r.data);
-      if (byEvent) market = byEvent;
+      const bySlug = await client.from('markets').select('*').eq('slug', id).maybeSingle().then((r: any) => r.data);
+      if (bySlug) market = bySlug;
+      else {
+        const byEvent = await client.from('markets').select('*').eq('event_id', id).maybeSingle().then((r: any) => r.data);
+        if (byEvent) market = byEvent;
+      }
     }
   } catch (e) {
     // silent fail, return fallback metadata
@@ -69,8 +73,12 @@ export default async function MarketDetailPage({ params }: { params: Promise<{ i
     const byId = await client.from('markets').select('*').eq('id', id).maybeSingle().then((r: any) => r.data);
     if (byId) market = byId;
     else {
-      const byEvent = await client.from('markets').select('*').eq('event_id', id).maybeSingle().then((r: any) => r.data);
-      if (byEvent) market = byEvent;
+      const bySlug = await client.from('markets').select('*').eq('slug', id).maybeSingle().then((r: any) => r.data);
+      if (bySlug) market = bySlug;
+      else {
+        const byEvent = await client.from('markets').select('*').eq('event_id', id).maybeSingle().then((r: any) => r.data);
+        if (byEvent) market = byEvent;
+      }
     }
   } catch (e) {
     // silent fail, client will fetch

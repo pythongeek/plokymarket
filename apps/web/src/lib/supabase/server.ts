@@ -11,7 +11,11 @@ export class PostgrestClient {
   private headers: Record<string, string>;
 
   constructor() {
-    this.baseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://polymarketbd.com').replace(/\/$/, '');
+    // On server: talk directly to PostgREST container to avoid nginx/SSL hops
+    const isServer = typeof window === 'undefined';
+    const directUrl = 'http://127.0.0.1:4000';
+    const publicUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://polymarketbd.com').replace(/\/$/, '');
+    this.baseUrl = isServer ? directUrl : publicUrl;
     const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
     this.headers = {
       'apikey': anonKey,
@@ -31,6 +35,7 @@ class PostgrestQueryBuilder {
   private table: string;
   private headers: Record<string, string>;
   private queryParams: string[] = [];
+  private isMaybeSingle = false;
 
   constructor(baseUrl: string, table: string, headers: Record<string, string>) {
     this.baseUrl = baseUrl;
@@ -114,21 +119,41 @@ class PostgrestQueryBuilder {
     return this;
   }
 
+  maybeSingle() {
+    this.isMaybeSingle = true;
+    return this;
+  }
+
+  single() {
+    this.queryParams.push('limit=1');
+    return this;
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async then<TResult1 = any[], TResult2 = any>(
     onfulfilled?: ((value: { data: TResult1; error: null }) => TResult1 | Promise<TResult1>) | null,
     onrejected?: ((reason: any) => TResult2 | Promise<TResult2>) | null
   ): Promise<TResult1 | TResult2> {
-    const url = `${this.baseUrl}/rest/v1/${this.table}?${this.queryParams.join('&')}`;
+    const isDirectPostgrest = this.baseUrl.includes(':4000');
+    const pathPrefix = isDirectPostgrest ? '' : '/rest/v1';
+    const url = `${this.baseUrl}${pathPrefix}/${this.table}?${this.queryParams.join('&')}`;
     try {
-      const res = await fetch(url, { headers: this.headers });
+      const res = await fetch(url, { headers: this.headers, cache: 'no-store' });
+      console.log('[PostgREST]', url, '-> status:', res.status);
       if (!res.ok) {
         const err = await res.json().catch(() => ({ message: res.statusText }));
         throw { code: 'PGRST' + res.status, message: err.message || res.statusText };
       }
-      const data = await res.json() as TResult1;
+      let data = await res.json() as TResult1;
+      if (this.isMaybeSingle && Array.isArray(data)) {
+        data = (data.length > 0 ? data[0] : null) as TResult1;
+      }
       return (onfulfilled ? onfulfilled({ data, error: null }) : data) as any;
     } catch (err) {
+      // Return error through onfulfilled so .then(e => e.data) gives null
+      if (onfulfilled) {
+        return onfulfilled({ data: null as any, error: err as any }) as any;
+      }
       if (onrejected) return onrejected(err);
       throw err;
     }

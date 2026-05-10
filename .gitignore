@@ -48,3 +48,5 @@ __pycache__/
 venv/
 .env
 apps/web/standalone/
+apps/web/standalone/cache/webpack/
+apps/web/standalone/cache/webpack/

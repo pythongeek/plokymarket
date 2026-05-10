@@ -5,20 +5,21 @@
 
 const MINIMAX_API_BASE = 'https://api.minimax.io/v1';
 
-interface MiniMaxMessage {
+export interface MiniMaxMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
 }
 
-interface MiniMaxGenerateOptions {
+export interface MiniMaxGenerateOptions {
   model?: string;
   temperature?: number;
   maxTokens?: number;
   topP?: number;
   stop?: string[];
+  systemPrompt?: string;
 }
 
-interface MiniMaxResponse {
+export interface MiniMaxResponse {
   id: string;
   model: string;
   content: string;
@@ -32,33 +33,38 @@ interface MiniMaxResponse {
 
 function getMiniMaxClient() {
   const apiKey = process.env.MINIMAX_API_KEY;
-  const groupId = process.env.MINIMAX_GROUP_ID;
-
   if (!apiKey) {
     throw new Error('MINIMAX_API_KEY is not set in environment variables');
   }
-
-  return { apiKey, groupId };
+  return { apiKey };
 }
 
 /**
- * Generate text using MiniMax API
+ * Generate text using MiniMax API (OpenAI-compatible endpoint)
+ * Default model: MiniMax-M2.7 (verified on this token plan)
  */
 export async function generateWithMiniMax(
   prompt: string,
   options: MiniMaxGenerateOptions = {}
 ): Promise<MiniMaxResponse> {
   const start = Date.now();
-  const { apiKey, groupId } = getMiniMaxClient();
+  const { apiKey } = getMiniMaxClient();
 
   const {
-    model = 'abab6.5s-chat',
+    model = 'MiniMax-M2.7',
     temperature = 0.7,
     maxTokens = 2048,
     topP = 0.95,
+    systemPrompt,
   } = options;
 
-  const response = await fetch(`${MINIMAX_API_BASE}/text/chatcompletion_v2`, {
+  const messages: MiniMaxMessage[] = [];
+  if (systemPrompt) {
+    messages.push({ role: 'system', content: systemPrompt });
+  }
+  messages.push({ role: 'user', content: prompt });
+
+  const response = await fetch(`${MINIMAX_API_BASE}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -70,9 +76,7 @@ export async function generateWithMiniMax(
       temperature,
       max_tokens: maxTokens,
       top_p: topP,
-      messages: [
-        { role: 'user', content: prompt }
-      ],
+      messages,
     }),
   });
 
@@ -84,12 +88,7 @@ export async function generateWithMiniMax(
   const data = await response.json();
   const latencyMs = Date.now() - start;
 
-  // Parse MiniMax response format
-  const choices = data.choices || [];
-  const content = choices[0]?.messages?.[0]?.text
-    || choices[0]?.message?.content
-    || choices[0]?.text
-    || '';
+  const content = data.choices?.[0]?.message?.content || '';
 
   return {
     id: data.id || '',
@@ -153,8 +152,7 @@ Respond ONLY in valid JSON format (no markdown, no explanation):
       } else {
         return {
           success: false,
-          error: 'Failed to parse AI response as JSON',
-          raw: text,
+          error: 'Failed to parse AI response as JSON: ' + text.slice(0, 200),
           provider: 'minimax',
         };
       }
@@ -276,7 +274,7 @@ export async function generateStructuredContentWithMiniMax(
       if (jsonMatch) {
         parsed = JSON.parse(jsonMatch[0]);
       } else {
-        return { success: false, error: 'Failed to parse JSON', provider: 'minimax', raw: text };
+        return { success: false, error: 'Failed to parse JSON: ' + text.slice(0, 200), provider: 'minimax' };
       }
     }
 

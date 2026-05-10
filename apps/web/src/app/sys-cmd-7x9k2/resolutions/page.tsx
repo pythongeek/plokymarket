@@ -24,7 +24,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
-import { cn } from '@/lib/utils';
+import { cn } from "@/lib/utils";
+import { AiResolutionPanel } from "@/components/admin/AiResolutionPanel";
 import { createClient } from '@/lib/supabase/client';
 
 interface ResolvableEvent {
@@ -281,6 +282,11 @@ export default function ResolutionDashboardPage() {
         }
     };
 
+    // Wrapper for AI resolution panel (boolean → YES/NO string)
+    const handleResolveMarket = async (marketId: string, outcome: boolean) => {
+        await handleExecuteResolution(marketId, outcome ? 'YES' : 'NO');
+    };
+
     const handleSettle = async () => {
         setProcessing(true);
         try {
@@ -509,22 +515,26 @@ export default function ResolutionDashboardPage() {
                 </TabsContent>
 
                 {/* ============================================ */}
-                {/* 3. AI ORACLE TAB */}
+                {/* 3. AI ORACLE TAB — Gemini + MiniMax Pipeline */}
                 {/* ============================================ */}
                 <TabsContent value="ai" className="space-y-4">
-                    <Card className="bg-zinc-900/50 border-zinc-800">
-                        <CardHeader>
-                            <CardTitle className="text-white flex items-center gap-2">
-                                <Zap className="w-5 h-5 text-purple-400" /> AI Oracle (Vertex AI) Lifecycle
-                            </CardTitle>
-                            <CardDescription>Automated web scraping and reasoning proposals by the AI Engine.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                             {oracleRequests.length === 0 ? (
-                                 <p className="text-sm text-zinc-500 text-center py-4">No AI proposals generated yet.</p>
-                             ) : (
-                                 <div className="space-y-4">
-                                     {oracleRequests.map((req) => (
+                    <AiResolutionPanel
+                        markets={resolvableEvents.filter(e => e.status !== 'resolved' && e.status !== 'cancelled')}
+                        onResolve={(marketId, outcome) => handleResolveMarket(marketId, outcome)}
+                    />
+
+                    {/* Legacy Oracle Requests (below the new panel) */}
+                    {oracleRequests.length > 0 && (
+                        <Card className="bg-zinc-900/50 border-zinc-800">
+                            <CardHeader>
+                                <CardTitle className="text-white text-base flex items-center gap-2">
+                                    <Zap className="w-4 h-4 text-purple-400" /> Legacy Oracle Requests
+                                </CardTitle>
+                                <CardDescription>Previously generated proposals from the old system.</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="space-y-4">
+                                    {oracleRequests.map((req) => (
                                         <div key={req.id} className="p-4 border border-zinc-800 rounded-lg bg-zinc-800/20">
                                             <div className="flex justify-between items-start">
                                                 <div>
@@ -550,11 +560,11 @@ export default function ResolutionDashboardPage() {
                                                 </div>
                                             </div>
                                         </div>
-                                     ))}
-                                 </div>
-                             )}
-                        </CardContent>
-                    </Card>
+                                    ))}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    )}
                 </TabsContent>
 
                 {/* ============================================ */}

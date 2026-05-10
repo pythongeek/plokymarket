@@ -1,0 +1,149 @@
+# Ploky Resolution System v2.1 — Open Source Stack
+# প্লোকি রিজলুশন সিস্টেম — ওপেন সোর্চ স্ট্যাক
+#
+# Run: docker compose -f docker-compose.resolution.yml up -d
+#
+# Services:
+#   - redis        : Caching (local, open source)
+#   - ollama       : Self-hosted LLM fallback (llama3.2, mistral)
+#   - ipfs         : Kubo IPFS node (local pinning)
+#   - ploky-ai     : FastAPI AI resolution service
+
+version: "3.8"
+
+services:
+  # ─────────────────────────────────────────────────────────────────
+  # Redis — Local Cache
+  # ─────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: ploky-redis
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # ─────────────────────────────────────────────────────────────────
+  # Ollama — Self-Hosted LLM
+  # ─────────────────────────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ploky-ollama
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    # Auto-pull models on first start
+    entrypoint: >
+      sh -c "
+        ollama serve &
+        sleep 5
+        ollama pull llama3.2 || true
+        ollama pull mistral || true
+        wait
+      "
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+        # Fallback for CPU-only servers
+        limits:
+          memory: 8G
+
+  # ─────────────────────────────────────────────────────────────────
+  # Kubo IPFS — Local IPFS Node
+  # ─────────────────────────────────────────────────────────────────
+  ipfs:
+    image: ipfs/kubo:latest
+    container_name: ploky-ipfs
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5001:5001"   # API
+      - "127.0.0.1:8080:8080"   # Gateway
+      - "4001:4001"             # Swarm (optional external)
+    volumes:
+      - ipfs_data:/data/ipfs
+      - ipfs_staging:/export
+    environment:
+      - IPFS_PROFILE=server
+      - IPFS_SWARM_KEY=/key/swarm.key
+    healthcheck:
+      test: ["CMD", "ipfs", "id"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # ─────────────────────────────────────────────────────────────────
+  # Ploky AI Service
+  # ─────────────────────────────────────────────────────────────────
+  ploky-ai:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    container_name: ploky-ai
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8081:8081"
+    environment:
+      # MiniMax (only paid service — add your key)
+      - MINIMAX_API_KEY=${MINIMAX_API_KEY:-}
+      - MINIMAX_GROUP_ID=${MINIMAX_GROUP_ID:-}
+      # Ollama (self-hosted fallback)
+      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2}
+      - OLLAMA_FALLBACK_MODEL=${OLLAMA_FALLBACK_MODEL:-mistral}
+      # Redis (local)
+      - REDIS_URL=redis://redis:6379/0
+      # IPFS (local Kubo)
+      - IPFS_API_HOST=ipfs
+      - IPFS_API_PORT=5001
+      - IPFS_GATEWAY=http://ipfs:8080/ipfs
+      # Blockchain (public RPC — no Infura/Alchemy)
+      - POLYGON_RPC=https://polygon-rpc.com
+      - AMOY_RPC=https://rpc-amoy.polygon.technology
+      # Contract (fill after deploy)
+      - PLKY_RESOLVER_ADDRESS=${PLKY_RESOLVER_ADDRESS:-}
+      - AI_SERVICE_PRIVATE_KEY=${AI_SERVICE_PRIVATE_KEY:-}
+      # Cache
+      - CACHE_TTL=3600
+      - AI_AUTO_RESOLVE_THRESHOLD=8500
+    depends_on:
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+      ipfs:
+        condition: service_healthy
+    volumes:
+      - ./ai-service:/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  redis_data:
+  ollama_models:
+  ipfs_data:
+  ipfs_staging:
