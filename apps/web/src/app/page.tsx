@@ -119,6 +119,8 @@ export default async function HomePage() {
       yesPrice,
       noPrice: 100 - prob,
       slug: m.slug || m.id,
+      imageUrl: m.image_url,
+      tradingClosesAt: m.trading_closes_at,
     };
   });
 

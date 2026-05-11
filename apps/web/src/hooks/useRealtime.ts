@@ -72,7 +72,7 @@ export function useRealtimeTrades(marketId: string) {
                 .from('trades')
                 .select('*')
                 .eq('market_id', marketId)
-                .order('created_at', { ascending: false })
+                .order('executed_at', { ascending: false })
                 .limit(50);
             setTrades(data || []);
         };

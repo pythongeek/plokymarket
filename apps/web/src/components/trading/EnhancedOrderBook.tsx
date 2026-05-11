@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '@/store/useStore';
 import { ArrowUp, ArrowDown, HandCoins, ShoppingCart, TrendingUp, TrendingDown } from 'lucide-react';
+import { OrderBookExplainer } from './OrderBookExplainer';
 
 interface DepthItem {
   price: number;
@@ -103,9 +104,7 @@ export function EnhancedOrderBook({ marketId }: Props) {
             <span className="text-lg">📊</span>
             <span>দাম কিনা কাছ করে? (খোলার বহি)</span>
           </CardTitle>
-          <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">
-            সবার অ্যাপডেট হচ্ছে
-          </span>
+          <OrderBookExplainer bestBid={bestBid ?? undefined} bestAsk={bestAsk ?? undefined} />
         </div>
         {/* Kid-friendly subtitle */}
         <p className="text-[11px] text-muted-foreground mt-1">

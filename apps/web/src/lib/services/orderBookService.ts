@@ -1,20 +1,13 @@
 // @ts-nocheck
-import { Redis } from '@upstash/redis';
+// Local in-memory order book service — no cloud dependencies
+// Redis caching removed; always queries DB directly
+
 import { createClient } from '@/lib/supabase/server';
 import type { Order } from '@/types/index';
 
-// Lazy initialization of Redis client to avoid env var warnings at build time
-let redisClient: Redis | null = null;
-const getRedis = (): Redis | null => {
-    if (!redisClient) {
-        const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
-        const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
-        if (url && token) {
-            redisClient = new Redis({ url, token });
-        }
-    }
-    return redisClient;
-};
+// No Redis — removed cloud dependency
+let redisClient: any | null = null;
+const getRedis = (): null => null;
 
 const CACHE_TTL = 1; // 1 second for near real-time
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import {
   LineChart, Line, ResponsiveContainer, Tooltip, XAxis,
@@ -9,6 +9,7 @@ import {
   Search, TrendingUp, Zap, Newspaper, BarChart3, Menu, X,
   ChevronRight, Flame, LayoutGrid, LogIn, UserPlus,
 } from 'lucide-react';
+import { NewsEventSlider } from '@/components/home/NewsEventSlider';
 
 // ── Types ──────────────────────────────────────────────
 interface MarketCardData {
@@ -24,6 +25,8 @@ interface MarketCardData {
   yesPrice: number;
   noPrice: number;
   slug: string;
+  imageUrl: string | null;
+  tradingClosesAt: string | null;
 }
 
 interface HeroData {
@@ -80,11 +83,36 @@ function MiniChart({ data, color }: { data: { t: number; v: number }[]; color: s
   );
 }
 
+// ── Countdown Hook ─────────────────────────────────────
+function useCountdown(targetDate: string | null) {
+  const [timeLeft, setTimeLeft] = useState('');
+  useEffect(() => {
+    if (!targetDate) { setTimeLeft(''); return; }
+    const update = () => {
+      const diff = new Date(targetDate).getTime() - Date.now();
+      if (diff <= 0) { setTimeLeft('শেষ'); return; }
+      const d = Math.floor(diff / 86400000);
+      const h = Math.floor((diff % 86400000) / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      if (d > 0) setTimeLeft(`${toBengali(d)}দ ${toBengali(h)}ঘ`);
+      else if (h > 0) setTimeLeft(`${toBengali(h)}ঘ ${toBengali(m)}মি`);
+      else setTimeLeft(`${toBengali(m)}মি`);
+    };
+    update();
+    const timer = setInterval(update, 60000);
+    return () => clearInterval(timer);
+  }, [targetDate]);
+  return timeLeft;
+}
+
 // ── Market Card ────────────────────────────────────────
 function MarketCard({ market }: { market: MarketCardData }) {
   const [sel, setSel] = useState<'yes' | 'no' | null>(null);
   const [placing, setPlacing] = useState(false);
-  const color = market.prob >= 50 ? '#16a34a' : '#dc2626';
+  const countdown = useCountdown(market.tradingClosesAt);
+  const isYesMajority = market.prob >= 50;
+  const yesPct = market.prob;
+  const noPct = 100 - market.prob;
 
   const placeOrder = useCallback(async (side: 'yes' | 'no') => {
     setPlacing(true);
@@ -116,69 +144,116 @@ function MarketCard({ market }: { market: MarketCardData }) {
 
   return (
     <div
-      className="group relative flex flex-col gap-2.5 rounded-2xl border border-gray-200 bg-white p-3.5 shadow-sm transition-shadow duration-200 hover:shadow-lg cursor-pointer"
+      className="group relative flex flex-col rounded-2xl border border-gray-200 bg-white shadow-sm transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5 cursor-pointer overflow-hidden"
       onClick={(e) => {
-        // Only navigate if click wasn't on a button
         if ((e.target as HTMLElement).closest('button')) return;
         window.location.href = `/markets/${market.slug}`;
       }}
     >
-      {/* Header */}
-      <div className="relative z-10 flex items-start gap-2">
-        <span className="text-xl shrink-0">{market.icon}</span>
-        <div className="min-w-0">
-          <span className="inline-block text-[10px] font-semibold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full">
-            {market.tag}
+      {/* ── Image / Gradient Header ── */}
+      <div className="relative h-28 overflow-hidden">
+        {market.imageUrl ? (
+          <img
+            src={market.imageUrl}
+            alt=""
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            loading="lazy"
+          />
+        ) : (
+          <div
+            className="w-full h-full flex items-center justify-center"
+            style={{
+              background: isYesMajority
+                ? 'linear-gradient(135deg, #16a34a 0%, #22c55e 50%, #86efac 100%)'
+                : 'linear-gradient(135deg, #dc2626 0%, #ef4444 50%, #fca5a5 100%)',
+            }}
+          >
+            <span className="text-5xl opacity-30">{market.icon}</span>
+          </div>
+        )}
+        {/* Overlay gradient */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+        {/* Category badge */}
+        <div className="absolute top-2 left-2 flex items-center gap-1 bg-white/90 backdrop-blur-sm px-2 py-0.5 rounded-full text-[11px] font-bold text-gray-700">
+          <span>{market.icon}</span>
+          <span>{market.tag}</span>
+        </div>
+      </div>
+
+      {/* ── Body ── */}
+      <div className="p-3.5 flex flex-col gap-2.5">
+        {/* Question */}
+        <p className="text-[13px] font-bold text-gray-900 leading-snug line-clamp-2 group-hover:text-blue-600 transition-colors">
+          {market.question}
+        </p>
+
+        {/* ── YES / NO Progress Bar ── */}
+        <div className="space-y-1.5">
+          {/* YES row */}
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-extrabold text-green-600 w-7 text-right">YES</span>
+            <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-green-500 rounded-full transition-all"
+                style={{ width: `${yesPct}%` }}
+              />
+            </div>
+            <span className="text-xs font-black text-green-600 w-8 text-right">{toBengali(yesPct)}%</span>
+          </div>
+          {/* NO row */}
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-extrabold text-red-600 w-7 text-right">NO</span>
+            <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-red-500 rounded-full transition-all"
+                style={{ width: `${noPct}%` }}
+              />
+            </div>
+            <span className="text-xs font-black text-red-600 w-8 text-right">{toBengali(noPct)}%</span>
+          </div>
+        </div>
+
+        {/* ── Volume + Time ── */}
+        <div className="flex items-center justify-between text-[11px]">
+          <span className="flex items-center gap-1 text-gray-500">
+            <span className="text-sm">💰</span>
+            <span className="font-bold text-gray-700">{market.volume}</span>
+            <span className="text-gray-400">ট্রেড</span>
           </span>
-          <p className="text-[13px] font-bold text-gray-900 mt-1 leading-snug line-clamp-2">
-            {market.question}
-          </p>
+          {countdown && (
+            <span className="flex items-center gap-1 text-gray-500">
+              <span className="text-sm">⏳</span>
+              <span className="font-bold text-amber-600">{countdown}</span>
+              <span className="text-gray-400">বাকি</span>
+            </span>
+          )}
         </div>
-      </div>
 
-      {/* Prob + Chart */}
-      <div className="relative z-10 flex items-center justify-between">
-        <div>
-          <span className="text-2xl font-black" style={{ color }}>
-            {toBengali(market.prob)}%
-          </span>
-          <span className="text-[10px] text-gray-400 ml-1">সম্ভাবনা</span>
+        {/* ── Trade Buttons ── */}
+        <div className="flex gap-2 pt-1">
+          <button
+            disabled={placing}
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setSel('yes'); placeOrder('yes'); }}
+            className={`flex-1 py-1.5 rounded-xl text-[12px] font-bold transition-all border ${
+              sel === 'yes'
+                ? 'bg-green-600 text-white border-green-600'
+                : 'bg-green-50 text-green-700 border-green-200 hover:border-green-400 hover:bg-green-100'
+            }`}
+          >
+            {placing && sel === 'yes' ? '...' : `হ্যাঁ ${toBengali(market.yesPrice)}¢`}
+          </button>
+          <button
+            disabled={placing}
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setSel('no'); placeOrder('no'); }}
+            className={`flex-1 py-1.5 rounded-xl text-[12px] font-bold transition-all border ${
+              sel === 'no'
+                ? 'bg-red-600 text-white border-red-600'
+                : 'bg-red-50 text-red-700 border-red-200 hover:border-red-400 hover:bg-red-100'
+            }`}
+          >
+            {placing && sel === 'no' ? '...' : `না ${toBengali(market.noPrice)}¢`}
+          </button>
         </div>
-        <div className="w-24">
-          <MiniChart data={market.chartData} color={color} />
-        </div>
-      </div>
-
-      {/* Yes / No Buttons */}
-      <div className="relative z-10 flex gap-2">
-        <button
-          disabled={placing}
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); setSel('yes'); placeOrder('yes'); }}
-          className={`flex-1 py-1.5 rounded-xl text-[13px] font-bold transition-all border-2 ${
-            sel === 'yes'
-              ? 'bg-green-600 text-white border-green-600'
-              : 'bg-green-50 text-green-600 border-gray-200 hover:border-green-400'
-          }`}
-        >
-          {placing && sel === 'yes' ? '...' : `হ্যাঁ ${toBengali(market.yesPrice)}¢`}
-        </button>
-        <button
-          disabled={placing}
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); setSel('no'); placeOrder('no'); }}
-          className={`flex-1 py-1.5 rounded-xl text-[13px] font-bold transition-all border-2 ${
-            sel === 'no'
-              ? 'bg-red-600 text-white border-red-600'
-              : 'bg-red-50 text-red-600 border-gray-200 hover:border-red-400'
-          }`}
-        >
-          {placing && sel === 'no' ? '...' : `না ${toBengali(market.noPrice)}¢`}
-        </button>
-      </div>
-
-      {/* Footer */}
-      <div className="relative z-10 flex justify-between text-[11px] text-gray-400 pt-1 border-t border-gray-100">
-        <span>{market.volume} ভলিউম</span>
-        <span>{market.date}</span>
       </div>
     </div>
   );
@@ -345,6 +420,9 @@ export default function HomePageClient({ initialMarkets, hero, categoryTabs, sta
                 <ChevronRight className="w-5 h-5 text-white/70 group-hover:translate-x-1 transition-transform" />
               </div>
             </Link>
+
+            {/* News / Event Slider — auto-rotating top markets */}
+            <NewsEventSlider markets={initialMarkets} />
 
             {/* Hero */}
             {hero && (

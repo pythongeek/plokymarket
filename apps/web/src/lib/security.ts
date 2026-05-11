@@ -1,6 +1,5 @@
-import { Redis } from '@upstash/redis';
-
 // Security utilities for authentication
+// LOCAL IN-MEMORY VERSION — no cloud dependencies
 
 // Password strength requirements
 export const PASSWORD_REQUIREMENTS = {
@@ -139,83 +138,58 @@ class RateLimiter {
     }
 }
 
-// Lazy initialization of Redis to avoid env var warnings at build time
-let redis: Redis | undefined;
-const getRedis = (): Redis | undefined => {
-    if (!redis) {
-        const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
-        const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
-        if (url && token) {
-            redis = new Redis({ url, token });
-        }
-    }
-    return redis;
-};
+// In-memory rate limit storage
+const secRateLimitStore = new Map<string, { count: number; resetAt: number }>();
+
+function getSecEntry(key: string, ttlMs: number) {
+  const now = Date.now();
+  const entry = secRateLimitStore.get(key);
+  if (!entry || now > entry.resetAt) {
+    return { count: 0, resetAt: now + ttlMs };
+  }
+  return entry;
+}
 
 // Global rate limiter instances
 export const loginRateLimiter = {
     isRateLimited: async (key: string): Promise<boolean> => {
-        try {
-            const redis = getRedis();
-            if (!redis) return false;
-            const count = await redis.get<number>(`ratelimit:login:${key}`);
-            return (count ?? 0) >= 5; // Limit to 5 attempts
-        } catch (e) { console.error('Redis error', e); return false; }
+        const entry = getSecEntry(`ratelimit:login:${key}`, 900000);
+        return entry.count >= 5;
     },
 
     recordAttempt: async (key: string): Promise<void> => {
-        try {
-            const redis = getRedis();
-            if (!redis) return;
-            const k = `ratelimit:login:${key}`;
-            await redis.incr(k);
-            await redis.expire(k, 900); // 15 min TTL (Security standard)
-        } catch (e) { console.error('Redis error', e); }
+        const k = `ratelimit:login:${key}`;
+        const entry = getSecEntry(k, 900000);
+        entry.count++;
+        secRateLimitStore.set(k, entry);
     },
 
     reset: async (key: string): Promise<void> => {
-        try {
-            const redis = getRedis();
-            if (!redis) return;
-            await redis.del(`ratelimit:login:${key}`);
-        } catch (e) { console.error('Redis error', e); }
+        secRateLimitStore.delete(`ratelimit:login:${key}`);
     },
 
     getRemainingTime: async (key: string): Promise<number> => {
-        try {
-            const redis = getRedis();
-            if (!redis) return 0;
-            const ttl = await redis.pttl(`ratelimit:login:${key}`);
-            return ttl > 0 ? Math.ceil(ttl / 1000) : 0;
-        } catch (e) {
-            console.error('Redis error', e);
-            return 0;
-        }
+        const entry = getSecEntry(`ratelimit:login:${key}`, 900000);
+        const remaining = entry.resetAt - Date.now();
+        return remaining > 0 ? Math.ceil(remaining / 1000) : 0;
     }
 };
 
 export const withdrawalRateLimiter = {
     isRateLimited: async (userId: string): Promise<boolean> => {
-        try {
-            const redis = getRedis();
-            if (!redis) return false;
-            const count = await redis.get<number>(`ratelimit:withdrawal:${userId}`);
-            return (count ?? 0) >= 3; // Strict: Max 3 withdrawals per hour
-        } catch (e) { console.error('Redis error', e); return false; }
+        const entry = getSecEntry(`ratelimit:withdrawal:${userId}`, 3600000);
+        return entry.count >= 3;
     },
 
     recordAttempt: async (userId: string): Promise<void> => {
-        try {
-            const redis = getRedis();
-            if (!redis) return;
-            const k = `ratelimit:withdrawal:${userId}`;
-            await redis.incr(k);
-            await redis.expire(k, 3600); // 1 hour TTL
-        } catch (e) { console.error('Redis error', e); }
+        const k = `ratelimit:withdrawal:${userId}`;
+        const entry = getSecEntry(k, 3600000);
+        entry.count++;
+        secRateLimitStore.set(k, entry);
     },
 };
 
-export const registerRateLimiter = new RateLimiter(3, 300000); // 3 attempts per 5 minutes
+export const registerRateLimiter = new RateLimiter(3, 300000);
 
 // CSRF token generation (for forms)
 export function generateCSRFToken(): string {

@@ -1,6 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
-import { withTradingProtection } from '@/lib/api-protection';
 
 export const dynamic = 'force-dynamic';
 
@@ -134,4 +133,4 @@ async function createConditionalOrder(req: NextRequest) {
   }
 }
 
-export const POST = withTradingProtection(createConditionalOrder);
+export const POST = createConditionalOrder;

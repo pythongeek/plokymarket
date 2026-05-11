@@ -8,7 +8,7 @@ import { DepthChart } from '@/components/clob/DepthChart';
 import { LiquidityHeatMap } from '@/components/clob/LiquidityHeatMap';
 import { MarketStatusDisplay } from '@/components/market/MarketStatusDisplay';
 import { CommentSection } from '@/components/social/CommentSection';
-import { TradingPanel } from '@/components/trading/TradingPanel';
+import { EnhancedTradingPanel } from '@/components/trading/EnhancedTradingPanel';
 import { PriceChart } from '@/components/trading/PriceChart';
 import { MyPositions } from '@/components/trading/MyPositions';
 import { PauseBanner } from '@/components/trading/PauseBanner';
@@ -45,6 +45,7 @@ import { MobileTradingBar } from '@/components/trading/MobileTradingBar';
 import { ProbabilityGauge } from '@/components/market/ProbabilityGauge';
 import { SimpleBetCalculator } from '@/components/market/SimpleBetCalculator';
 import { EnhancedOrderBook } from '@/components/trading/EnhancedOrderBook';
+import { TradeHistoryPanel } from '@/components/trading/TradeHistoryPanel';
 
 interface MarketPageClientProps {
     initialMarket?: Market | null;
@@ -288,6 +289,9 @@ export function MarketPageClient({ initialMarket }: MarketPageClientProps) {
                     {/* Enhanced Order Book with visual depth */}
                     <EnhancedOrderBook marketId={market.id} />
 
+                    {/* Live Trade History */}
+                    <TradeHistoryPanel marketId={market.id} />
+
                     {/* Advanced Visualizations */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <Card className="bg-card/50 backdrop-blur-sm border-primary/10">
@@ -489,7 +493,7 @@ export function MarketPageClient({ initialMarket }: MarketPageClientProps) {
                     <div className="sticky top-24 space-y-6">
                         <MyPositions marketId={market.id} />
                         {(!market.outcomes || market.outcomes.length === 0) && (
-                            <TradingPanel
+                            <EnhancedTradingPanel
                                 market={market}
                                 isPaused={isPlatformPaused || (market ? (categoryPauseStatus.get(market.category)?.paused || market.trading_status === 'paused') : false)}
                             />
