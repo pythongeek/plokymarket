@@ -14,6 +14,10 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import DepositFlow from './DepositFlow';
+import CryptoDeposit from './CryptoDeposit';
+import P2PDeposit from './P2PDeposit';
+import CardTransfer from './CardTransfer';
+import OnRampDeposit from './OnRampDeposit';
 
 export type DepositMethod =
     | 'hub'
@@ -118,19 +122,18 @@ const DEPOSIT_METHODS: DepositMethodConfig[] = [
         id: 'card',
         title: 'কার্ড ট্রান্সফার',
         subtitle: 'Card Transfer',
-        description: 'RedotPay বা Bleap ভিরচুয়াল কার্ড থেকে সরাসরি ট্রান্সফার। বিস্তারিত গাইড ও স্টেপ-বাই-স্টেপ নির্দেশিকা।',
+        description: 'RedotPay বা Bleap ভার্চুয়াল কার্ড থেকে সরাসরি USDT পাঠান। বিস্তারিত গাইড ও স্টেপ-বাই-স্টেপ নির্দেশিকা।',
         icon: <CreditCard className="h-7 w-7" />,
         borderColor: 'border-cyan-500/20 hover:border-cyan-500/60',
         bgGradient: 'from-cyan-500/5 to-transparent',
         iconBg: 'bg-cyan-500/10 group-hover:bg-cyan-500/20',
         iconColor: 'text-cyan-400',
-        comingSoon: true,
     },
     {
         id: 'moonpay',
         title: 'INXY / MoonPay',
         subtitle: 'Crypto On-Ramp',
-        description: 'ব্যাঙ্ক কার্ড দিয়ে সরাসরি USDT কিনুন। সরল করন ওয়ালেটে USDT পাঠান।',
+        description: 'ব্যাঙ্ক কার্ড দিয়ে সরাসরি USDT কিনুন। ভিসা/মাস্টারকার্ড গ্রহণযোগ্য।',
         icon: <Globe className="h-7 w-7" />,
         badge: 'On-Ramp',
         badgeColor: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30',
@@ -138,8 +141,7 @@ const DEPOSIT_METHODS: DepositMethodConfig[] = [
         bgGradient: 'from-indigo-500/5 to-transparent',
         iconBg: 'bg-indigo-500/10 group-hover:bg-indigo-500/20',
         iconColor: 'text-indigo-400',
-        external: true,
-        href: '/wallet/deposit/on-ramp',
+        comingSoon: true,
     },
     {
         id: 'telegram',
@@ -227,8 +229,6 @@ export default function DepositHub() {
     const getLegacyMode = (m: DepositMethod): string | null => {
         switch (m) {
             case 'agent': return 'manual';
-            case 'crypto': return 'usdt';
-            case 'p2p': return 'binance';
             default: return null;
         }
     };
@@ -292,6 +292,86 @@ export default function DepositHub() {
                     ডিপোজিট হাবে ফিরে যান
                 </Button>
                 <PartnerDirectory />
+            </motion.div>
+        );
+    }
+
+    if (mode === 'crypto') {
+        return (
+            <motion.div
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="space-y-4"
+            >
+                <Button
+                    variant="ghost"
+                    onClick={() => setMode('hub')}
+                    className="text-slate-400 hover:text-white flex items-center gap-2 pl-0"
+                >
+                    <ArrowLeft size={18} />
+                    ডিপোজিট হাবে ফিরে যান
+                </Button>
+                <CryptoDeposit />
+            </motion.div>
+        );
+    }
+
+    if (mode === 'p2p') {
+        return (
+            <motion.div
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="space-y-4"
+            >
+                <Button
+                    variant="ghost"
+                    onClick={() => setMode('hub')}
+                    className="text-slate-400 hover:text-white flex items-center gap-2 pl-0"
+                >
+                    <ArrowLeft size={18} />
+                    ডিপোজিট হাবে ফিরে যান
+                </Button>
+                <P2PDeposit />
+            </motion.div>
+        );
+    }
+
+    if (mode === 'card') {
+        return (
+            <motion.div
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="space-y-4"
+            >
+                <Button
+                    variant="ghost"
+                    onClick={() => setMode('hub')}
+                    className="text-slate-400 hover:text-white flex items-center gap-2 pl-0"
+                >
+                    <ArrowLeft size={18} />
+                    ডিপোজিট হাবে ফিরে যান
+                </Button>
+                <CardTransfer />
+            </motion.div>
+        );
+    }
+
+    if (mode === 'moonpay') {
+        return (
+            <motion.div
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="space-y-4"
+            >
+                <Button
+                    variant="ghost"
+                    onClick={() => setMode('hub')}
+                    className="text-slate-400 hover:text-white flex items-center gap-2 pl-0"
+                >
+                    <ArrowLeft size={18} />
+                    ডিপোজিট হাবে ফিরে যান
+                </Button>
+                <OnRampDeposit />
             </motion.div>
         );
     }
