@@ -10,7 +10,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createPublicClient } from '@/lib/supabase/server';
 import { orderBookRealtimeEngine } from '@/lib/realtime/OrderBookRealtimeEngine';
 
 export async function GET(

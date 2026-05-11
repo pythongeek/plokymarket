@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server';
+import { createPublicClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
@@ -41,7 +41,7 @@ export async function GET() {
   // Check Supabase
   const startSupabase = Date.now();
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     const { error } = await supabase.from('markets').select('id').limit(1);
     response.services.supabase.latency_ms = Date.now() - startSupabase;
     if (error && error.code !== 'PGRST116') {

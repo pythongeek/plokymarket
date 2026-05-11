@@ -45,7 +45,6 @@ import { MobileTradingBar } from '@/components/trading/MobileTradingBar';
 import { ProbabilityGauge } from '@/components/market/ProbabilityGauge';
 import { SimpleBetCalculator } from '@/components/market/SimpleBetCalculator';
 import { EnhancedOrderBook } from '@/components/trading/EnhancedOrderBook';
-import { TradeHistoryPanel } from '@/components/trading/TradeHistoryPanel';
 
 interface MarketPageClientProps {
     initialMarket?: Market | null;
@@ -288,9 +287,6 @@ export function MarketPageClient({ initialMarket }: MarketPageClientProps) {
 
                     {/* Enhanced Order Book with visual depth */}
                     <EnhancedOrderBook marketId={market.id} />
-
-                    {/* Live Trade History */}
-                    <TradeHistoryPanel marketId={market.id} />
 
                     {/* Advanced Visualizations */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

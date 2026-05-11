@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server';
+import { createPublicClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/service';
 import { NextResponse } from 'next/server';
 import { verifyQStashSignature } from '@/lib/upstash/workflows';

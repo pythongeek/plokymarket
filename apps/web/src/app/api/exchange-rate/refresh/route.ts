@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createPublicClient } from '@/lib/supabase/server';
 
 /**
  * POST /api/exchange-rate/refresh
@@ -8,7 +8,7 @@ import { createClient } from '@/lib/supabase/server';
  */
 export async function POST(request: NextRequest) {
     try {
-        const supabase = await createClient();
+        const supabase = createPublicClient();
 
         // Fetch from Binance P2P
         const response = await fetch('https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search', {
@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
         console.error('[Exchange Rate Refresh] Error:', error);
 
         // Return last known rate on error
-        const supabase = await createClient();
+        const supabase = createPublicClient();
         const { data: lastRate } = await supabase
             .from('exchange_rates_live')
             .select('*')

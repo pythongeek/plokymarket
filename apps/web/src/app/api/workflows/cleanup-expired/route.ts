@@ -4,7 +4,7 @@
  * Supports both QStash and cron-job.org
  */
 
-import { createClient } from '@/lib/supabase/server';
+import { createPublicClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyQStashSignature } from '@/lib/upstash/workflows';
 import { verifyCronSecret } from '@/lib/cron/workflows';
@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = await createClient();
+    const supabase = createPublicClient();
 
     // Find expired pending deposits (older than 24 hours)
     // Use created_at if expires_at doesn't exist

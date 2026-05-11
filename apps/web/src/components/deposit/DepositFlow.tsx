@@ -71,8 +71,12 @@ const DEPOSIT_METHODS = [
     },
 ];
 
-export default function DepositFlow() {
-    const [mode, setMode] = useState<DepositMode>('select');
+interface DepositFlowProps {
+    initialMode?: DepositMode;
+}
+
+export default function DepositFlow({ initialMode }: DepositFlowProps) {
+    const [mode, setMode] = useState<DepositMode>(initialMode || 'select');
     const [settings, setSettings] = useState<any>({});
     const [agentMethod, setAgentMethod] = useState<'bkash' | 'nagad'>('bkash');
     const [agentAmount, setAgentAmount] = useState('1000');

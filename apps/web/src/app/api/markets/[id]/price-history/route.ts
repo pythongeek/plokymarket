@@ -81,7 +81,7 @@ function aggregateOhlc(
       existing.volume += Number(row.quantity);
     } else {
       buckets.set(key, {
-        open: row.price,
+        open: Number(row.price),
         high: row.price,
         low: row.price,
         close: row.price,
@@ -92,7 +92,7 @@ function aggregateOhlc(
 
   const keys = Array.from(buckets.keys()).sort((a, b) => a - b);
   const result: OhlcPoint[] = [];
-  let lastClose = rows[0].price;
+  let lastClose = Number(rows[0].price);
 
   for (let i = 0; i < keys.length; i++) {
     const k = keys[i];
@@ -119,7 +119,7 @@ function aggregateOhlc(
       close: b.close,
       volume: b.volume,
     });
-    lastClose = b.close;
+    lastClose = Number(b.close);
   }
 
   return result;

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createPublicClient } from '@/lib/supabase/server';
 
 export async function GET(req: NextRequest) {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     const searchParams = req.nextUrl.searchParams;
     const timeframe = searchParams.get('timeframe') || 'weekly';
     const league = searchParams.get('league'); // Filter by league

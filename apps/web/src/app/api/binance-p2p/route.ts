@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createPublicClient } from '@/lib/supabase/server';
 import fallbackData from '@/data/fallback-sellers.json';
 
 export const dynamic = 'force-dynamic';
@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: 'Invalid method' }, { status: 400 });
     }
 
-    const supabase = await createClient();
+    const supabase = createPublicClient();
 
     try {
         // 1. Check cache first (less than 5 minutes old)

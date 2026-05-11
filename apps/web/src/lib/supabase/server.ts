@@ -11,15 +11,10 @@ export class PostgrestClient {
   private headers: Record<string, string>;
 
   constructor() {
-    // On server: talk directly to PostgREST container to avoid nginx/SSL hops
-    const isServer = typeof window === 'undefined';
-    const directUrl = 'http://127.0.0.1:4000';
-    const publicUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://polymarketbd.com').replace(/\/$/, '');
-    this.baseUrl = isServer ? directUrl : publicUrl;
+    this.baseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://polymarketbd.com').replace(/\/$/, '');
     const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
     this.headers = {
       'apikey': anonKey,
-      'Authorization': `Bearer ${anonKey}`,
       'Content-Type': 'application/json',
       'Accept': 'application/json',
     };
@@ -35,7 +30,9 @@ class PostgrestQueryBuilder {
   private table: string;
   private headers: Record<string, string>;
   private queryParams: string[] = [];
-  private isMaybeSingle = false;
+  private singleMode: 'single' | 'maybeSingle' | null = null;
+  private bodyData: unknown = null;
+  private method: 'GET' | 'POST' | 'PATCH' | 'DELETE' = 'GET';
 
   constructor(baseUrl: string, table: string, headers: Record<string, string>) {
     this.baseUrl = baseUrl;
@@ -119,13 +116,41 @@ class PostgrestQueryBuilder {
     return this;
   }
 
-  maybeSingle() {
-    this.isMaybeSingle = true;
+  single() {
+    this.singleMode = 'single';
+    this.queryParams.push('limit=1');
     return this;
   }
 
-  single() {
+  maybeSingle() {
+    this.singleMode = 'maybeSingle';
     this.queryParams.push('limit=1');
+    return this;
+  }
+
+  insert(data: unknown | unknown[]) {
+    this.method = 'POST';
+    this.bodyData = data;
+    this.headers = { ...this.headers, 'Prefer': 'return=representation' };
+    return this;
+  }
+
+  update(data: Record<string, unknown>) {
+    this.method = 'PATCH';
+    this.bodyData = data;
+    this.headers = { ...this.headers, 'Prefer': 'return=representation' };
+    return this;
+  }
+
+  delete() {
+    this.method = 'DELETE';
+    return this;
+  }
+
+  match(query: Record<string, string | number | boolean>) {
+    for (const [key, value] of Object.entries(query)) {
+      this.eq(key, value);
+    }
     return this;
   }
 
@@ -134,26 +159,37 @@ class PostgrestQueryBuilder {
     onfulfilled?: ((value: { data: TResult1; error: null }) => TResult1 | Promise<TResult1>) | null,
     onrejected?: ((reason: any) => TResult2 | Promise<TResult2>) | null
   ): Promise<TResult1 | TResult2> {
-    const isDirectPostgrest = this.baseUrl.includes(':4000');
-    const pathPrefix = isDirectPostgrest ? '' : '/rest/v1';
-    const url = `${this.baseUrl}${pathPrefix}/${this.table}?${this.queryParams.join('&')}`;
+    const url = `${this.baseUrl}/rest/v1/${this.table}${this.queryParams.length > 0 ? '?' + this.queryParams.join('&') : ''}`;
     try {
-      const res = await fetch(url, { headers: this.headers, cache: 'no-store' });
-      console.log('[PostgREST]', url, '-> status:', res.status);
+      const fetchOpts: RequestInit = {
+        method: this.method,
+        headers: this.headers,
+        cache: 'no-store',
+      };
+      if (this.bodyData !== null) {
+        fetchOpts.body = JSON.stringify(this.bodyData);
+      }
+      const res = await fetch(url, fetchOpts);
+      console.log('[PostgREST]', this.method, url, '-> status:', res.status);
       if (!res.ok) {
         const err = await res.json().catch(() => ({ message: res.statusText }));
         throw { code: 'PGRST' + res.status, message: err.message || res.statusText };
       }
       let data = await res.json() as TResult1;
-      if (this.isMaybeSingle && Array.isArray(data)) {
-        data = (data.length > 0 ? data[0] : null) as TResult1;
+      // Handle single/maybeSingle modes
+      if (Array.isArray(data) && this.singleMode) {
+        if (data.length === 0) {
+          if (this.singleMode === 'maybeSingle') {
+            data = null as unknown as TResult1;
+          } else {
+            throw { code: 'PGRST116', message: 'JSON object requested, multiple (or no) rows returned' };
+          }
+        } else {
+          data = data[0] as unknown as TResult1;
+        }
       }
       return (onfulfilled ? onfulfilled({ data, error: null }) : data) as any;
     } catch (err) {
-      // Return error through onfulfilled so .then(e => e.data) gives null
-      if (onfulfilled) {
-        return onfulfilled({ data: null as any, error: err as any }) as any;
-      }
       if (onrejected) return onrejected(err);
       throw err;
     }

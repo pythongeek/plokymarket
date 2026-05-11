@@ -9,6 +9,7 @@ import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { inngest } from '@/lib/inngest/client';
 import { OracleService } from '@/lib/oracle/service';
 import { AIOrchestrator } from '@/lib/oracle/ai/AIOrchestrator';
+import { jwtVerify } from 'jose';
 
 const oracleService = new OracleService();
 const aiOrchestrator = new AIOrchestrator();
@@ -18,9 +19,32 @@ const aiOrchestrator = new AIOrchestrator();
  * Request AI oracle resolution for a market
  * Body: { marketId: string, context?: object }
  */
+const JWT_SECRET = new TextEncoder().encode(
+  process.env.NEXT_PUBLIC_JWT_SECRET || 'P10kyM@rket.BD.2026.JWT.SECRET.XX'
+);
+
+async function getUserFromRequest(request: Request) {
+  const authHeader = request.headers.get('authorization');
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice(7);
+    try {
+      const { payload } = await jwtVerify(token, JWT_SECRET, { clockTolerance: 60 });
+      return { id: payload.sub as string, email: payload.email as string };
+    } catch { /* fall through */ }
+  }
+  const cookie = request.headers.get('cookie') || '';
+  const match = cookie.match(/sb-access-token=([^;]+)/);
+  const token = match ? decodeURIComponent(match[1]) : null;
+  if (!token) return null;
+  try {
+    const { payload } = await jwtVerify(token, JWT_SECRET, { clockTolerance: 60 });
+    return { id: payload.sub as string, email: payload.email as string };
+  } catch { return null; }
+}
+
+
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
     const body = await request.json();
     const { marketId, context } = body;
 
@@ -36,22 +60,20 @@ export async function POST(request: NextRequest) {
     const isServiceCall = authHeader?.startsWith('Bearer ');
 
     if (!isServiceCall) {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+      const user = await getUserFromRequest(request);
 
-      if (!session?.user) {
+      if (!profile) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
       }
 
       // Check admin for manual trigger
-      const { data: user } = await (supabase
+      const { data: profile } = await (supabase
         .from('user_profiles')
         .select('is_admin, is_super_admin')
-        .eq('id', session.user.id)
+        .eq('id', user.id)
         .single() as any);
 
-      if (!user?.is_admin && !user?.is_super_admin) {
+      if (!profile?.is_admin && !profile?.is_super_admin) {
         return NextResponse.json(
           { error: 'Admin access required for AI oracle resolution' },
           { status: 403 }
@@ -89,7 +111,7 @@ export async function POST(request: NextRequest) {
         id: requestId,
         market_id: marketId,
         request_type: 'initial',
-        proposer_id: isServiceCall ? null : (await supabase.auth.getUser()).data.user?.id,
+        proposer_id: isServiceCall ? null : (await getUserFromRequest(request)).data.user?.id,
         bond_amount: 0,
         bond_currency: 'BDT',
         status: 'pending',
@@ -157,26 +179,23 @@ export async function POST(request: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient();
     const url = new URL(request.url);
 
     // Authenticate
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    const user = await getUserFromRequest(request);
 
-    if (!session?.user) {
+    if (!profile) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Check admin
-    const { data: user } = await (supabase
+    const { data: profile } = await (supabase
       .from('user_profiles')
       .select('is_admin')
-      .eq('id', session.user.id)
+      .eq('id', user.id)
       .single() as any);
 
-    if (!user?.is_admin) {
+    if (!profile?.is_admin) {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
     }
 

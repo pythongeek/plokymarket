@@ -5,9 +5,34 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createPublicClient } from '@/lib/supabase/server';
 import { executeEventCreationWorkflow, batchExecuteWorkflow } from "@/lib/ai/workflows/event-creation-workflow";
 import { getProviderStatus, getRotationStats } from "@/lib/ai/rotation-system";
+import { jwtVerify } from 'jose';
+
+const JWT_SECRET = new TextEncoder().encode(
+  process.env.NEXT_PUBLIC_JWT_SECRET || 'P10kyM@rket.BD.2026.JWT.SECRET.XX'
+);
+
+async function getUserFromRequest(request: Request) {
+  const authHeader = request.headers.get('authorization');
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice(7);
+    try {
+      const { payload } = await jwtVerify(token, JWT_SECRET, { clockTolerance: 60 });
+      return { id: payload.sub as string, email: payload.email as string };
+    } catch { /* fall through */ }
+  }
+  const cookie = request.headers.get('cookie') || '';
+  const match = cookie.match(/sb-access-token=([^;]+)/);
+  const token = match ? decodeURIComponent(match[1]) : null;
+  if (!token) return null;
+  try {
+    const { payload } = await jwtVerify(token, JWT_SECRET, { clockTolerance: 60 });
+    return { id: payload.sub as string, email: payload.email as string };
+  } catch { return null; }
+}
+
 
 export const maxDuration = 180; // 3 minutes for complex workflow
 export const dynamic = "force-dynamic";
@@ -20,10 +45,10 @@ export async function POST(req: NextRequest) {
   
   try {
     // Auth check
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const supabase = createPublicClient();
+    const user = await getUserFromRequest(request);
     
-    if (!user) {
+    if (!profile) {
       return NextResponse.json(
         { error: "Unauthorized", message: "Please sign in to create events" },
         { status: 401 }

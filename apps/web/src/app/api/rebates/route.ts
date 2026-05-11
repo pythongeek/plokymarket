@@ -2,17 +2,41 @@
  * API Route: /api/rebates
  * Maker rebate endpoints for viewing and claiming rebates
  */
-import { createClient } from '@/lib/supabase/server';
+import { createPublicClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { rebateService } from '@/lib/services/rebateService';
+import { jwtVerify } from 'jose';
 
 // GET /api/rebates - Get rebate summary and status
+const JWT_SECRET = new TextEncoder().encode(
+  process.env.NEXT_PUBLIC_JWT_SECRET || 'P10kyM@rket.BD.2026.JWT.SECRET.XX'
+);
+
+async function getUserFromRequest(request: Request) {
+  const authHeader = request.headers.get('authorization');
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice(7);
+    try {
+      const { payload } = await jwtVerify(token, JWT_SECRET, { clockTolerance: 60 });
+      return { id: payload.sub as string, email: payload.email as string };
+    } catch { /* fall through */ }
+  }
+  const cookie = request.headers.get('cookie') || '';
+  const match = cookie.match(/sb-access-token=([^;]+)/);
+  const token = match ? decodeURIComponent(match[1]) : null;
+  if (!token) return null;
+  try {
+    const { payload } = await jwtVerify(token, JWT_SECRET, { clockTolerance: 60 });
+    return { id: payload.sub as string, email: payload.email as string };
+  } catch { return null; }
+}
+
+
 export async function GET(request: Request) {
     try {
-        const supabase = await createClient();
 
         // Authenticate user
-        const { data: { user } } = await supabase.auth.getUser();
+        const user = await getUserFromRequest(request);
         if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
@@ -76,10 +100,9 @@ export async function GET(request: Request) {
 // POST /api/rebates - Claim a rebate
 export async function POST(request: Request) {
     try {
-        const supabase = await createClient();
 
         // Authenticate user
-        const { data: { user } } = await supabase.auth.getUser();
+        const user = await getUserFromRequest(request);
         if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }

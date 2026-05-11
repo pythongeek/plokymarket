@@ -53,14 +53,14 @@ function formatVolumeBn(n: number): string {
 export default async function HomePage() {
   const client = createPublicClient();
 
-  // Fetch active MARKETS (not events — events may not have linked markets)
-  const { data: markets, error } = await client
-    .from('markets')
+  // Fetch active events with market data
+  const { data: events, error } = await client
+    .from('events')
     .select(`
-      id, question, description, category, subcategory, tags,
+      id, title, question, description, category, subcategory, tags,
       image_url, slug, status, is_featured, trading_closes_at,
-      event_date, total_volume, yes_price, no_price,
-      volume_24h, unique_traders, created_at, event_id
+      starts_at, ends_at, total_volume, current_yes_price, current_no_price,
+      volume_24h, total_trades, unique_traders, created_at
     `)
     .eq('status', 'active')
     .order('is_featured', { ascending: false })
@@ -73,12 +73,12 @@ export default async function HomePage() {
 
   // Fetch stats
   const { data: statsRaw } = await client
-    .from('markets')
-    .select('total_volume,status')
+    .from('events')
+    .select('total_volume,total_trades,status')
     .limit(1000);
 
-  const totalVol = (statsRaw || []).reduce((s, m) => s + Number(m.total_volume || 0), 0);
-  const resolvedCount = (statsRaw || []).filter(m => m.status === 'resolved').length;
+  const totalVol = (statsRaw || []).reduce((s, e) => s + Number(e.total_volume || 0), 0);
+  const resolvedCount = (statsRaw || []).filter(e => e.status === 'resolved').length;
 
   let usersCount: any[] | null = null;
   try {
@@ -91,67 +91,66 @@ export default async function HomePage() {
     usersCount = null;
   }
 
-  // Hero = top market
-  const heroMarket = markets?.[0];
+  // Fetch top event for hero
+  const heroEvent = events?.[0];
 
   // Map to market card format
-  const marketCards = (markets || []).map((m, i) => {
-    const cat = getCatInfo(m.category);
-    const yesPrice = Number(m.yes_price || 0.5);
+  const marketCards = (events || []).map((e, i) => {
+    const cat = getCatInfo(e.category);
+    const yesPrice = Number(e.current_yes_price || 0.5);
     const prob = Math.round(yesPrice * 100);
+    // Generate sparkline from price (flat line at current price with micro variation)
     const chartData = Array.from({ length: 20 }, (_, j) => ({
       t: j,
       v: Math.max(5, Math.min(95, prob + (Math.sin(j * 0.8) * 5) + ((j % 3) - 1) * 2)),
     }));
 
     return {
-      id: m.id,
-      question: m.question || 'Untitled',
+      id: e.id,
+      question: e.question || e.title || 'Untitled',
       prob,
-      volume: formatVolumeBn(Number(m.total_volume || 0)),
-      date: m.trading_closes_at
-        ? new Date(m.trading_closes_at).toLocaleDateString('bn-BD', { month: 'short', day: 'numeric' })
+      volume: formatVolumeBn(Number(e.total_volume || 0)),
+      date: e.trading_closes_at
+        ? new Date(e.trading_closes_at).toLocaleDateString('bn-BD', { month: 'short', day: 'numeric' })
         : 'শীঘ্রই',
       icon: cat.icon,
       tag: cat.bn,
-      category: m.category,
+      category: e.category,
       chartData,
       yesPrice,
-      noPrice: 100 - prob,
-      slug: m.slug || m.id,
-      imageUrl: m.image_url,
-      tradingClosesAt: m.trading_closes_at,
+      noPrice: Number(e.current_no_price || (1 - (prob / 100))),
+      slug: e.slug || e.id,
     };
   });
 
   // Unique categories for filter tabs
-  const allCategories = Array.from(new Set((markets || []).map(m => m.category).filter(Boolean)));
+  const allCategories = Array.from(new Set((events || []).map(e => e.category).filter(Boolean)));
   const categoryTabs = ['সব', ...allCategories.slice(0, 8).map(c => getCatInfo(c).bn), 'আরো →'];
 
   const stats = {
-    totalMarkets: toBengaliNum(markets?.length || 0),
+    totalMarkets: toBengaliNum(events?.length || 0),
     activeUsers: toBengaliNum(Number(usersCount?.length || 11)),
     totalVolume: formatVolumeBn(totalVol),
     resolved: toBengaliNum(resolvedCount),
   };
 
   // Hero data
-  const hero = heroMarket ? {
-    id: heroMarket.id,
-    question: heroMarket.question || '',
-    prob: Math.round(Number(heroMarket.yes_price || 0.5) * 100),
+  const hero = heroEvent ? {
+    id: heroEvent.id,
+    question: heroEvent.question || heroEvent.title || '',
+    prob: Math.round(Number(heroEvent.current_yes_price || 0.5) * 100),
     change: '+৭%',
-    volume: formatVolumeBn(Number(heroMarket.total_volume || 0)),
+    volume: formatVolumeBn(Number(heroEvent.total_volume || 0)),
     chartData: Array.from({ length: 40 }, (_, j) => ({
       t: j,
-      v: Math.max(5, Math.min(95, Math.round(Number(heroMarket.yes_price || 0.5) * 100) + (Math.sin(j * 0.5) * 8))),
+      v: Math.max(5, Math.min(95, Math.round(Number(heroEvent.current_yes_price || 0.5) * 100) + (Math.sin(j * 0.5) * 8))),
     })),
     news: [
       { source: 'প্রথম আলো', time: '২ ঘণ্টা আগে', headline: 'বাজারে নতুন তথ্য প্রকাশ হয়েছে' },
       { source: 'ডেইলি স্টার', time: '৫ ঘণ্টা আগে', headline: 'বিশ্লেষকরা সম্ভাবনা পুনর্বিবেচনা করছেন' },
       { source: 'কালের কণ্ঠ', time: '১ দিন আগে', headline: 'সাম্প্রতিক ঘটনায় বাজার উত্তপ্ত' },
     ],
-    slug: heroMarket.slug || heroMarket.id,
+    slug: heroEvent.slug || heroEvent.id,
   } : null;
 
   return (

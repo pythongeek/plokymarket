@@ -6,7 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createPublicClient } from '@/lib/supabase/server';
 import { executeVerificationWorkflow } from '@/lib/workflows/UpstashOrchestrator';
 import { verifyQStashSignature } from '@/lib/qstash/verify';
 
@@ -40,7 +40,7 @@ async function verifyAuth(request: NextRequest): Promise<boolean> {
 // Fire and Forget - Process news workflow in background
 async function processNewsWorkflow(request: NextRequest) {
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
 
     // Find news events nearing deadline (within 12 hours)
     const { data: events, error } = await supabase

@@ -1,16 +1,41 @@
 import { createPublicClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
+import { jwtVerify } from 'jose';
 
 // POST /api/withdrawals/verify
 // Verify OTP and finalize the withdrawal request
+const JWT_SECRET = new TextEncoder().encode(
+  process.env.NEXT_PUBLIC_JWT_SECRET || 'P10kyM@rket.BD.2026.JWT.SECRET.XX'
+);
+
+async function getUserFromRequest(request: Request) {
+  const authHeader = request.headers.get('authorization');
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice(7);
+    try {
+      const { payload } = await jwtVerify(token, JWT_SECRET, { clockTolerance: 60 });
+      return { id: payload.sub as string, email: payload.email as string };
+    } catch { /* fall through */ }
+  }
+  const cookie = request.headers.get('cookie') || '';
+  const match = cookie.match(/sb-access-token=([^;]+)/);
+  const token = match ? decodeURIComponent(match[1]) : null;
+  if (!token) return null;
+  try {
+    const { payload } = await jwtVerify(token, JWT_SECRET, { clockTolerance: 60 });
+    return { id: payload.sub as string, email: payload.email as string };
+  } catch { return null; }
+}
+
+
 export async function POST(request: Request) {
     try {
         const supabase = await createPublicClient();
 
         // 1. Auth Check
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        const user = await getUserFromRequest(request);
 
-        if (authError || !user) {
+        if (!user) {
             return NextResponse.json(
                 { error: 'Authentication required' },
                 { status: 401 }

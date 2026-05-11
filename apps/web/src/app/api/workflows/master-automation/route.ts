@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server';
+import { createPublicClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { verifyQStashSignature } from '@/lib/upstash/workflows';
 
@@ -22,7 +22,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
         }
 
-        const supabase = await createClient();
+        const supabase = createPublicClient();
         const now = new Date();
         // Use Asia/Dhaka time for consistency
         const bdTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Dhaka' }));

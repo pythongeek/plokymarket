@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createPublicClient } from '@/lib/supabase/server';
 import { executeVerificationWorkflow } from '@/lib/workflows/UpstashOrchestrator';
 import { verifyQStashSignature } from '@/lib/qstash/verify';
 
@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
     }
 
-    const supabase = await createClient();
+    const supabase = createPublicClient();
 
     // Find sports events nearing deadline (within 6 hours for sports)
     const { data: events, error } = await supabase

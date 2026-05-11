@@ -4,37 +4,60 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createPublicClient } from '@/lib/supabase/server';
+import { jwtVerify } from 'jose';
 import { DEFAULT_WORKFLOWS } from '@/lib/workflows/WorkflowBuilder';
 
 /**
  * GET /api/workflows/[id]
  * Get specific workflow with execution history
  */
+const JWT_SECRET = new TextEncoder().encode(
+  process.env.NEXT_PUBLIC_JWT_SECRET || 'P10kyM@rket.BD.2026.JWT.SECRET.XX'
+);
+
+async function getUserFromRequest(request: Request) {
+  const authHeader = request.headers.get('authorization');
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice(7);
+    try {
+      const { payload } = await jwtVerify(token, JWT_SECRET, { clockTolerance: 60 });
+      return { id: payload.sub as string, email: payload.email as string };
+    } catch { /* fall through */ }
+  }
+  const cookie = request.headers.get('cookie') || '';
+  const match = cookie.match(/sb-access-token=([^;]+)/);
+  const token = match ? decodeURIComponent(match[1]) : null;
+  if (!token) return null;
+  try {
+    const { payload } = await jwtVerify(token, JWT_SECRET, { clockTolerance: 60 });
+    return { id: payload.sub as string, email: payload.email as string };
+  } catch { return null; }
+}
+
+
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id: workflowId } = await params;
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     const url = new URL(request.url);
     const historyLimit = parseInt(url.searchParams.get('historyLimit') || '20');
 
     // Authenticate
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    const user = await getUserFromRequest(request);
 
-    if (!session?.user) {
+    if (!profile) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Check admin
-    const { data: user, error: userError } = await supabase
+    const { data: profile, error: userError } = await supabase
       .from('user_profiles')
       .select('is_admin')
-      .eq('id', session.user.id)
+      .eq('id', user.id)
       .single();
 
-    if (userError || !user?.is_admin) {
+    if (userError || !profile?.is_admin) {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
     }
 
@@ -106,25 +129,23 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   try {
     const { id: workflowId } = await params;
     const body = await request.json();
-    const supabase = await createClient();
+    const supabase = createPublicClient();
 
     // Authenticate
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    const user = await getUserFromRequest(request);
 
-    if (!session?.user) {
+    if (!profile) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Check admin
-    const { data: user, error: userError } = await supabase
+    const { data: profile, error: userError } = await supabase
       .from('user_profiles')
       .select('is_admin')
-      .eq('id', session.user.id)
+      .eq('id', user.id)
       .single();
 
-    if (userError || !user?.is_admin) {
+    if (userError || !profile?.is_admin) {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
     }
 
@@ -139,7 +160,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     // Build update object
     const updates: Record<string, any> = {
       updated_at: new Date().toISOString(),
-      updated_by: session.user.id,
+      updated_by: user.id,
     };
 
     if (body.name) updates.name = body.name;
@@ -183,25 +204,23 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id: workflowId } = await params;
-    const supabase = await createClient();
+    const supabase = createPublicClient();
 
     // Authenticate
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    const user = await getUserFromRequest(request);
 
-    if (!session?.user) {
+    if (!profile) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Check admin
-    const { data: user, error: userError } = await supabase
+    const { data: profile, error: userError } = await supabase
       .from('user_profiles')
       .select('is_admin')
-      .eq('id', session.user.id)
+      .eq('id', user.id)
       .single();
 
-    if (userError || !user?.is_admin) {
+    if (userError || !profile?.is_admin) {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
     }
 

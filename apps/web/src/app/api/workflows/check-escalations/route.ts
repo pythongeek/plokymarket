@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createPublicClient } from '@/lib/supabase/server';
 import { verifyQStashSignature } from '@/lib/qstash/verify';
 
 export async function POST(request: NextRequest) {
@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
     }
 
-    const supabase = await createClient();
+    const supabase = createPublicClient();
 
     // Note: The workflow_executions table schema doesn't match what this endpoint expects
     // The table has: id, workflow_name, status, results, error_message, started_at, completed_at, duration_ms, created_at

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createPublicClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     const body: WebhookPayload = await request.json();
     const { event, market_id, data = {} } = body;
 
-    const supabase = await createClient();
+    const supabase = createPublicClient();
 
     switch (event) {
       case 'market_created': {

@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server';
+import { createPublicClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { verifyQStashSignature } from '@/lib/upstash/workflows';
 
@@ -14,7 +14,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
         }
 
-        const supabase = await createClient();
+        const supabase = createPublicClient();
         const results: Record<string, any> = { timestamp: new Date().toISOString(), tasks: [], errors: [] };
         const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `https://${process.env.VERCEL_URL}` || 'http://localhost:3000';
 
