@@ -40,7 +40,7 @@ async function checkAuthRateLimit(ip: string) {
 function isAuthPortal(pathname: string) { return pathname.includes(SECURE_PATHS.auth); }
 function isSecurePath(pathname: string) { return !isAuthPortal(pathname) && Object.values(SECURE_PATHS).some(p => pathname.includes(p)); }
 function isApiAdminPath(pathname: string) { return pathname.includes('/api/admin'); }
-function isAdminPath(pathname: string) { return pathname.includes('/admin'); }
+function isAdminPath(pathname: string) { return pathname === '/admin' || pathname.startsWith('/admin/'); }
 
 const intlMiddleware = createMiddleware({
   locales: ['bn', 'en', 'hi'],

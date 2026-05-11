@@ -6,6 +6,7 @@ import { getMessages } from 'next-intl/server';
 import { routing } from '@/i18n/routing';
 import { PWAInstallPrompt } from '@/components/pwa';
 import GoogleOAuthCallback from '@/components/auth/GoogleOAuthCallback';
+import { HeaderWrapper } from '@/components/layout/HeaderWrapper';
 
 export const metadata: Metadata = {
   title: 'Plokymarket - Prediction Marketplace',
@@ -101,6 +102,7 @@ export default async function RootLayout({
         <ClientProviders>
           <GoogleOAuthCallback />
           <NextIntlClientProvider messages={messages}>
+            <HeaderWrapper />
             {children}
           </NextIntlClientProvider>
         </ClientProviders>

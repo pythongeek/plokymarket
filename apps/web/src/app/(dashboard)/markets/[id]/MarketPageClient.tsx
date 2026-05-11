@@ -68,18 +68,22 @@ export function MarketPageClient({ initialMarket }: MarketPageClientProps) {
         categoryPauseStatus,
         subscribeToEmergencySettings,
         unsubscribeAll,
-        events
+        events,
+        fetchEventBySlug
     } = useMarketStore();
 
     const [resolvedMarket, setResolvedMarket] = useState<Market | null>(initialMarket || null);
     const [isLoading, setIsLoading] = useState(!initialMarket);
 
     // Use event from marketStore if available for real-time pause updates
-    const event = marketId ? events.get(marketId) : undefined;
+    // Try ID lookup first, then slug match for slug-based URLs
+    const event = marketId
+        ? events.get(marketId) || Array.from(events.values()).find((e) => e.slug === marketId)
+        : undefined;
     // Look up by market ID first, then by event_id (homepage links use event IDs)
     // Add null checks to prevent "Cannot read properties of undefined" errors
     const storeMarket = (event as unknown as Market) || (marketId && markets
-        ? markets.find((m) => m.id === marketId) || markets.find((m) => (m as any).event_id === marketId)
+        ? markets.find((m) => m.id === marketId) || markets.find((m) => (m as any).event_id === marketId) || markets.find((m) => (m as any).slug === marketId)
         : undefined);
 
     const market = storeMarket || resolvedMarket;
@@ -91,6 +95,7 @@ export function MarketPageClient({ initialMarket }: MarketPageClientProps) {
     }, [fetchMarkets, subscribeToEmergencySettings, unsubscribeAll]);
 
     // If store lookup fails, fetch from server API (bypasses RLS, supports event_id)
+    // Also try fetching event by slug for events without linked markets
     useEffect(() => {
         if (!marketId) { setIsLoading(false); return; }
         if (storeMarket || initialMarket) { setIsLoading(false); return; }
@@ -98,12 +103,21 @@ export function MarketPageClient({ initialMarket }: MarketPageClientProps) {
         let cancelled = false;
         const resolve = async () => {
             try {
+                // Try API market lookup first
                 const res = await fetch(`/api/markets/${marketId}`);
                 if (res.ok) {
                     const m = await res.json();
                     if (!cancelled && m && !m.error) {
                         setResolvedMarket(m as Market);
+                        setIsLoading(false);
+                        return;
                     }
+                }
+                // Fallback: fetch event by slug (for events without linked markets)
+                const eventData = await fetchEventBySlug(marketId);
+                if (!cancelled && eventData) {
+                    // Cast UnifiedEvent to Market for display
+                    setResolvedMarket(eventData as unknown as Market);
                 }
             } catch (err) {
                 console.error('Failed to resolve market:', err);
@@ -113,7 +127,7 @@ export function MarketPageClient({ initialMarket }: MarketPageClientProps) {
         };
         resolve();
         return () => { cancelled = true; };
-    }, [marketId, storeMarket, initialMarket]);
+    }, [marketId, storeMarket, initialMarket, fetchEventBySlug]);
 
     // Fetch orders using the resolved market ID
     useEffect(() => {

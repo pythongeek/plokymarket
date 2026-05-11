@@ -48,10 +48,21 @@ export function Navbar() {
   return (
     <nav className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 items-center justify-between gap-4">
-        {/* Logo */}
-        <Link href="/" className="flex items-center gap-2 flex-shrink-0">
-          <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-white font-bold text-xl">P</div>
-          <span className="text-xl font-bold font-display tracking-tight text-foreground hidden sm:block">Plokymarket</span>
+        {/* Logo with Bangladesh Flag */}
+        <Link href="/" className="flex items-center gap-2 flex-shrink-0 group">
+          <div className="relative w-9 h-9 rounded-lg overflow-hidden shadow-sm border border-border/50 group-hover:shadow-md transition-shadow">
+            <img
+              src="/bd-flag.png"
+              alt="Bangladesh"
+              className="w-full h-full object-cover"
+              width={36}
+              height={36}
+            />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-xl font-black font-display tracking-tight text-foreground leading-none">Plokymarket</span>
+            <span className="text-[9px] font-bold text-primary/80 uppercase tracking-[0.2em] leading-none mt-0.5 hidden sm:block">Bangladesh</span>
+          </div>
         </Link>
 
         {/* Center Desktop Navigation */}
