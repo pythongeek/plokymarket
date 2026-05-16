@@ -57,8 +57,23 @@ export default function SecureAuthPortal() {
     setSessionId(Math.random().toString(36).substring(2, 10).toUpperCase());
   }, []);
 
-  // Check for existing session
+  // Check for existing session — with redirect-loop breaker
   useEffect(() => {
+    const redirectCount = Number(sessionStorage.getItem('pm_auth_redirect_count') || '0');
+    const lastRedirect = Number(sessionStorage.getItem('pm_auth_redirect_time') || '0');
+    const now = Date.now();
+
+    // Reset counter if > 30s since last redirect
+    if (now - lastRedirect > 30000) {
+      sessionStorage.setItem('pm_auth_redirect_count', '0');
+    }
+
+    // If we've been redirected > 2 times in 30s, we're in a loop — stop
+    if (redirectCount >= 2) {
+      setError('Authentication loop detected. Please clear cookies and try again, or contact support.');
+      return;
+    }
+
     const checkSession = async () => {
       try {
         const resp = await fetchWithTimeout('/api/auth/session', {
@@ -68,6 +83,8 @@ export default function SecureAuthPortal() {
         if (resp.status === 200) {
           const data = await resp.json();
           if (data.user && (data.user.is_admin || data.user.is_super_admin)) {
+            sessionStorage.setItem('pm_auth_redirect_count', String(redirectCount + 1));
+            sessionStorage.setItem('pm_auth_redirect_time', String(now));
             router.replace(redirectTo);
           }
         }
@@ -169,6 +186,9 @@ export default function SecureAuthPortal() {
 
       console.log('Admin verified, level:', profile.is_super_admin ? 'super' : 'admin');
       console.log('Redirecting to:', redirectTo);
+      // Reset redirect loop counter on successful manual login
+      sessionStorage.removeItem('pm_auth_redirect_count');
+      sessionStorage.removeItem('pm_auth_redirect_time');
       router.replace(redirectTo);
 
     } catch (err: any) {

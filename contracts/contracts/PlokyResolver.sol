@@ -189,6 +189,9 @@ contract PlokyResolver is AccessControl, ReentrancyGuard, Pausable {
     event UMARequested(bytes32 indexed qId, bytes32 identifier, uint256 timestamp);
     event BondReturned(address indexed user, uint256 amount, string reason);
     event BondSeized(address indexed user, uint256 amount, string reason);
+    event AIThresholdChanged(uint256 old_, uint256 new_, address by);
+    event TreasuryChanged(address old_, address new_, address by);
+    event StuckTokensWithdrawn(address token, address to, uint256 amount);
 
     // ───────────────────────────────────────────────────────────────────────────────
     // CONSTRUCTOR
@@ -316,7 +319,7 @@ contract PlokyResolver is AccessControl, ReentrancyGuard, Pausable {
         require(plkyToken.transfer(msg.sender, amount), "Transfer failed");
     }
 
-    function slashResolver(address resolver, uint256 amount, string memory reason) public onlyRole(ARBITER_ROLE) {
+    function slashResolver(address resolver, uint256 amount, string memory reason) public nonReentrant onlyRole(ARBITER_ROLE) {
         ResolverProfile storage r = resolvers[resolver];
         require(r.stakedAmount > 0, "No stake to slash");
 
@@ -366,7 +369,8 @@ contract PlokyResolver is AccessControl, ReentrancyGuard, Pausable {
     ) external onlyRole(AI_ORACLE_ROLE) exists(qId) {
         require(confidenceScore <= MAX_REPUTATION, "Invalid confidence");
         require(bytes(analysisCID).length > 0, "No CID");
-        require(questions[qId].status == QStatus.AI_REVIEW || questions[qId].status == QStatus.OPEN, "Invalid status");
+        Question storage q = questions[qId];
+        require(q.status == QStatus.AI_REVIEW || q.status == QStatus.OPEN, "Invalid status");
 
         aiAnalyses[qId] = AIAnalysis({
             questionId: qId,
@@ -380,13 +384,13 @@ contract PlokyResolver is AccessControl, ReentrancyGuard, Pausable {
             biasScore: biasScore
         });
 
-        questions[qId].aiConfidenceScore = confidenceScore;
-        questions[qId].aiAnalysisCID = analysisCID;
+        q.aiConfidenceScore = confidenceScore;
+        q.aiAnalysisCID = analysisCID;
 
         emit AIAnalysisSubmitted(qId, confidenceScore, recommendedOutcome, analysisCID);
 
         // Auto-resolve if high confidence objective question
-        if (questions[qId].tier == QuestionTier.OBJECTIVE && confidenceScore >= aiConfidenceThreshold) {
+        if (q.tier == QuestionTier.OBJECTIVE && confidenceScore >= aiConfidenceThreshold) {
             _autoResolve(qId, recommendedOutcome, analysisCID);
         } else {
             // Advance to next step
@@ -492,8 +496,9 @@ contract PlokyResolver is AccessControl, ReentrancyGuard, Pausable {
     }
 
     function finalizeCommunityVote(bytes32 qId) external exists(qId) {
-        require(questions[qId].status == QStatus.COMMUNITY_VOTE, "Not in community vote");
-        require(block.timestamp >= questions[qId].createdAt + TIMELOCK_PERIOD, "Voting period active");
+        Question storage q = questions[qId];
+        require(q.status == QStatus.COMMUNITY_VOTE, "Not in community vote");
+        require(block.timestamp >= q.createdAt + TIMELOCK_PERIOD, "Voting period active");
 
         uint256 yesWeight = 0;
         uint256 noWeight = 0;
@@ -504,12 +509,12 @@ contract PlokyResolver is AccessControl, ReentrancyGuard, Pausable {
 
         emit CommunityVoteFinalized(qId, outcome, yesWeight, noWeight);
 
-        if (questions[qId].tier == QuestionTier.OBJECTIVE) {
+        if (q.tier == QuestionTier.OBJECTIVE) {
             _advanceEscalation(qId);
         } else {
             // Semi-subjective uses community vote as input to expert panel
-            questions[qId].status = QStatus.OPEN;
-            questions[qId].currentStep = EscalationStep.STEP3_EXPERT;
+            q.status = QStatus.OPEN;
+            q.currentStep = EscalationStep.STEP3_EXPERT;
         }
     }
 
@@ -593,7 +598,8 @@ contract PlokyResolver is AccessControl, ReentrancyGuard, Pausable {
         Question storage q = questions[qId];
         require(q.status == QStatus.TIMELOCK, "Not in timelock");
 
-        ProposedVerdict storage pv = proposals[q.activeProposalId];
+        bytes32 activePid = q.activeProposalId;
+        ProposedVerdict storage pv = proposals[activePid];
         require(block.timestamp >= pv.timelockEndsAt, "Timelock active");
         require(pv.totalWeight >= quorumThreshold * (MAX_REPUTATION / resolverCount), "Under quorum");
         require(!pv.executed, "Done");
@@ -606,10 +612,10 @@ contract PlokyResolver is AccessControl, ReentrancyGuard, Pausable {
         q.resolvedBy = msg.sender;
 
         // Update resolver stats
-        _updateResolverStats(q.activeProposalId);
+        _updateResolverStats(activePid);
 
         // Return bonds to successful resolvers
-        _returnVerdictBonds(q.activeProposalId);
+        _returnVerdictBonds(activePid);
 
         emit VerdictExecuted(qId, pv.outcome, pv.reasonCID, msg.sender, block.timestamp);
     }
@@ -686,7 +692,7 @@ contract PlokyResolver is AccessControl, ReentrancyGuard, Pausable {
     }
 
     function resolveDispute(bytes32 qId, uint256 idx, string calldata res, bool validDispute)
-        external onlyRole(ARBITER_ROLE)
+        external nonReentrant onlyRole(ARBITER_ROLE)
     {
         require(idx < disputes[qId].length, "Invalid index");
         Dispute storage d = disputes[qId][idx];
@@ -703,8 +709,9 @@ contract PlokyResolver is AccessControl, ReentrancyGuard, Pausable {
             emit BondReturned(d.disputer, reward, "Valid dispute");
 
             // Slash resolver if dispute is valid
-            if (questions[qId].status == QStatus.RESOLVED) {
-                address resolver = questions[qId].resolvedBy;
+            Question storage q = questions[qId];
+            if (q.status == QStatus.RESOLVED) {
+                address resolver = q.resolvedBy;
                 if (resolver != address(0) && resolvers[resolver].stakedAmount > 0) {
                     slashResolver(resolver, VERDICT_BOND / 2, "Valid dispute against resolution");
                 }
@@ -751,7 +758,7 @@ contract PlokyResolver is AccessControl, ReentrancyGuard, Pausable {
         emit UMARequested(qId, YES_OR_NO_IDENTIFIER, block.timestamp);
     }
 
-    function settleUMAResolution(bytes32 qId) external exists(qId) {
+    function settleUMAResolution(bytes32 qId) external nonReentrant exists(qId) {
         require(umaEnabled, "UMA not enabled");
         require(questions[qId].outcome == Outcome.AWAITING_UMA, "Not awaiting UMA");
 
@@ -797,12 +804,16 @@ contract PlokyResolver is AccessControl, ReentrancyGuard, Pausable {
 
     function setAIThreshold(uint256 threshold) external onlyRole(ADMIN_ROLE) {
         require(threshold <= MAX_REPUTATION, "Invalid threshold");
+        uint256 old_ = aiConfidenceThreshold;
         aiConfidenceThreshold = threshold;
+        emit AIThresholdChanged(old_, threshold, msg.sender);
     }
 
     function setTreasury(address _treasury) external onlyRole(ADMIN_ROLE) {
         require(_treasury != address(0), "Invalid address");
+        address old_ = treasury;
         treasury = _treasury;
+        emit TreasuryChanged(old_, _treasury, msg.sender);
     }
 
     function emergencyPause() external onlyRole(ADMIN_ROLE) {
@@ -815,6 +826,7 @@ contract PlokyResolver is AccessControl, ReentrancyGuard, Pausable {
 
     function withdrawStuckTokens(address token, uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(IERC20(token).transfer(msg.sender, amount), "Transfer failed");
+        emit StuckTokensWithdrawn(token, msg.sender, amount);
     }
 
     // ───────────────────────────────────────────────────────────────────────────────

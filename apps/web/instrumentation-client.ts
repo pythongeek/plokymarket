@@ -5,8 +5,9 @@ Sentry.init({
 
     // Adds request headers and IP for users
     sendDefaultPii: true,
-    tracesSampleRate: process.env.NODE_ENV === "development" ? 1.0 : 0.1,
-    enableLogs: true,
+    enabled: false, // DISABLED — performance overhead too high for Bangladesh users
+    tracesSampleRate: 0,
+    enableLogs: false,
 });
 
 export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;

@@ -22,7 +22,14 @@
         },
         {
             "parameters": {
-                "url": "https://en.prothomalo.com/feed"
+                "url": "https://en.prothomalo.com/feed",
+                "options": {
+                    "retry": {
+                        "limit": 3,
+                        "statusCodes": "429,500,502,503,504",
+                        "errorCodes": "ECONNRESET,ETIMEDOUT,ECONNREFUSED"
+                    }
+                }
             },
             "name": "Fetch RSS",
             "type": "n8n-nodes-base.httpRequest",
@@ -109,7 +116,7 @@
         {
             "parameters": {
                 "chatId": "YOUR_TELEGRAM_CHAT_ID",
-                "text": "🤖 *New Market Suggestion*\n\nQuestion: {{ $json.question }}\nConfidence: {{ $json.confidence }}\nSource: {{ $node[\"Filter & Split\"].json.link }}",
+                "text": "\ud83e\udd16 *New Market Suggestion*\n\nQuestion: {{ $json.question }}\nConfidence: {{ $json.confidence }}\nSource: {{ $node[\"Filter & Split\"].json.link }}",
                 "additionalFields": {
                     "parse_mode": "Markdown"
                 }
@@ -127,6 +134,50 @@
                     "name": "Telegram Account"
                 }
             }
+        },
+        {
+            "parameters": {},
+            "id": "error-trigger",
+            "name": "Error Trigger",
+            "type": "n8n-nodes-base.errorTrigger",
+            "typeVersion": 1,
+            "position": [
+                250,
+                500
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "={{ $env.ALERT_WEBHOOK_URL }}",
+                "sendBody": true,
+                "contentType": "json",
+                "body": {
+                    "embeds": [
+                        {
+                            "title": "[CRITICAL] n8n Workflow Failure",
+                            "description": "=Workflow: {{ $workflow.name }}\\nNode: {{ $json.error.node.name }}\\nError: {{ $json.error.message }}",
+                            "color": 15158332,
+                            "timestamp": "={{ $now }}"
+                        }
+                    ]
+                },
+                "options": {
+                    "retry": {
+                        "limit": 3,
+                        "statusCodes": "429,500,502,503,504",
+                        "errorCodes": "ECONNRESET,ETIMEDOUT,ECONNREFUSED"
+                    }
+                }
+            },
+            "id": "alert-webhook",
+            "name": "Send Alert",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4,
+            "position": [
+                470,
+                500
+            ]
         }
     ],
     "connections": {
@@ -184,6 +235,17 @@
                     },
                     {
                         "node": "Notify Telegram",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Error Trigger": {
+            "main": [
+                [
+                    {
+                        "node": "Send Alert",
                         "type": "main",
                         "index": 0
                     }

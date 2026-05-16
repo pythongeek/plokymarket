@@ -10,9 +10,11 @@ const SECURE_PATHS = {
 };
 
 const ALLOWED_ADMIN_IPS: string[] = process.env.ADMIN_IP_WHITELIST?.split(',') || [];
-const AUTH_RATE_LIMIT_WINDOW=3600
-const MAX_AUTH_ATTEMPTS=10
-const JWT_SECRET=process.env.JWT_SECRET || process.env.JWT_SECRET || 'P10kyM@rket.BD.2026.JWT.SECRET';
+const AUTH_RATE_LIMIT_WINDOW = Number(process.env.AUTH_RATE_LIMIT_WINDOW) || 300; // 5 min
+const MAX_AUTH_ATTEMPTS = Number(process.env.MAX_AUTH_ATTEMPTS) || 5;
+
+// MUST match login/route.ts and session/route.ts exactly
+const JWT_SECRET = process.env.JWT_SECRET || process.env.SUPABASE_JWT_SECRET || 'P10kyM@rket.BD.2026.JWT.SECRET';
 
 function getClientIp(request: NextRequest): string {
   const forwarded = request.headers.get('x-forwarded-for');
@@ -116,6 +118,7 @@ export async function middleware(request: NextRequest) {
       console.warn('JWT validation failed:', (jwtErr as Error).message);
       const authUrl = new URL(SECURE_PATHS.auth, request.url);
       authUrl.searchParams.set('redirect', pathname);
+      authUrl.searchParams.set('error', 'invalid_token');
       return NextResponse.redirect(authUrl);
     }
 

@@ -1,0 +1,27 @@
+/var/log/pm2/*.log {
+  daily
+  missingok
+  rotate 14
+  compress
+  delaycompress
+  notifempty
+  create 0644 root root
+  sharedscripts
+  postrotate
+    pm2 reloadLogs
+  endscript
+}
+
+/var/log/nginx/*.log {
+  daily
+  missingok
+  rotate 30
+  compress
+  delaycompress
+  notifempty
+  create 0644 www-data adm
+  sharedscripts
+  postrotate
+    [ -f /var/run/nginx.pid ] && kill -USR1 $(cat /var/run/nginx.pid)
+  endscript
+}

@@ -2,8 +2,8 @@
   "_format": "hh-sol-cache-2",
   "files": {
     "/root/workspace/plokymarket/contracts/contracts/PlokyResolver.sol": {
-      "lastModificationDate": 1778352135322,
-      "contentHash": "c9bf724f402c6246faa099f298c34cac",
+      "lastModificationDate": 1778855754976,
+      "contentHash": "1cdc51d5255dff528d17b5369ab0eaff",
       "sourceName": "contracts/PlokyResolver.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -549,8 +549,8 @@
       ]
     },
     "/root/workspace/plokymarket/contracts/contracts/PlokyResolverLite.sol": {
-      "lastModificationDate": 1778355193656,
-      "contentHash": "737e77453a4c4afe6c177b4ee6953910",
+      "lastModificationDate": 1778855773526,
+      "contentHash": "c314d62da90bd8de4ae9c52abd69c211",
       "sourceName": "contracts/PlokyResolverLite.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -579,6 +579,7 @@
       },
       "imports": [
         "@openzeppelin/contracts/access/AccessControl.sol",
+        "@openzeppelin/contracts/utils/ReentrancyGuard.sol",
         "@openzeppelin/contracts/token/ERC20/IERC20.sol"
       ],
       "versionPragmas": [

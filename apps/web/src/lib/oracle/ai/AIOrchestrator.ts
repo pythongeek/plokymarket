@@ -23,7 +23,7 @@ import { DeliberationAgent } from './agents/DeliberationAgent';
 import { ExplanationAgent } from './agents/ExplanationAgent';
 import { runOSINTAgent, osintToEvidence } from './agents/VertexOSINTAgent';
 
-import { CircuitBreaker, getGlobalCircuitBreaker } from './resilience/CircuitBreaker';
+import { CircuitBreakerCompat as CircuitBreaker, getGlobalCircuitBreaker } from './resilience/CircuitBreakerCompat';
 import { OracleCache, getGlobalCache, CACHE_KEYS } from './resilience/Cache';
 import { getRateLimiter } from './resilience/RateLimiter';
 

@@ -1,267 +1,454 @@
 {
-  "name": "Plokymarket Exchange Rate Update",
-  "nodes": [
-    {
-      "parameters": {
-        "rule": {
-          "interval": [
-            {
-              "field": "cronExpression",
-              "expression": "*/5 * * * *"
-            }
-          ]
-        }
-      },
-      "id": "schedule-trigger",
-      "name": "Schedule Trigger",
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.2,
-      "position": [250, 300],
-      "events": [
+    "name": "Plokymarket Exchange Rate Update",
+    "nodes": [
         {
-          "type": "scheduledTime",
-          "resetSchedule": false
-        }
-      ]
-    },
-    {
-      "parameters": {
-        "url": "=https://api.binance.com/api/v3/ticker/price?symbol=USDTBDT",
-        "options": {
-          "timeout": 10000
-        }
-      },
-      "id": "binance-price",
-      "name": "Binance P2P",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [470, 150]
-    },
-    {
-      "parameters": {
-        "url": "=https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=bdt",
-        "options": {
-          "timeout": 10000
-        }
-      },
-      "id": "coingecko-price",
-      "name": "CoinGecko",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [470, 300]
-    },
-    {
-      "parameters": {
-      "url": "=https://api.exchangerate-api.com/v4/latest/USDT",
-        "options": {
-          "timeout": 10000
-        }
-      },
-      "id": "exchange-rate-api",
-      "name": "Exchange Rate API",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [470, 450]
-    },
-    {
-      "parameters": {
-        "jsCode": "// Process exchange rate from Binance\nconst binanceData = $input.byIndex[0].json;\nconst coingeckoData = $input.byIndex[1].json;\nconst exchangeData = $input.byIndex[2].json;\n\n// Extract USDT/BDT rate from Binance\nlet binanceRate = null;\nif (binanceData && binanceData.price) {\n  binanceRate = parseFloat(binanceData.price);\n}\n\n// Extract from CoinGecko (tether -> bdt)\nlet coingeckoRate = null;\nif (coingeckoData && coingeckoData.tether && coingeckoData.tether.bdt) {\n  coingeckoRate = parseFloat(coingeckoData.tether.bdt);\n}\n\n// Extract from exchange rate API\nlet apiRate = null;\nif (exchangeData && exchangeData.rates && exchangeData.rates.BDT) {\n  apiRate = parseFloat(exchangeData.rates.BDT);\n}\n\n// Use Binance as primary (most reliable for BD), fallback chain\nlet baseRate = binanceRate || coingeckoRate || apiRate;\n\nif (!baseRate) {\n  // Ultimate fallback to last known good rate\n  baseRate = 122.50;\n}\n\n// Apply 1.5% platform margin for P2P/selling\nconst platformMargin = 0.015;\nconst sellRate = Math.round(baseRate * (1 + platformMargin) * 100) / 100;\nconst buyRate = Math.round(baseRate * (1 - platformMargin * 0.5) * 100) / 100;\n\nreturn {\n  json: {\n    baseRate,\n    sellRate,\n    buyRate,\n    source: binanceRate ? 'binance' : (coingeckoRate ? 'coingecko' : 'exchange_rate_api'),\n    timestamp: new Date().toISOString()\n  }\n};"
-      },
-      "id": "process-rates",
-      "name": "Process Rates",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [690, 300]
-    },
-    {
-      "parameters": {
-        "jsCode": "// Check if rate changed significantly from last record\nconst currentRate = $input.first().json;\n\n// Query last exchange rate\nreturn {\n  json: {\n    checkQuery: `\n      SELECT rate_bdt, created_at\n      FROM exchange_rates\n      ORDER BY created_at DESC\n      LIMIT 1\n    `,\n    currentRate: currentRate.baseRate,\n    sellRate: currentRate.sellRate,\n    buyRate: currentRate.buyRate,\n    source: currentRate.source\n  }\n};"
-      },
-      "id": "check-change",
-      "name": "Check Rate Change",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [910, 300]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $env.SUPABASE_URL }}/rest/v1/rpc/execute_sql",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "apikey",
-              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            "parameters": {
+                "rule": {
+                    "interval": [
+                        {
+                            "field": "cronExpression",
+                            "expression": "*/5 * * * *"
+                        }
+                    ]
+                }
             },
-            {
-              "name": "Authorization",
-              "value": "Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            },
-            {
-              "name": "Prefer",
-              "value": "return=representation"
-            }
-          ]
+            "id": "schedule-trigger",
+            "name": "Schedule Trigger",
+            "type": "n8n-nodes-base.scheduleTrigger",
+            "typeVersion": 1.2,
+            "position": [
+                250,
+                300
+            ],
+            "events": [
+                {
+                    "type": "scheduledTime",
+                    "resetSchedule": false
+                }
+            ]
         },
-        "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "sql",
-              "value": "={{ $json.checkQuery }}"
-            }
-          ]
-        },
-        "options": {}
-      },
-      "id": "query-last-rate",
-      "name": "Get Last Rate",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [1130, 300]
-    },
-    {
-      "parameters": {
-        "jsCode": "// Determine if we should insert new rate\nconst lastRecord = $input.first().json;\nconst lastRate = lastRecord && lastRecord.length > 0 ? lastRecord[0].rate_bdt : null;\nconst currentRate = $input.first().json.currentRate;\n\n// Insert if no previous rate or changed by > 0.5%\nconst threshold = 0.005;\nconst shouldInsert = !lastRate || Math.abs(currentRate - lastRate) / lastRate > threshold;\n\nreturn {\n  json: {\n    shouldInsert,\n    lastRate,\n    currentRate,\n    sellRate: $input.first().json.sellRate,\n    buyRate: $input.first().json.buyRate,\n    source: $input.first().json.source\n  }\n};"
-      },
-      "id": "decide-insert",
-      "name": "Decide Insert",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1350, 300]
-    },
-    {
-      "parameters": {
-        "jsCode": "// Only output if shouldInsert is true\nconst data = $input.first().json;\nif (data.shouldInsert) {\n  return {\n    json: {\n      insertQuery: `\n        INSERT INTO exchange_rates (rate_bdt, source, created_at)\n        VALUES (${data.currentRate}, '${data.source}', NOW())\n      `\n    }\n  };\n}\nreturn {\n  json: {\n    skip: true,\n    reason: 'Rate unchanged or no significant change'\n  }\n};"
-      },
-      "id": "prepare-insert",
-      "name": "Prepare Insert",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1570, 300]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $env.SUPABASE_URL }}/rest/v1/rpc/execute_sql",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "apikey",
-              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+        {
+            "parameters": {
+                "url": "=https://api.binance.com/api/v3/ticker/price?symbol=USDTBDT",
+                "options": {
+                    "timeout": 10000,
+                    "retry": {
+                        "limit": 3,
+                        "statusCodes": "429,500,502,503,504",
+                        "errorCodes": "ECONNRESET,ETIMEDOUT,ECONNREFUSED"
+                    }
+                }
             },
-            {
-              "name": "Authorization",
-              "value": "Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            },
-            {
-              "name": "Prefer",
-              "value": "return=minimal"
-            }
-          ]
+            "id": "binance-price",
+            "name": "Binance P2P",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                470,
+                150
+            ]
         },
-        "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "sql",
-              "value": "={{ $json.insertQuery }}"
-            }
-          ]
+        {
+            "parameters": {
+                "url": "=https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=bdt",
+                "options": {
+                    "timeout": 10000,
+                    "retry": {
+                        "limit": 3,
+                        "statusCodes": "429,500,502,503,504",
+                        "errorCodes": "ECONNRESET,ETIMEDOUT,ECONNREFUSED"
+                    }
+                }
+            },
+            "id": "coingecko-price",
+            "name": "CoinGecko",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                470,
+                300
+            ]
         },
-        "options": {}
-      },
-      "id": "insert-rate",
-      "name": "Insert Rate",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [1790, 300]
+        {
+            "parameters": {
+                "url": "=https://api.exchangerate-api.com/v4/latest/USDT",
+                "options": {
+                    "timeout": 10000,
+                    "retry": {
+                        "limit": 3,
+                        "statusCodes": "429,500,502,503,504",
+                        "errorCodes": "ECONNRESET,ETIMEDOUT,ECONNREFUSED"
+                    }
+                }
+            },
+            "id": "exchange-rate-api",
+            "name": "Exchange Rate API",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                470,
+                450
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "// Process exchange rate from Binance\nconst binanceData = $input.byIndex[0].json;\nconst coingeckoData = $input.byIndex[1].json;\nconst exchangeData = $input.byIndex[2].json;\n\n// Extract USDT/BDT rate from Binance\nlet binanceRate = null;\nif (binanceData && binanceData.price) {\n  binanceRate = parseFloat(binanceData.price);\n}\n\n// Extract from CoinGecko (tether -> bdt)\nlet coingeckoRate = null;\nif (coingeckoData && coingeckoData.tether && coingeckoData.tether.bdt) {\n  coingeckoRate = parseFloat(coingeckoData.tether.bdt);\n}\n\n// Extract from exchange rate API\nlet apiRate = null;\nif (exchangeData && exchangeData.rates && exchangeData.rates.BDT) {\n  apiRate = parseFloat(exchangeData.rates.BDT);\n}\n\n// Use Binance as primary (most reliable for BD), fallback chain\nlet baseRate = binanceRate || coingeckoRate || apiRate;\n\nif (!baseRate) {\n  // Ultimate fallback to last known good rate\n  baseRate = 122.50;\n}\n\n// Apply 1.5% platform margin for P2P/selling\nconst platformMargin = 0.015;\nconst sellRate = Math.round(baseRate * (1 + platformMargin) * 100) / 100;\nconst buyRate = Math.round(baseRate * (1 - platformMargin * 0.5) * 100) / 100;\n\nreturn {\n  json: {\n    baseRate,\n    sellRate,\n    buyRate,\n    source: binanceRate ? 'binance' : (coingeckoRate ? 'coingecko' : 'exchange_rate_api'),\n    timestamp: new Date().toISOString()\n  }\n};"
+            },
+            "id": "process-rates",
+            "name": "Process Rates",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                690,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "// Check if rate changed significantly from last record\nconst currentRate = $input.first().json;\n\n// Query last exchange rate\nreturn {\n  json: {\n    checkQuery: `\n      SELECT rate_bdt, created_at\n      FROM exchange_rates\n      ORDER BY created_at DESC\n      LIMIT 1\n    `,\n    currentRate: currentRate.baseRate,\n    sellRate: currentRate.sellRate,\n    buyRate: currentRate.buyRate,\n    source: currentRate.source\n  }\n};"
+            },
+            "id": "check-change",
+            "name": "Check Rate Change",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                910,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "={{ $env.SUPABASE_URL }}/rest/v1/rpc/execute_sql",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "apikey",
+                            "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+                        },
+                        {
+                            "name": "Authorization",
+                            "value": "Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+                        },
+                        {
+                            "name": "Content-Type",
+                            "value": "application/json"
+                        },
+                        {
+                            "name": "Prefer",
+                            "value": "return=representation"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "name": "sql",
+                            "value": "={{ $json.checkQuery }}"
+                        }
+                    ]
+                },
+                "options": {
+                    "retry": {
+                        "limit": 3,
+                        "statusCodes": "429,500,502,503,504",
+                        "errorCodes": "ECONNRESET,ETIMEDOUT,ECONNREFUSED"
+                    }
+                }
+            },
+            "id": "query-last-rate",
+            "name": "Get Last Rate",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                1130,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "// Determine if we should insert new rate\nconst lastRecord = $input.first().json;\nconst lastRate = lastRecord && lastRecord.length > 0 ? lastRecord[0].rate_bdt : null;\nconst currentRate = $input.first().json.currentRate;\n\n// Insert if no previous rate or changed by > 0.5%\nconst threshold = 0.005;\nconst shouldInsert = !lastRate || Math.abs(currentRate - lastRate) / lastRate > threshold;\n\nreturn {\n  json: {\n    shouldInsert,\n    lastRate,\n    currentRate,\n    sellRate: $input.first().json.sellRate,\n    buyRate: $input.first().json.buyRate,\n    source: $input.first().json.source\n  }\n};"
+            },
+            "id": "decide-insert",
+            "name": "Decide Insert",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                1350,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "// Only output if shouldInsert is true\nconst data = $input.first().json;\nif (data.shouldInsert) {\n  return {\n    json: {\n      insertQuery: `\n        INSERT INTO exchange_rates (rate_bdt, source, created_at)\n        VALUES (${data.currentRate}, '${data.source}', NOW())\n      `\n    }\n  };\n}\nreturn {\n  json: {\n    skip: true,\n    reason: 'Rate unchanged or no significant change'\n  }\n};"
+            },
+            "id": "prepare-insert",
+            "name": "Prepare Insert",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                1570,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "={{ $env.SUPABASE_URL }}/rest/v1/rpc/execute_sql",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "apikey",
+                            "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+                        },
+                        {
+                            "name": "Authorization",
+                            "value": "Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+                        },
+                        {
+                            "name": "Content-Type",
+                            "value": "application/json"
+                        },
+                        {
+                            "name": "Prefer",
+                            "value": "return=minimal"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "name": "sql",
+                            "value": "={{ $json.insertQuery }}"
+                        }
+                    ]
+                },
+                "options": {
+                    "retry": {
+                        "limit": 3,
+                        "statusCodes": "429,500,502,503,504",
+                        "errorCodes": "ECONNRESET,ETIMEDOUT,ECONNREFUSED"
+                    }
+                }
+            },
+            "id": "insert-rate",
+            "name": "Insert Rate",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                1790,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "// Final result\nconst data = $input.first().json;\nreturn {\n  json: {\n    success: true,\n    rate_updated: !data.skip,\n    rate_bdt: data.currentRate,\n    sell_rate: data.sellRate,\n    buy_rate: data.buyRate,\n    source: data.source,\n    timestamp: new Date().toISOString()\n  }\n};"
+            },
+            "id": "final-result",
+            "name": "Result",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                2010,
+                300
+            ]
+        },
+        {
+            "parameters": {},
+            "id": "error-trigger",
+            "name": "Error Trigger",
+            "type": "n8n-nodes-base.errorTrigger",
+            "typeVersion": 1,
+            "position": [
+                250,
+                500
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "={{ $env.ALERT_WEBHOOK_URL }}",
+                "sendBody": true,
+                "contentType": "json",
+                "body": {
+                    "embeds": [
+                        {
+                            "title": "[CRITICAL] n8n Workflow Failure",
+                            "description": "=Workflow: {{ $workflow.name }}\\nNode: {{ $json.error.node.name }}\\nError: {{ $json.error.message }}",
+                            "color": 15158332,
+                            "timestamp": "={{ $now }}"
+                        }
+                    ]
+                },
+                "options": {
+                    "retry": {
+                        "limit": 3,
+                        "statusCodes": "429,500,502,503,504",
+                        "errorCodes": "ECONNRESET,ETIMEDOUT,ECONNREFUSED"
+                    }
+                }
+            },
+            "id": "alert-webhook",
+            "name": "Send Alert",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4,
+            "position": [
+                470,
+                500
+            ]
+        }
+    ],
+    "connections": {
+        "Schedule Trigger": {
+            "main": [
+                [
+                    {
+                        "node": "Binance P2P",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "CoinGecko",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Exchange Rate API",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Binance P2P": {
+            "main": [
+                [
+                    {
+                        "node": "Process Rates",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "CoinGecko": {
+            "main": [
+                [
+                    {
+                        "node": "Process Rates",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Exchange Rate API": {
+            "main": [
+                [
+                    {
+                        "node": "Process Rates",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Process Rates": {
+            "main": [
+                [
+                    {
+                        "node": "Check Rate Change",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Check Rate Change": {
+            "main": [
+                [
+                    {
+                        "node": "Get Last Rate",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Get Last Rate": {
+            "main": [
+                [
+                    {
+                        "node": "Decide Insert",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Decide Insert": {
+            "main": [
+                [
+                    {
+                        "node": "Prepare Insert",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Prepare Insert": {
+            "main": [
+                [
+                    {
+                        "node": "Insert Rate",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Insert Rate": {
+            "main": [
+                [
+                    {
+                        "node": "Result",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Error Trigger": {
+            "main": [
+                [
+                    {
+                        "node": "Send Alert",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
     },
-    {
-      "parameters": {
-        "jsCode": "// Final result\nconst data = $input.first().json;\nreturn {\n  json: {\n    success: true,\n    rate_updated: !data.skip,\n    rate_bdt: data.currentRate,\n    sell_rate: data.sellRate,\n    buy_rate: data.buyRate,\n    source: data.source,\n    timestamp: new Date().toISOString()\n  }\n};"
-      },
-      "id": "final-result",
-      "name": "Result",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [2010, 300]
-    }
-  ],
-  "connections": {
-    "Schedule Trigger": {
-      "main": [
-        [
-          { "node": "Binance P2P", "type": "main", "index": 0 },
-          { "node": "CoinGecko", "type": "main", "index": 0 },
-          { "node": "Exchange Rate API", "type": "main", "index": 0 }
-        ]
-      ]
+    "settings": {
+        "executionOrder": "v1",
+        "saveManualExecutions": true,
+        "callerPolicy": "workflowsFromSameOwner"
     },
-    "Binance P2P": {
-      "main": [
-        [{ "node": "Process Rates", "type": "main", "index": 0 }]
-      ]
-    },
-    "CoinGecko": {
-      "main": [
-        [{ "node": "Process Rates", "type": "main", "index": 0 }]
-      ]
-    },
-    "Exchange Rate API": {
-      "main": [
-        [{ "node": "Process Rates", "type": "main", "index": 0 }]
-      ]
-    },
-    "Process Rates": {
-      "main": [
-        [{ "node": "Check Rate Change", "type": "main", "index": 0 }]
-      ]
-    },
-    "Check Rate Change": {
-      "main": [
-        [{ "node": "Get Last Rate", "type": "main", "index": 0 }]
-      ]
-    },
-    "Get Last Rate": {
-      "main": [
-        [{ "node": "Decide Insert", "type": "main", "index": 0 }]
-      ]
-    },
-    "Decide Insert": {
-      "main": [
-        [{ "node": "Prepare Insert", "type": "main", "index": 0 }]
-      ]
-    },
-    "Prepare Insert": {
-      "main": [
-        [{ "node": "Insert Rate", "type": "main", "index": 0 }]
-      ]
-    },
-    "Insert Rate": {
-      "main": [
-        [{ "node": "Result", "type": "main", "index": 0 }]
-      ]
-    }
-  },
-  "settings": {
-    "executionOrder": "v1",
-    "saveManualExecutions": true,
-    "callerPolicy": "workflowsFromSameOwner"
-  },
-  "staticData": null,
-  "tags": [
-    { "name": "plokymarket", "id": "tag-plokymarket" },
-    { "name": "exchange-rate", "id": "tag-exchange-rate" }
-  ]
+    "staticData": null,
+    "tags": [
+        {
+            "name": "plokymarket",
+            "id": "tag-plokymarket"
+        },
+        {
+            "name": "exchange-rate",
+            "id": "tag-exchange-rate"
+        }
+    ]
 }

@@ -1,0 +1,32 @@
+### Phase 1 Confirmation Report
+
+- **Goal Status:** Success
+- **Files Modified:**
+  - `src/lib/ai/ai-router.ts` (NEW) — Strict AI router enforcing MiniMax→Oracle/Assistant, Vertex→KYC
+  - `src/lib/upstash/rateLimit.ts` (MODIFIED) — Added `checkKYCRateLimit`, `checkOracleRateLimit`, `checkAssistantRateLimit`
+  - `src/lib/ai/ai-router.test.ts` (NEW) — 8 intent-based tests
+- **Routing Verified:** Yes
+  - MiniMax handles: `oracle_resolution`, `market_analysis`, `user_assistant`
+  - Vertex handles: `kyc_verification` ONLY
+  - Fallback: MiniMax 5xx/timeout → Vertex (logged as `ORACLE_FALLBACK_TRIGGERED`)
+- **Fallback Verified:** Yes
+  - Test C confirmed: 502 error triggers Vertex fallback
+  - Test G confirmed: 401 error does NOT trigger fallback (fail loud)
+- **Rate Limits Applied:**
+  - KYC Verification: Max 3 requests per IP per 10 minutes
+  - Oracle Resolution: Max 10 requests per Market ID per 5 minutes
+  - AI Assistant: Max 20 requests per User ID per 1 minute
+  - All return HTTP 429 with `Retry-After` header
+- **Tests Passing:** 8/8 tests passed
+  - Test A: Oracle routes ONLY to MiniMax
+  - Test B: KYC routes ONLY to Vertex
+  - Test C: MiniMax 5xx triggers Vertex fallback
+  - Test D: KYC rate limit 429
+  - Test E: Oracle rate limit per-market
+  - Test F: Assistant rate limit per-user
+  - Test G: 4xx does NOT trigger fallback
+  - Test H: Health check returns both providers
+- **Anomalies/Conflicts Surfaced:**
+  - Existing `orchestrator.ts` uses Kimi as fallback — this contradicts the target architecture (MiniMax primary, Vertex fallback). `ai-router.ts` replaces this pattern. The old orchestrator should be deprecated.
+  - Pre-existing type errors in admin components (11 errors) unrelated to Module D.
+  - `Map` iteration TS errors in `rateLimit.ts` pre-exist (downlevelIteration flag issue).

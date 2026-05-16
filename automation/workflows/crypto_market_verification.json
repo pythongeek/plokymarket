@@ -1,216 +1,470 @@
 {
-  "name": "Plokymarket Crypto Market Verification",
-  "nodes": [
-    {
-      "parameters": {
-        "rule": {
-          "interval": [
-            {
-              "field": "cronExpression",
-              "expression": "*/5 * * * *"
-            }
-          ]
-        }
-      },
-      "id": "schedule-trigger",
-      "name": "Schedule Trigger",
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.2,
-      "position": [250, 300],
-      "events": [
+    "name": "Plokymarket Crypto Market Verification",
+    "nodes": [
         {
-          "type": "scheduledTime",
-          "resetSchedule": false
-        }
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "// Query crypto markets closing within 24 hours\nreturn {\n  json: {\n    query: `\n      SELECT m.id, m.question, m.category, m.trading_closes_at,\n             m.status, m.yes_price, m.no_price,\n             m.resolution_source, m.resolution_source_type\n      FROM markets m\n      WHERE m.status = 'active'\n        AND m.category IN ('Crypto', 'Bitcoin', 'Ethereum', 'Price')\n        AND m.trading_closes_at <= NOW() + INTERVAL '24 hours'\n        AND m.trading_closes_at > NOW()\n        AND (m.resolution_source_type = 'CRYPTO_API' OR m.resolution_source_type IS NULL)\n      ORDER BY m.trading_closes_at ASC\n      LIMIT 10\n    `\n  }\n};"
-      },
-      "id": "prepare-query",
-      "name": "Prepare Query",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [470, 300]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $env.SUPABASE_URL }}/rest/v1/rpc/execute_sql",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "apikey",
-              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            "parameters": {
+                "rule": {
+                    "interval": [
+                        {
+                            "field": "cronExpression",
+                            "expression": "*/5 * * * *"
+                        }
+                    ]
+                }
             },
-            {
-              "name": "Authorization",
-              "value": "Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            },
-            {
-              "name": "Prefer",
-              "value": "return=representation"
-            }
-          ]
+            "id": "schedule-trigger",
+            "name": "Schedule Trigger",
+            "type": "n8n-nodes-base.scheduleTrigger",
+            "typeVersion": 1.2,
+            "position": [
+                250,
+                300
+            ],
+            "events": [
+                {
+                    "type": "scheduledTime",
+                    "resetSchedule": false
+                }
+            ]
         },
-        "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "sql",
-              "value": "={{ $json.query }}"
-            }
-          ]
+        {
+            "parameters": {
+                "jsCode": "// Query crypto markets closing within 24 hours\nreturn {\n  json: {\n    query: `\n      SELECT m.id, m.question, m.category, m.trading_closes_at,\n             m.status, m.yes_price, m.no_price,\n             m.resolution_source, m.resolution_source_type\n      FROM markets m\n      WHERE m.status = 'active'\n        AND m.category IN ('Crypto', 'Bitcoin', 'Ethereum', 'Price')\n        AND m.trading_closes_at <= NOW() + INTERVAL '24 hours'\n        AND m.trading_closes_at > NOW()\n        AND (m.resolution_source_type = 'CRYPTO_API' OR m.resolution_source_type IS NULL)\n      ORDER BY m.trading_closes_at ASC\n      LIMIT 10\n    `\n  }\n};"
+            },
+            "id": "prepare-query",
+            "name": "Prepare Query",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                470,
+                300
+            ]
         },
-        "options": {}
-      },
-      "id": "query-markets",
-      "name": "Query Crypto Markets",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [690, 300]
-    },
-    {
-      "parameters": {
-        "jsCode": "// Extract markets and prepare CoinGecko queries\nconst response = $input.first().json;\nconst markets = Array.isArray(response) ? response : [response].filter(Boolean);\n\n// Extract crypto symbols from questions\nconst cryptoMap = {\n  'bitcoin': 'bitcoin',\n  'btc': 'bitcoin',\n  'ethereum': 'ethereum',\n  'eth': 'ethereum',\n  'tether': 'tether',\n  'usdt': 'tether',\n  'bnb': 'binancecoin',\n  'sol': 'solana',\n  'xrp': 'ripple',\n  'cardano': 'cardano',\n  'ada': 'cardano',\n  'dogecoin': 'dogecoin',\n  'doge': 'dogecoin'\n};\n\nconst prepared = markets.map(m => {\n  const questionLower = m.question.toLowerCase();\n  let coinId = 'bitcoin'; // default\n\n  for (const [keyword, id] of Object.entries(cryptoMap)) {\n    if (questionLower.includes(keyword)) {\n      coinId = id;\n      break;\n    }\n  }\n\n  return {\n    json: {\n      market_id: m.id,\n      question: m.question,\n      coin_id: coinId,\n      yes_price: m.yes_price,\n      no_price: m.no_price\n    }\n  };\n});\n\nreturn prepared;\n"
-      },
-      "id": "extract-markets",
-      "name": "Extract Markets",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [910, 300]
-    },
-    {
-      "parameters": {
-        "batchSize": 1,
-        "options": {}
-      },
-      "id": "split-batch",
-      "name": "Split in Batches",
-      "type": "n8n-nodes-base.splitInBatches",
-      "typeVersion": 2,
-      "position": [1130, 300]
-    },
-    {
-      "parameters": {
-        "url": "=https://api.coingecko.com/api/v33/simple/price?ids={{ $json.coin_id }}&vs_currencies=usd&include_24hr_change=true",
-        "options": {
-          "timeout": 10000
-        }
-      },
-      "id": "coingecko-price",
-      "name": "CoinGecko Price",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [1350, 300]
-    },
-    {
-      "parameters": {
-        "url": "=https://api.binance.com/api/v3/ticker/price?symbol={{ $json.coin_id === 'bitcoin' ? 'BTCUSDT' : $json.coin_id === 'ethereum' ? 'ETHUSDT' : 'BTCUSDT' }}",
-        "options": {
-          "timeout": 10000
-        }
-      },
-      "id": "binance-price",
-      "name": "Binance Price",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [1350, 500]
-    },
-    {
-      "parameters": {
-        "jsCode": "// Combine price data\nconst coinGeckoData = $input.byIndex[0].json;\nconst binanceData = $input.byIndex[1].json;\n\nconst coinId = $input.first().json.coin_id;\nconst market = $input.first().json;\n\n// Get price from CoinGecko\nlet cgPrice = null;\nlet cgChange24h = null;\nif (coinGeckoData && coinGeckoData[coinId]) {\n  cgPrice = coinGeckoData[coinId].usd;\n  cgChange24h = coinGeckoData[coinId].usd_24h_change;\n}\n\n// Get price from Binance\nlet binancePrice = null;\nif (binanceData && binanceData.price) {\n  binancePrice = parseFloat(binanceData.price);\n}\n\n// Use CoinGecko as primary\nconst currentPrice = cgPrice || binancePrice;\nconst priceSource = cgPrice ? 'coingecko' : 'binance';\n\nreturn {\n  json: {\n    market_id: market.market_id,\n    question: market.question,\n    coin_id: coinId,\n    current_price: currentPrice,\n    price_24h_change: cgChange24h,\n    price_source: priceSource,\n    binance_price: binancePrice,\n    timestamp: new Date().toISOString()\n  }\n};"
-      },
-      "id": "combine-prices",
-      "name": "Combine Prices",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1570, 400]
-    },
-    {
-      "parameters": {
-        "jsCode": "// Analyze crypto market outcome\nconst data = $input.first().json;\nconst question = data.question.toLowerCase();\n\n// Extract target price from question (e.g., \"Will BTC be above $100000\")\nconst priceMatch = question.match(/\\$?(\\d+(?:,\\d+)*\\.?\\d*)/);\nconst targetPrice = priceMatch ? parseFloat(priceMatch[1].replace(/,/g, '')) : null;\n\nlet outcome = 'UNCERTAIN';\nlet confidence = 30;\n\nif (targetPrice && data.current_price) {\n  const current = data.current_price;\n\n  // Check if above or below target\n  if (question.includes('above') || question.includes('higher') || question.includes('exceed')) {\n    if (current > targetPrice) {\n      outcome = 'YES';\n      confidence = 95;\n    } else if (current < targetPrice * 0.95) {\n      outcome = 'NO';\n      confidence = 95;\n    } else {\n      // Within 5% - uncertain\n      confidence = 60;\n    }\n  } else if (question.includes('below') || question.includes('lower') || question.includes('drop')) {\n    if (current < targetPrice) {\n      outcome = 'YES';\n      confidence = 95;\n    } else if (current > targetPrice * 1.05) {\n      outcome = 'NO';\n      confidence = 95;\n    } else {\n      confidence = 60;\n    }\n  }\n\n  // Also check 24h change if relevant\n  if (question.includes('24h') || question.includes('today')) {\n    const change24h = data.price_24h_change || 0;\n    if (question.includes('rise') || question.includes('gain') || question.includes('up')) {\n      if (change24h > 1) {\n        outcome = 'YES';\n        confidence = 80;\n      } else if (change24h < -1) {\n        outcome = 'NO';\n        confidence = 80;\n      }\n    } else if (question.includes('fall') || question.includes('lose') || question.includes('down')) {\n      if (change24h < -1) {\n        outcome = 'YES';\n        confidence = 80;\n      } else if (change24h > 1) {\n        outcome = 'NO';\n        confidence = 80;\n      }\n    }\n  }\n}\n\nreturn {\n  json: {\n    ...data,\n    target_price: targetPrice,\n    outcome,\n    confidence,\n    should_trigger_resolution: confidence >= 90 && outcome !== 'UNCERTAIN'\n  }\n};"
-      },
-      "id": "analyze-outcome",
-      "name": "Analyze Outcome",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1790, 400]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $env.N8N_WEBHOOK_URL }}/webhook/plokymarket-batch-resolution",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "={{ $env.SUPABASE_URL }}/rest/v1/rpc/execute_sql",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "apikey",
+                            "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+                        },
+                        {
+                            "name": "Authorization",
+                            "value": "Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+                        },
+                        {
+                            "name": "Content-Type",
+                            "value": "application/json"
+                        },
+                        {
+                            "name": "Prefer",
+                            "value": "return=representation"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "name": "sql",
+                            "value": "={{ $json.query }}"
+                        }
+                    ]
+                },
+                "options": {
+                    "retry": {
+                        "limit": 3,
+                        "statusCodes": "429,500,502,503,504",
+                        "errorCodes": "ECONNRESET,ETIMEDOUT,ECONNREFUSED"
+                    }
+                }
             },
-            {
-              "name": "x-n8n-api-key",
-              "value": "={{ $env.N8N_API_KEY }}"
-            }
-          ]
+            "id": "query-markets",
+            "name": "Query Crypto Markets",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                690,
+                300
+            ]
         },
-        "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "market_id",
-              "value": "={{ $json.market_id }}"
+        {
+            "parameters": {
+                "jsCode": "// Extract markets and prepare CoinGecko queries\nconst response = $input.first().json;\nconst markets = Array.isArray(response) ? response : [response].filter(Boolean);\n\n// Extract crypto symbols from questions\nconst cryptoMap = {\n  'bitcoin': 'bitcoin',\n  'btc': 'bitcoin',\n  'ethereum': 'ethereum',\n  'eth': 'ethereum',\n  'tether': 'tether',\n  'usdt': 'tether',\n  'bnb': 'binancecoin',\n  'sol': 'solana',\n  'xrp': 'ripple',\n  'cardano': 'cardano',\n  'ada': 'cardano',\n  'dogecoin': 'dogecoin',\n  'doge': 'dogecoin'\n};\n\nconst prepared = markets.map(m => {\n  const questionLower = m.question.toLowerCase();\n  let coinId = 'bitcoin'; // default\n\n  for (const [keyword, id] of Object.entries(cryptoMap)) {\n    if (questionLower.includes(keyword)) {\n      coinId = id;\n      break;\n    }\n  }\n\n  return {\n    json: {\n      market_id: m.id,\n      question: m.question,\n      coin_id: coinId,\n      yes_price: m.yes_price,\n      no_price: m.no_price\n    }\n  };\n});\n\nreturn prepared;\n"
             },
-            {
-              "name": "question",
-              "value": "={{ $json.question }}"
-            },
-            {
-              "name": "category",
-              "value": "Crypto"
-            },
-            {
-              "name": "trigger_source",
-              "value": "crypto_verification"
-            }
-          ]
+            "id": "extract-markets",
+            "name": "Extract Markets",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                910,
+                300
+            ]
         },
-        "options": {
-          "timeout": 60000
+        {
+            "parameters": {
+                "batchSize": 1,
+                "options": {}
+            },
+            "id": "split-batch",
+            "name": "Split in Batches",
+            "type": "n8n-nodes-base.splitInBatches",
+            "typeVersion": 2,
+            "position": [
+                1130,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "url": "=https://api.coingecko.com/api/v33/simple/price?ids={{ $json.coin_id }}&vs_currencies=usd&include_24hr_change=true",
+                "options": {
+                    "timeout": 10000,
+                    "retry": {
+                        "limit": 3,
+                        "statusCodes": "429,500,502,503,504",
+                        "errorCodes": "ECONNRESET,ETIMEDOUT,ECONNREFUSED"
+                    }
+                }
+            },
+            "id": "coingecko-price",
+            "name": "CoinGecko Price",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                1350,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "url": "=https://api.binance.com/api/v3/ticker/price?symbol={{ $json.coin_id === 'bitcoin' ? 'BTCUSDT' : $json.coin_id === 'ethereum' ? 'ETHUSDT' : 'BTCUSDT' }}",
+                "options": {
+                    "timeout": 10000,
+                    "retry": {
+                        "limit": 3,
+                        "statusCodes": "429,500,502,503,504",
+                        "errorCodes": "ECONNRESET,ETIMEDOUT,ECONNREFUSED"
+                    }
+                }
+            },
+            "id": "binance-price",
+            "name": "Binance Price",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                1350,
+                500
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "// Combine price data\nconst coinGeckoData = $input.byIndex[0].json;\nconst binanceData = $input.byIndex[1].json;\n\nconst coinId = $input.first().json.coin_id;\nconst market = $input.first().json;\n\n// Get price from CoinGecko\nlet cgPrice = null;\nlet cgChange24h = null;\nif (coinGeckoData && coinGeckoData[coinId]) {\n  cgPrice = coinGeckoData[coinId].usd;\n  cgChange24h = coinGeckoData[coinId].usd_24h_change;\n}\n\n// Get price from Binance\nlet binancePrice = null;\nif (binanceData && binanceData.price) {\n  binancePrice = parseFloat(binanceData.price);\n}\n\n// Use CoinGecko as primary\nconst currentPrice = cgPrice || binancePrice;\nconst priceSource = cgPrice ? 'coingecko' : 'binance';\n\nreturn {\n  json: {\n    market_id: market.market_id,\n    question: market.question,\n    coin_id: coinId,\n    current_price: currentPrice,\n    price_24h_change: cgChange24h,\n    price_source: priceSource,\n    binance_price: binancePrice,\n    timestamp: new Date().toISOString()\n  }\n};"
+            },
+            "id": "combine-prices",
+            "name": "Combine Prices",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                1570,
+                400
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "// Analyze crypto market outcome\nconst data = $input.first().json;\nconst question = data.question.toLowerCase();\n\n// Extract target price from question (e.g., \"Will BTC be above $100000\")\nconst priceMatch = question.match(/\\$?(\\d+(?:,\\d+)*\\.?\\d*)/);\nconst targetPrice = priceMatch ? parseFloat(priceMatch[1].replace(/,/g, '')) : null;\n\nlet outcome = 'UNCERTAIN';\nlet confidence = 30;\n\nif (targetPrice && data.current_price) {\n  const current = data.current_price;\n\n  // Check if above or below target\n  if (question.includes('above') || question.includes('higher') || question.includes('exceed')) {\n    if (current > targetPrice) {\n      outcome = 'YES';\n      confidence = 95;\n    } else if (current < targetPrice * 0.95) {\n      outcome = 'NO';\n      confidence = 95;\n    } else {\n      // Within 5% - uncertain\n      confidence = 60;\n    }\n  } else if (question.includes('below') || question.includes('lower') || question.includes('drop')) {\n    if (current < targetPrice) {\n      outcome = 'YES';\n      confidence = 95;\n    } else if (current > targetPrice * 1.05) {\n      outcome = 'NO';\n      confidence = 95;\n    } else {\n      confidence = 60;\n    }\n  }\n\n  // Also check 24h change if relevant\n  if (question.includes('24h') || question.includes('today')) {\n    const change24h = data.price_24h_change || 0;\n    if (question.includes('rise') || question.includes('gain') || question.includes('up')) {\n      if (change24h > 1) {\n        outcome = 'YES';\n        confidence = 80;\n      } else if (change24h < -1) {\n        outcome = 'NO';\n        confidence = 80;\n      }\n    } else if (question.includes('fall') || question.includes('lose') || question.includes('down')) {\n      if (change24h < -1) {\n        outcome = 'YES';\n        confidence = 80;\n      } else if (change24h > 1) {\n        outcome = 'NO';\n        confidence = 80;\n      }\n    }\n  }\n}\n\nreturn {\n  json: {\n    ...data,\n    target_price: targetPrice,\n    outcome,\n    confidence,\n    should_trigger_resolution: confidence >= 90 && outcome !== 'UNCERTAIN'\n  }\n};"
+            },
+            "id": "analyze-outcome",
+            "name": "Analyze Outcome",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                1790,
+                400
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "={{ $env.N8N_WEBHOOK_URL }}/webhook/plokymarket-batch-resolution",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "Content-Type",
+                            "value": "application/json"
+                        },
+                        {
+                            "name": "x-n8n-api-key",
+                            "value": "={{ $env.N8N_API_KEY }}"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "name": "market_id",
+                            "value": "={{ $json.market_id }}"
+                        },
+                        {
+                            "name": "question",
+                            "value": "={{ $json.question }}"
+                        },
+                        {
+                            "name": "category",
+                            "value": "Crypto"
+                        },
+                        {
+                            "name": "trigger_source",
+                            "value": "crypto_verification"
+                        }
+                    ]
+                },
+                "options": {
+                    "timeout": 60000,
+                    "retry": {
+                        "limit": 3,
+                        "statusCodes": "429,500,502,503,504",
+                        "errorCodes": "ECONNRESET,ETIMEDOUT,ECONNREFUSED"
+                    }
+                }
+            },
+            "id": "trigger-resolution",
+            "name": "Trigger Resolution",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                2010,
+                400
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "// Compile all results\nconst allResults = [];\nfor (const item of $input.all()) {\n  if (item.json.market_id) {\n    allResults.push(item.json);\n  }\n}\n\nconst resolved = allResults.filter(r => r.should_trigger_resolution);\n\nreturn {\n  json: {\n    total_checked: allResults.length,\n    triggered_resolution: resolved.length,\n    results: allResults,\n    timestamp: new Date().toISOString()\n  }\n};"
+            },
+            "id": "compile-results",
+            "name": "Compile Results",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                2230,
+                400
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "// Final result\nconst data = $input.first().json;\nreturn {\n  json: {\n    success: true,\n    markets_checked: data.total_checked,\n    resolutions_triggered: data.triggered_resolution,\n    timestamp: new Date().toISOString()\n  }\n};"
+            },
+            "id": "final-result",
+            "name": "Result",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                2450,
+                400
+            ]
+        },
+        {
+            "parameters": {},
+            "id": "error-trigger",
+            "name": "Error Trigger",
+            "type": "n8n-nodes-base.errorTrigger",
+            "typeVersion": 1,
+            "position": [
+                250,
+                500
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "={{ $env.ALERT_WEBHOOK_URL }}",
+                "sendBody": true,
+                "contentType": "json",
+                "body": {
+                    "embeds": [
+                        {
+                            "title": "[CRITICAL] n8n Workflow Failure",
+                            "description": "=Workflow: {{ $workflow.name }}\nNode: {{ $json.error.node.name }}\nError: {{ $json.error.message }}",
+                            "color": 15158332,
+                            "timestamp": "={{ $now }}"
+                        }
+                    ]
+                },
+                "options": {
+                    "retry": {
+                        "limit": 3,
+                        "statusCodes": "429,500,502,503,504",
+                        "errorCodes": "ECONNRESET,ETIMEDOUT,ECONNREFUSED"
+                    }
+                }
+            },
+            "id": "alert-webhook",
+            "name": "Send Alert",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4,
+            "position": [
+                470,
+                500
+            ]
         }
-      },
-      "id": "trigger-resolution",
-      "name": "Trigger Resolution",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [2010, 400]
+    ],
+    "connections": {
+        "Schedule Trigger": {
+            "main": [
+                [
+                    {
+                        "node": "Prepare Query",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Prepare Query": {
+            "main": [
+                [
+                    {
+                        "node": "Query Crypto Markets",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Query Crypto Markets": {
+            "main": [
+                [
+                    {
+                        "node": "Extract Markets",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Extract Markets": {
+            "main": [
+                [
+                    {
+                        "node": "Split in Batches",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Split in Batches": {
+            "main": [
+                [
+                    {
+                        "node": "CoinGecko Price",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "CoinGecko Price": {
+            "main": [
+                [
+                    {
+                        "node": "Combine Prices",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Binance Price": {
+            "main": [
+                [
+                    {
+                        "node": "Combine Prices",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Combine Prices": {
+            "main": [
+                [
+                    {
+                        "node": "Analyze Outcome",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Analyze Outcome": {
+            "main": [
+                [
+                    {
+                        "node": "Trigger Resolution",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Trigger Resolution": {
+            "main": [
+                [
+                    {
+                        "node": "Compile Results",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Compile Results": {
+            "main": [
+                [
+                    {
+                        "node": "Result",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Error Trigger": {
+            "main": [
+                [
+                    {
+                        "node": "Send Alert",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
     },
-    {
-      "parameters": {
-        "jsCode": "// Compile all results\nconst allResults = [];\nfor (const item of $input.all()) {\n  if (item.json.market_id) {\n    allResults.push(item.json);\n  }\n}\n\nconst resolved = allResults.filter(r => r.should_trigger_resolution);\n\nreturn {\n  json: {\n    total_checked: allResults.length,\n    triggered_resolution: resolved.length,\n    results: allResults,\n    timestamp: new Date().toISOString()\n  }\n};"
-      },
-      "id": "compile-results",
-      "name": "Compile Results",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [2230, 400]
+    "settings": {
+        "executionOrder": "v1",
+        "saveManualExecutions": true,
+        "callerPolicy": "workflowsFromSameOwner"
     },
-    {
-      "parameters": {
-        "jsCode": "// Final result\nconst data = $input.first().json;\nreturn {\n  json: {\n    success: true,\n    markets_checked: data.total_checked,\n    resolutions_triggered: data.triggered_resolution,\n    timestamp: new Date().toISOString()\n  }\n};"
-      },
-      "id": "final-result",
-      "name": "Result",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [2450, 400]
-    }
-  ],
-  "connections": {
-    "Schedule Trigger": {\n      "main": [\n        [{ "node": "Prepare Query", "type": "main", "index": 0 }]\n      ]\n    },\n    "Prepare Query": {\n      "main": [\n        [{ "node": "Query Crypto Markets", "type": "main", "index": 0 }]\n      ]\n    },\n    "Query Crypto Markets": {\n      "main": [\n        [{ "node": "Extract Markets", "type": "main", "index": 0 }]\n      ]\n    },\n    "Extract Markets": {\n      "main": [\n        [{ "node": "Split in Batches", "type": "main", "index": 0 }]\n      ]\n    },\n    "Split in Batches": {\n      "main": [\n        [{ "node": "CoinGecko Price", "type": "main", "index": 0 }]\n      ]\n    },\n    "CoinGecko Price": {\n      "main": [\n        [{ "node": "Combine Prices", "type": "main", "index": 0 }]\n      ]\n    },\n    "Binance Price": {\n      "main": [\n        [{ "node": "Combine Prices", "type": "main", "index": 0 }]\n      ]\n    },\n    "Combine Prices": {\n      "main": [\n        [{ "node": "Analyze Outcome", "type": "main", "index": 0 }]\n      ]\n    },\n    "Analyze Outcome": {\n      "main": [\n        [{ "node": "Trigger Resolution", "type": "main", "index": 0 }]\n      ]\n    },\n    "Trigger Resolution": {\n      "main": [\n        [{ "node": "Compile Results", "type": "main", "index": 0 }]\n      ]\n    },\n    "Compile Results": {\n      "main": [\n        [{ "node": "Result", "type": "main", "index": 0 }]\n      ]\n    }\n  },\n  "settings": {\n    "executionOrder": "v1",\n    "saveManualExecutions": true,\n    "callerPolicy": "workflowsFromSameOwner"\n  },\n  "staticData": null,\n  "tags": [\n    { "name": "plokymarket", "id": "tag-plokymarket" },\n    { "name": "crypto", "id": "tag-crypto" },\n    { "name": "verification", "id": "tag-verification" }\n  ]\n}\n
+    "staticData": null,
+    "tags": [
+        {
+            "name": "plokymarket",
+            "id": "tag-plokymarket"
+        },
+        {
+            "name": "crypto",
+            "id": "tag-crypto"
+        },
+        {
+            "name": "verification",
+            "id": "tag-verification"
+        }
+    ]
+}

@@ -251,6 +251,137 @@ export async function checkWithdrawalRateLimit(userId: string): Promise<RateLimi
   };
 }
 
+// ─── Module D: AI Rate Limits ───────────────────────────────────────────────────────────────────────
+
+/**
+ * KYC Verification: Max 3 requests per IP per 10 minutes.
+ * Returns 429 with Retry-After if exceeded.
+ */
+export async function checkKYCRateLimit(request: Request): Promise<RateLimitResult> {
+  const ip = getIp(request);
+  const key = `rl:kyc:${ip}`;
+  const now = Date.now();
+  const windowSeconds = 600; // 10 minutes
+  const windowMs = windowSeconds * 1000;
+  const maxRequests = 3;
+
+  let entry = rateLimitStore.get(key);
+  if (!entry || now > entry.resetAt) {
+    entry = { count: 0, resetAt: now + windowMs, timestamps: [] };
+  }
+
+  entry.timestamps = entry.timestamps.filter(ts => ts > now - windowMs);
+  const count = entry.timestamps.length;
+
+  if (count >= maxRequests) {
+    const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
+    return {
+      allowed: false,
+      remaining: 0,
+      limit: maxRequests,
+      resetAt: entry.resetAt,
+      retryAfter: Math.max(1, retryAfter),
+    };
+  }
+
+  entry.timestamps.push(now);
+  rateLimitStore.set(key, entry);
+
+  return {
+    allowed: true,
+    remaining: Math.max(0, maxRequests - entry.timestamps.length),
+    limit: maxRequests,
+    resetAt: entry.resetAt,
+  };
+}
+
+/**
+ * Oracle Resolution: Max 10 requests per Market ID per 5 minutes.
+ */
+export async function checkOracleRateLimit(
+  request: Request,
+  marketId: string
+): Promise<RateLimitResult> {
+  const ip = getIp(request);
+  const key = `rl:oracle:${marketId}:${ip}`;
+  const now = Date.now();
+  const windowSeconds = 300; // 5 minutes
+  const windowMs = windowSeconds * 1000;
+  const maxRequests = 10;
+
+  let entry = rateLimitStore.get(key);
+  if (!entry || now > entry.resetAt) {
+    entry = { count: 0, resetAt: now + windowMs, timestamps: [] };
+  }
+
+  entry.timestamps = entry.timestamps.filter(ts => ts > now - windowMs);
+  const count = entry.timestamps.length;
+
+  if (count >= maxRequests) {
+    const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
+    return {
+      allowed: false,
+      remaining: 0,
+      limit: maxRequests,
+      resetAt: entry.resetAt,
+      retryAfter: Math.max(1, retryAfter),
+    };
+  }
+
+  entry.timestamps.push(now);
+  rateLimitStore.set(key, entry);
+
+  return {
+    allowed: true,
+    remaining: Math.max(0, maxRequests - entry.timestamps.length),
+    limit: maxRequests,
+    resetAt: entry.resetAt,
+  };
+}
+
+/**
+ * AI Assistant: Max 20 requests per User ID per minute.
+ */
+export async function checkAssistantRateLimit(
+  request: Request,
+  userId: string
+): Promise<RateLimitResult> {
+  const key = `rl:assistant:${userId}`;
+  const now = Date.now();
+  const windowSeconds = 60; // 1 minute
+  const windowMs = windowSeconds * 1000;
+  const maxRequests = 20;
+
+  let entry = rateLimitStore.get(key);
+  if (!entry || now > entry.resetAt) {
+    entry = { count: 0, resetAt: now + windowMs, timestamps: [] };
+  }
+
+  entry.timestamps = entry.timestamps.filter(ts => ts > now - windowMs);
+  const count = entry.timestamps.length;
+
+  if (count >= maxRequests) {
+    const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
+    return {
+      allowed: false,
+      remaining: 0,
+      limit: maxRequests,
+      resetAt: entry.resetAt,
+      retryAfter: Math.max(1, retryAfter),
+    };
+  }
+
+  entry.timestamps.push(now);
+  rateLimitStore.set(key, entry);
+
+  return {
+    allowed: true,
+    remaining: Math.max(0, maxRequests - entry.timestamps.length),
+    limit: maxRequests,
+    resetAt: entry.resetAt,
+  };
+}
+
 // Auth rate limit for middleware
 export async function checkAuthRateLimit(ip: string, maxAttempts = 10, windowSeconds = 3600): Promise<{ allowed: boolean; remaining: number; retryAfter?: number }> {
   const key = `ratelimit:auth:${ip}`;

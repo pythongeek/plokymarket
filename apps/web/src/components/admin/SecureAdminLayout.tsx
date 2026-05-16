@@ -131,16 +131,32 @@ export function SecureAdminLayout({
     try {
       console.log(`[AdminAuth] ${isBackground ? 'Refreshing' : 'Starting'} auth check...`);
 
-      // Try getUser first, then fallback to getSession
+      // FIRST: Try our custom session endpoint (reads sb-access-token cookie)
+      // This MUST be checked first because middleware and login API use sb-access-token
       let user: any = null;
-      const { data: userData, error: userError } = await supabase.auth.getUser();
+      try {
+        const sessionRes = await fetch('/api/auth/session', { credentials: 'include' });
+        if (sessionRes.ok) {
+          const sessionData = await sessionRes.json();
+          if (sessionData.user) {
+            user = sessionData.user;
+            console.log('[AdminAuth] Session found via /api/auth/session');
+          }
+        }
+      } catch (e) {
+        console.log('[AdminAuth] /api/auth/session failed, falling back to Supabase...');
+      }
 
-      if (userError || !userData?.user) {
-        console.log('[AdminAuth] getUser failed, trying getSession...', userError?.message);
-        const { data: sessionData } = await supabase.auth.getSession();
-        user = sessionData?.session?.user;
-      } else {
-        user = userData.user;
+      // FALLBACK: Try Supabase native session (for backward compatibility)
+      if (!user) {
+        const { data: userData, error: userError } = await supabase.auth.getUser();
+        if (userError || !userData?.user) {
+          console.log('[AdminAuth] getUser failed, trying getSession...', userError?.message);
+          const { data: sessionData } = await supabase.auth.getSession();
+          user = sessionData?.session?.user;
+        } else {
+          user = userData.user;
+        }
       }
 
       if (!user) {
@@ -153,6 +169,8 @@ export function SecureAdminLayout({
       }
 
       const userEmail = (user.email || '').toLowerCase();
+      const isSuperAdmin = user.is_super_admin || false;
+      const isAdmin = user.is_admin || isSuperAdmin;
 
       // FIRST: Check email-based admin whitelist (most reliable)
       const adminEmails = ['admin@plokymarket.bd', 'admin@polymarket.bd'];
@@ -168,27 +186,38 @@ export function SecureAdminLayout({
         return;
       }
 
-      // SECOND: Check user_profiles table for admin flags
-      const profileRes = await fetch(`/api/admin/users/me?user_id=${user.id}`);
-      const profileData = profileRes.ok ? await profileRes.json() : { data: null };
-      const profile = profileData.data;
-
-      const isAdmin = profile?.is_admin || profile?.is_super_admin;
-
+      // SECOND: If admin flags are in the session/user object, use them
       if (isAdmin) {
         const adminData = {
           id: user.id,
-          email: profile?.email || userEmail,
-          is_super_admin: profile?.is_super_admin || false,
+          email: userEmail,
+          is_super_admin: isSuperAdmin,
           last_login: new Date().toISOString(),
         };
         setAdmin(adminData);
       } else {
-        console.log('[AdminAuth] ❌ Access denied — not an admin');
-        if (!isBackground) {
-          setAuthError('Access denied. Admin privileges required.');
-          await supabase.auth.signOut();
-          router.replace('/auth-portal-3m5n8');
+        // THIRD: Check user_profiles table for admin flags (fallback)
+        const profileRes = await fetch(`/api/admin/users/me?user_id=${user.id}`);
+        const profileData = profileRes.ok ? await profileRes.json() : { data: null };
+        const profile = profileData.data;
+
+        const isProfileAdmin = profile?.is_admin || profile?.is_super_admin;
+        if (isProfileAdmin) {
+          const adminData = {
+            id: user.id,
+            email: profile?.email || userEmail,
+            is_super_admin: profile?.is_super_admin || false,
+            last_login: new Date().toISOString(),
+          };
+          setAdmin(adminData);
+        } else {
+          console.log('[AdminAuth] ❌ Access denied — not an admin');
+          if (!isBackground) {
+            setAuthError('Access denied. Admin privileges required.');
+            await supabase.auth.signOut();
+            await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {});
+            router.replace('/auth-portal-3m5n8');
+          }
         }
       }
 
@@ -261,6 +290,8 @@ export function SecureAdminLayout({
       }
 
       await supabase.auth.signOut();
+      // Also clear the custom sb-access-token cookie
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {});
       toast({ title: 'Logged out', description: 'Admin session terminated' });
       router.replace('/auth-portal-3m5n8');
     } catch (err) {

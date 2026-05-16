@@ -196,6 +196,16 @@ BEGIN
     
     v_total_cost := p_quantity * p_price;
     
+    -- LOCK wallets in deterministic order to prevent deadlocks
+    -- Order by user_id ensures consistent lock acquisition across concurrent match_order calls
+    IF v_buyer_id < v_seller_id THEN
+        PERFORM 1 FROM public.wallets WHERE user_id = v_buyer_id FOR UPDATE;
+        PERFORM 1 FROM public.wallets WHERE user_id = v_seller_id FOR UPDATE;
+    ELSE
+        PERFORM 1 FROM public.wallets WHERE user_id = v_seller_id FOR UPDATE;
+        PERFORM 1 FROM public.wallets WHERE user_id = v_buyer_id FOR UPDATE;
+    END IF;
+    
     -- Update buyer wallet (deduct from available balance)
     UPDATE public.wallets SET 
         balance = balance - v_total_cost

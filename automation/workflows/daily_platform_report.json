@@ -1,252 +1,406 @@
 {
-  "name": "Plokymarket Daily Platform Report",
-  "nodes": [
-    {
-      "parameters": {
-        "rule": {
-          "interval": [
-            {
-              "field": "cronExpression",
-              "expression": "0 9 * * *"
-            }
-          ]
-        }
-      },
-      "id": "schedule-trigger",
-      "name": "Schedule Trigger",
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.2,
-      "position": [250, 300],
-      "events": [
+    "name": "Plokymarket Daily Platform Report",
+    "nodes": [
         {
-          "type": "scheduledTime",
-          "resetSchedule": false
+            "parameters": {
+                "rule": {
+                    "interval": [
+                        {
+                            "field": "cronExpression",
+                            "expression": "0 9 * * *"
+                        }
+                    ]
+                }
+            },
+            "id": "schedule-trigger",
+            "name": "Schedule Trigger",
+            "type": "n8n-nodes-base.scheduleTrigger",
+            "typeVersion": 1.2,
+            "position": [
+                250,
+                300
+            ],
+            "events": [
+                {
+                    "type": "scheduledTime",
+                    "resetSchedule": false
+                }
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "// Build stats query\nreturn {\n  json: {\n    statsQuery: `\n      SELECT\n        (SELECT COUNT(*) FROM users WHERE status = 'active') as total_users,\n        (SELECT COUNT(*) FROM users WHERE created_at::date = CURRENT_DATE) as new_users_today,\n        (SELECT COUNT(*) FROM markets WHERE status = 'active') as active_markets,\n        (SELECT COUNT(*) FROM markets WHERE status = 'resolved' AND resolved_at::date = CURRENT_DATE) as resolved_today,\n        (SELECT COALESCE(SUM(volume), 0) FROM trading_volume WHERE recorded_at::date = CURRENT_DATE) as volume_today,\n        (SELECT COUNT(*) FROM deposits WHERE status = 'pending') as pending_deposits,\n        (SELECT COUNT(*) FROM withdrawals WHERE status = 'pending') as pending_withdrawals,\n        (SELECT COALESCE(SUM(amount), 0) FROM deposits WHERE status = 'approved' AND created_at::date = CURRENT_DATE) as deposit_amount_today,\n        (SELECT COALESCE(SUM(amount), 0) FROM withdrawals WHERE status = 'approved' AND created_at::date = CURRENT_DATE) as withdrawal_amount_today\n    `\n  }\n};"
+            },
+            "id": "prepare-query",
+            "name": "Prepare Query",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                470,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "={{ $env.SUPABASE_URL }}/rest/v1/rpc/execute_sql",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "apikey",
+                            "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+                        },
+                        {
+                            "name": "Authorization",
+                            "value": "Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+                        },
+                        {
+                            "name": "Content-Type",
+                            "value": "application/json"
+                        },
+                        {
+                            "name": "Prefer",
+                            "value": "return=representation"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "name": "sql",
+                            "value": "={{ $json.statsQuery }}"
+                        }
+                    ]
+                },
+                "options": {
+                    "retry": {
+                        "limit": 3,
+                        "statusCodes": "429,500,502,503,504",
+                        "errorCodes": "ECONNRESET,ETIMEDOUT,ECONNREFUSED"
+                    }
+                }
+            },
+            "id": "query-stats",
+            "name": "Query Stats",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                690,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "// Extract stats\nconst response = $input.first().json;\nconst stats = Array.isArray(response) ? response[0] : response;\n\n// Format numbers in Bengali style\nconst formatNum = (n) => {\n  if (n >= 10000000) return (n / 10000000).toFixed(1) + ' Cr';\n  if (n >= 100000) return (n / 100000).toFixed(1) + ' L';\n  if (n >= 1000) return (n / 1000).toFixed(1) + 'K';\n  return n.toString();\n};\n\nconst formatBDT = (n) => '\u09f3' + formatNum(Math.round(n));\n\n// Determine trend emoji\nconst volume = stats.volume_today || 0;\nconst volumeEmoji = volume > 100000 ? '\ud83d\udcc8' : volume > 10000 ? '\ud83d\udcca' : '\ud83d\udcc9';\n\n// Top categories query\nreturn {\n  json: {\n    stats,\n    total_users: stats.total_users || 0,\n    new_users_today: stats.new_users_today || 0,\n    active_markets: stats.active_markets || 0,\n    resolved_today: stats.resolved_today || 0,\n    volume_today: stats.volume_today || 0,\n    pending_deposits: stats.pending_deposits || 0,\n    pending_withdrawals: stats.pending_withdrawals || 0,\n    deposit_amount_today: stats.deposit_amount_today || 0,\n    withdrawal_amount_today: stats.withdrawal_amount_today || 0,\n    formatNum,\n    formatBDT,\n    volumeEmoji,\n    date: new Date().toLocaleDateString('bn-BD', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })\n  }\n};"
+            },
+            "id": "extract-stats",
+            "name": "Extract Stats",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                910,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "// Format Bengali report\nconst data = $input.first().json;\n\nconst message = `\n\ud83d\udcca <b>\u09aa\u09cd\u09b2\u09cb\u0995\u09bf\u09ae\u09be\u09b0\u09cd\u0995\u09c7\u099f \u09a6\u09c8\u09a8\u09bf\u0995 \u09b0\u09bf\u09aa\u09cb\u09b0\u09cd\u099f</b>\n\n\ud83d\udcc5 <b>\u09a4\u09be\u09b0\u09bf\u0996:</b> ${data.date}\n\n\ud83d\udc65 <b>\u09ac\u09cd\u09af\u09ac\u09b9\u09be\u09b0\u0995\u09be\u09b0\u09c0</b>\n\u2022 \u09ae\u09cb\u099f \u09ac\u09cd\u09af\u09ac\u09b9\u09be\u09b0\u0995\u09be\u09b0\u09c0: ${data.total_users.toLocaleString('bn-BD')}\n\u2022 \u0986\u099c \u09a8\u09a4\u09c1\u09a8: ${data.new_users_today.toLocaleString('bn-BD')}\n\n\ud83d\udcc8 <b>\u09ae\u09be\u09b0\u09cd\u0995\u09c7\u099f</b>\n\u2022 \u09b8\u0995\u09cd\u09b0\u09bf\u09af\u09bc \u09ae\u09be\u09b0\u09cd\u0995\u09c7\u099f: ${data.active_markets.toLocaleString('bn-BD')}\n\u2022 \u0986\u099c \u09b8\u09ae\u09be\u09a7\u09be\u09a8: ${data.resolved_today.toLocaleString('bn-BD')}\n\n\ud83d\udcb0 <b>\u09ad\u09b2\u09bf\u0989\u09ae \u0993 \u099f\u09cd\u09b0\u09c7\u09a1\u09bf\u0982</b>\n${data.volumeEmoji} \u0986\u099c\u0995\u09c7\u09b0 \u09ad\u09b2\u09bf\u0989\u09ae: ${data.formatBDT(data.volume_today)}\n\n\ud83c\udfe6 <b>\u09a1\u09bf\u09aa\u09cb\u099c\u09bf\u099f \u0993 \u0989\u0987\u09a5\u09a1\u09cd\u09b0</b>\n\u2022 \u0986\u099c\u0995\u09c7\u09b0 \u09a1\u09bf\u09aa\u09cb\u099c\u09bf\u099f: ${data.formatBDT(data.deposit_amount_today)}\n\u2022 \u0986\u099c\u0995\u09c7\u09b0 \u0989\u0987\u09a5\u09a1\u09cd\u09b0: ${data.formatBDT(data.withdrawal_amount_today)}\n\u2022 \u09aa\u09c7\u09a8\u09cd\u09a1\u09bf\u0982 \u09a1\u09bf\u09aa\u09cb\u099c\u09bf\u099f: ${data.pending_deposits}\u099f\u09bf\n\u2022 \u09aa\u09c7\u09a8\u09cd\u09a1\u09bf\u0982 \u0989\u0987\u09a5\u09a1\u09cd\u09b0: ${data.pending_withdrawals}\u099f\u09bf\n\n\ud83d\udd17 <a href=\"https://polymarket-bangladesh.vercel.app/admin\">\u0985\u09cd\u09af\u09be\u09a1\u09ae\u09bf\u09a8 \u09aa\u09cd\u09af\u09be\u09a8\u09c7\u09b2</a>\n`.trim();\n\nreturn {\n  json: {\n    message,\n    stats: {\n      total_users: data.total_users,\n      new_users_today: data.new_users_today,\n      active_markets: data.active_markets,\n      resolved_today: data.resolved_today,\n      volume_today: data.volume_today,\n      pending_deposits: data.pending_deposits,\n      pending_withdrawals: data.pending_withdrawals\n    }\n  }\n};"
+            },
+            "id": "format-report",
+            "name": "Format Report",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                1130,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "Content-Type",
+                            "value": "application/json"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "name": "chat_id",
+                            "value": "={{ $env.TELEGRAM_CHAT_ID }}"
+                        },
+                        {
+                            "name": "text",
+                            "value": "={{ $json.message }}"
+                        },
+                        {
+                            "name": "parse_mode",
+                            "value": "HTML"
+                        }
+                    ]
+                },
+                "options": {
+                    "retry": {
+                        "limit": 3,
+                        "statusCodes": "429,500,502,503,504",
+                        "errorCodes": "ECONNRESET,ETIMEDOUT,ECONNREFUSED"
+                    }
+                }
+            },
+            "id": "send-telegram",
+            "name": "Send Telegram",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                1350,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "// Also save to database for historical tracking\nreturn {\n  json: {\n    saveQuery: `\n      INSERT INTO daily_reports (report_date, total_users, new_users, active_markets, resolved_markets, volume_24h, pending_deposits, pending_withdrawals, created_at)\n      VALUES (CURRENT_DATE, ${$input.first().json.stats.total_users}, ${$input.first().json.stats.new_users_today}, ${$input.first().json.stats.active_markets}, ${$input.first().json.stats.resolved_today}, ${$input.first().json.stats.volume_today}, ${$input.first().json.stats.pending_deposits}, ${$input.first().json.stats.pending_withdrawals}, NOW())\n      ON CONFLICT (report_date) DO UPDATE SET\n        total_users = EXCLUDED.total_users,\n        new_users = EXCLUDED.new_users,\n        active_markets = EXCLUDED.active_markets,\n        resolved_markets = EXCLUDED.resolved_markets,\n        volume_24h = EXCLUDED.volume_24h,\n        pending_deposits = EXCLUDED.pending_deposits,\n        pending_withdrawals = EXCLUDED.pending_withdrawals\n    `\n  }\n};"
+            },
+            "id": "prepare-save",
+            "name": "Save to DB",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                1570,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "={{ $env.SUPABASE_URL }}/rest/v1/rpc/execute_sql",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "apikey",
+                            "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+                        },
+                        {
+                            "name": "Authorization",
+                            "value": "Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+                        },
+                        {
+                            "name": "Content-Type",
+                            "value": "application/json"
+                        },
+                        {
+                            "name": "Prefer",
+                            "value": "return=minimal"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "name": "sql",
+                            "value": "={{ $json.saveQuery }}"
+                        }
+                    ]
+                },
+                "options": {
+                    "retry": {
+                        "limit": 3,
+                        "statusCodes": "429,500,502,503,504",
+                        "errorCodes": "ECONNRESET,ETIMEDOUT,ECONNREFUSED"
+                    }
+                }
+            },
+            "id": "save-report",
+            "name": "Save Report",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                1790,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "// Final result\nreturn {\n  json: {\n    success: true,\n    report_sent: true,\n    timestamp: new Date().toISOString()\n  }\n};"
+            },
+            "id": "final-result",
+            "name": "Result",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                2010,
+                300
+            ]
+        },
+        {
+            "parameters": {},
+            "id": "error-trigger",
+            "name": "Error Trigger",
+            "type": "n8n-nodes-base.errorTrigger",
+            "typeVersion": 1,
+            "position": [
+                250,
+                500
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "={{ $env.ALERT_WEBHOOK_URL }}",
+                "sendBody": true,
+                "contentType": "json",
+                "body": {
+                    "embeds": [
+                        {
+                            "title": "[CRITICAL] n8n Workflow Failure",
+                            "description": "=Workflow: {{ $workflow.name }}\\nNode: {{ $json.error.node.name }}\\nError: {{ $json.error.message }}",
+                            "color": 15158332,
+                            "timestamp": "={{ $now }}"
+                        }
+                    ]
+                },
+                "options": {
+                    "retry": {
+                        "limit": 3,
+                        "statusCodes": "429,500,502,503,504",
+                        "errorCodes": "ECONNRESET,ETIMEDOUT,ECONNREFUSED"
+                    }
+                }
+            },
+            "id": "alert-webhook",
+            "name": "Send Alert",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4,
+            "position": [
+                470,
+                500
+            ]
         }
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "// Build stats query\nreturn {\n  json: {\n    statsQuery: `\n      SELECT\n        (SELECT COUNT(*) FROM users WHERE status = 'active') as total_users,\n        (SELECT COUNT(*) FROM users WHERE created_at::date = CURRENT_DATE) as new_users_today,\n        (SELECT COUNT(*) FROM markets WHERE status = 'active') as active_markets,\n        (SELECT COUNT(*) FROM markets WHERE status = 'resolved' AND resolved_at::date = CURRENT_DATE) as resolved_today,\n        (SELECT COALESCE(SUM(volume), 0) FROM trading_volume WHERE recorded_at::date = CURRENT_DATE) as volume_today,\n        (SELECT COUNT(*) FROM deposits WHERE status = 'pending') as pending_deposits,\n        (SELECT COUNT(*) FROM withdrawals WHERE status = 'pending') as pending_withdrawals,\n        (SELECT COALESCE(SUM(amount), 0) FROM deposits WHERE status = 'approved' AND created_at::date = CURRENT_DATE) as deposit_amount_today,\n        (SELECT COALESCE(SUM(amount), 0) FROM withdrawals WHERE status = 'approved' AND created_at::date = CURRENT_DATE) as withdrawal_amount_today\n    `\n  }\n};"
-      },
-      "id": "prepare-query",
-      "name": "Prepare Query",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [470, 300]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $env.SUPABASE_URL }}/rest/v1/rpc/execute_sql",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "apikey",
-              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
-            },
-            {
-              "name": "Authorization",
-              "value": "Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            },
-            {
-              "name": "Prefer",
-              "value": "return=representation"
-            }
-          ]
+    ],
+    "connections": {
+        "Schedule Trigger": {
+            "main": [
+                [
+                    {
+                        "node": "Prepare Query",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
         },
-        "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "sql",
-              "value": "={{ $json.statsQuery }}"
-            }
-          ]
+        "Prepare Query": {
+            "main": [
+                [
+                    {
+                        "node": "Query Stats",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
         },
-        "options": {}
-      },
-      "id": "query-stats",
-      "name": "Query Stats",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [690, 300]
-    },
-    {
-      "parameters": {
-        "jsCode": "// Extract stats\nconst response = $input.first().json;\nconst stats = Array.isArray(response) ? response[0] : response;\n\n// Format numbers in Bengali style\nconst formatNum = (n) => {\n  if (n >= 10000000) return (n / 10000000).toFixed(1) + ' Cr';\n  if (n >= 100000) return (n / 100000).toFixed(1) + ' L';\n  if (n >= 1000) return (n / 1000).toFixed(1) + 'K';\n  return n.toString();\n};\n\nconst formatBDT = (n) => '৳' + formatNum(Math.round(n));\n\n// Determine trend emoji\nconst volume = stats.volume_today || 0;\nconst volumeEmoji = volume > 100000 ? '📈' : volume > 10000 ? '📊' : '📉';\n\n// Top categories query\nreturn {\n  json: {\n    stats,\n    total_users: stats.total_users || 0,\n    new_users_today: stats.new_users_today || 0,\n    active_markets: stats.active_markets || 0,\n    resolved_today: stats.resolved_today || 0,\n    volume_today: stats.volume_today || 0,\n    pending_deposits: stats.pending_deposits || 0,\n    pending_withdrawals: stats.pending_withdrawals || 0,\n    deposit_amount_today: stats.deposit_amount_today || 0,\n    withdrawal_amount_today: stats.withdrawal_amount_today || 0,\n    formatNum,\n    formatBDT,\n    volumeEmoji,\n    date: new Date().toLocaleDateString('bn-BD', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })\n  }\n};"
-      },
-      "id": "extract-stats",
-      "name": "Extract Stats",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [910, 300]
-    },
-    {
-      "parameters": {
-        "jsCode": "// Format Bengali report\nconst data = $input.first().json;\n\nconst message = `\n📊 <b>প্লোকিমার্কেট দৈনিক রিপোর্ট</b>\n\n📅 <b>তারিখ:</b> ${data.date}\n\n👥 <b>ব্যবহারকারী</b>\n• মোট ব্যবহারকারী: ${data.total_users.toLocaleString('bn-BD')}\n• আজ নতুন: ${data.new_users_today.toLocaleString('bn-BD')}\n\n📈 <b>মার্কেট</b>\n• সক্রিয় মার্কেট: ${data.active_markets.toLocaleString('bn-BD')}\n• আজ সমাধান: ${data.resolved_today.toLocaleString('bn-BD')}\n\n💰 <b>ভলিউম ও ট্রেডিং</b>\n${data.volumeEmoji} আজকের ভলিউম: ${data.formatBDT(data.volume_today)}\n\n🏦 <b>ডিপোজিট ও উইথড্র</b>\n• আজকের ডিপোজিট: ${data.formatBDT(data.deposit_amount_today)}\n• আজকের উইথড্র: ${data.formatBDT(data.withdrawal_amount_today)}\n• পেন্ডিং ডিপোজিট: ${data.pending_deposits}টি\n• পেন্ডিং উইথড্র: ${data.pending_withdrawals}টি\n\n🔗 <a href=\"https://polymarket-bangladesh.vercel.app/admin\">অ্যাডমিন প্যানেল</a>\n`.trim();\n\nreturn {\n  json: {\n    message,\n    stats: {\n      total_users: data.total_users,\n      new_users_today: data.new_users_today,\n      active_markets: data.active_markets,\n      resolved_today: data.resolved_today,\n      volume_today: data.volume_today,\n      pending_deposits: data.pending_deposits,\n      pending_withdrawals: data.pending_withdrawals\n    }\n  }\n};"
-      },
-      "id": "format-report",
-      "name": "Format Report",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1130, 300]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
+        "Query Stats": {
+            "main": [
+                [
+                    {
+                        "node": "Extract Stats",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
         },
-        "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "chat_id",
-              "value": "={{ $env.TELEGRAM_CHAT_ID }}"
-            },
-            {
-              "name": "text",
-              "value": "={{ $json.message }}"
-            },
-            {
-              "name": "parse_mode",
-              "value": "HTML"
-            }
-          ]
+        "Extract Stats": {
+            "main": [
+                [
+                    {
+                        "node": "Format Report",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
         },
-        "options": {}
-      },
-      "id": "send-telegram",
-      "name": "Send Telegram",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [1350, 300]
-    },
-    {
-      "parameters": {
-        "jsCode": "// Also save to database for historical tracking\nreturn {\n  json: {\n    saveQuery: `\n      INSERT INTO daily_reports (report_date, total_users, new_users, active_markets, resolved_markets, volume_24h, pending_deposits, pending_withdrawals, created_at)\n      VALUES (CURRENT_DATE, ${$input.first().json.stats.total_users}, ${$input.first().json.stats.new_users_today}, ${$input.first().json.stats.active_markets}, ${$input.first().json.stats.resolved_today}, ${$input.first().json.stats.volume_today}, ${$input.first().json.stats.pending_deposits}, ${$input.first().json.stats.pending_withdrawals}, NOW())\n      ON CONFLICT (report_date) DO UPDATE SET\n        total_users = EXCLUDED.total_users,\n        new_users = EXCLUDED.new_users,\n        active_markets = EXCLUDED.active_markets,\n        resolved_markets = EXCLUDED.resolved_markets,\n        volume_24h = EXCLUDED.volume_24h,\n        pending_deposits = EXCLUDED.pending_deposits,\n        pending_withdrawals = EXCLUDED.pending_withdrawals\n    `\n  }\n};"
-      },
-      "id": "prepare-save",
-      "name": "Save to DB",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1570, 300]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $env.SUPABASE_URL }}/rest/v1/rpc/execute_sql",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "apikey",
-              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
-            },
-            {
-              "name": "Authorization",
-              "value": "Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            },
-            {
-              "name": "Prefer",
-              "value": "return=minimal"
-            }
-          ]
+        "Format Report": {
+            "main": [
+                [
+                    {
+                        "node": "Send Telegram",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
         },
-        "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "sql",
-              "value": "={{ $json.saveQuery }}"
-            }
-          ]
+        "Send Telegram": {
+            "main": [
+                [
+                    {
+                        "node": "Save to DB",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
         },
-        "options": {}
-      },
-      "id": "save-report",
-      "name": "Save Report",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [1790, 300]
+        "Save to DB": {
+            "main": [
+                [
+                    {
+                        "node": "Save Report",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Save Report": {
+            "main": [
+                [
+                    {
+                        "node": "Result",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Error Trigger": {
+            "main": [
+                [
+                    {
+                        "node": "Send Alert",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
     },
-    {
-      "parameters": {
-        "jsCode": "// Final result\nreturn {\n  json: {\n    success: true,\n    report_sent: true,\n    timestamp: new Date().toISOString()\n  }\n};"
-      },
-      "id": "final-result",
-      "name": "Result",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [2010, 300]
-    }
-  ],
-  "connections": {
-    "Schedule Trigger": {
-      "main": [
-        [{ "node": "Prepare Query", "type": "main", "index": 0 }]
-      ]
+    "settings": {
+        "executionOrder": "v1",
+        "saveManualExecutions": true,
+        "callerPolicy": "workflowsFromSameOwner"
     },
-    "Prepare Query": {
-      "main": [
-        [{ "node": "Query Stats", "type": "main", "index": 0 }]
-      ]
-    },
-    "Query Stats": {
-      "main": [
-        [{ "node": "Extract Stats", "type": "main", "index": 0 }]
-      ]
-    },
-    "Extract Stats": {
-      "main": [
-        [{ "node": "Format Report", "type": "main", "index": 0 }]
-      ]
-    },
-    "Format Report": {
-      "main": [
-        [{ "node": "Send Telegram", "type": "main", "index": 0 }]
-      ]
-    },
-    "Send Telegram": {
-      "main": [
-        [{ "node": "Save to DB", "type": "main", "index": 0 }]
-      ]
-    },
-    "Save to DB": {
-      "main": [
-        [{ "node": "Save Report", "type": "main", "index": 0 }]
-      ]
-    },
-    "Save Report": {
-      "main": [
-        [{ "node": "Result", "type": "main", "index": 0 }]
-      ]
-    }
-  },
-  "settings": {
-    "executionOrder": "v1",
-    "saveManualExecutions": true,
-    "callerPolicy": "workflowsFromSameOwner"
-  },
-  "staticData": null,
-  "tags": [
-    { "name": "plokymarket", "id": "tag-plokymarket" },
-    { "name": "report", "id": "tag-report" }
-  ]
+    "staticData": null,
+    "tags": [
+        {
+            "name": "plokymarket",
+            "id": "tag-plokymarket"
+        },
+        {
+            "name": "report",
+            "id": "tag-report"
+        }
+    ]
 }

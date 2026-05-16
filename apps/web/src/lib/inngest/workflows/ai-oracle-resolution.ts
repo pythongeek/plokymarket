@@ -1,14 +1,20 @@
 import { inngest } from '../client';
 import { createServiceClient } from '@/lib/supabase/server';
-import { AIOrchestrator } from '@/lib/oracle/ai/AIOrchestrator';
-
-const aiOrchestrator = new AIOrchestrator();
+import {
+  resolveWithMiniMaxOracle,
+  determineResolutionAction,
+  OracleParsingError,
+  type OracleResolutionResult,
+  MIN_CONFIDENCE_THRESHOLD,
+} from '@/lib/ai/minimax-oracle';
 
 export type OracleResolveEvent = {
   data: {
     requestId: string;
     marketId: string;
     marketQuestion: string;
+    resolutionCriteria?: string;
+    existingEvidence?: string[];
     context?: Record<string, any>;
     triggerSource?: 'service' | 'admin' | 'cron';
     reprocess?: boolean;
@@ -17,27 +23,60 @@ export type OracleResolveEvent = {
 
 /**
  * AI Oracle Resolution Inngest Workflow
- * 
- * Multi-stage pipeline for AI-powered market resolution:
- * 1. Fetch market context and verification sources
- * 2. Run AI orchestration (retrieval, synthesis, deliberation)
- * 3. Verify and cross-check results
- * 4. Update oracle request with results
- * 5. Auto-resolve if confidence threshold met, otherwise queue for review
+ *
+ * Uses MiniMax m2.7 (Hermes) primary → Vertex fallback.
+ * Idempotent by market_id. Max 3 retries on network failures.
+ * OracleParsingError → immediate human tribunal (no retry).
+ * Persistent failures → onFailure handler escalates to human queue.
  */
 export const aiOracleResolution = inngest.createFunction(
-  { id: 'ai-oracle-resolution', concurrency: 3, rateLimit: { key: 'market', limit: 5, period: '1m' } },
+  {
+    id: 'ai-oracle-resolution',
+    concurrency: { limit: 1, key: 'event.data.marketId' },
+    retries: 3,
+    onFailure: async ({ event, error }: any) => {
+      const data = event.data as { marketId: string; marketQuestion: string; requestId: string };
+      console.error(`[AI Oracle] onFailure triggered for market ${data.marketId}:`, error.message);
+
+      try {
+        const supabase = await createServiceClient();
+
+        await (supabase.from('human_review_queue') as any).insert({
+          pipeline_id: `max_retry_${Date.now()}_${data.marketId.slice(0, 8)}`,
+          market_id: data.marketId,
+          market_question: data.marketQuestion,
+          ai_outcome: 'UNRESOLVED',
+          ai_confidence: 0,
+          ai_explanation: `MAX_RETRIES_EXCEEDED: ${error.message}`,
+          evidence_summary: { error: error.message, stack: error.stack?.slice(0, 2000) },
+          status: 'pending',
+          priority: 'critical',
+          created_at: new Date().toISOString(),
+          deadline_at: new Date(Date.now() + 86400000).toISOString(),
+        });
+
+        await (supabase.from('oracle_requests') as any)
+          .update({ status: 'escalated', updated_at: new Date().toISOString() })
+          .eq('id', data.requestId);
+
+        console.log(`[AI Oracle] Escalated market ${data.marketId} to human_review_queue after max retries`);
+      } catch (dbError: any) {
+        console.error(`[AI Oracle] Failed to escalate to human queue:`, dbError.message);
+      }
+
+      return { success: false, escalated: true, reason: 'MAX_RETRIES_EXCEEDED' };
+    },
+  },
   { event: 'oracle/ai.resolve' },
   async ({ event, step }) => {
-    const { requestId, marketId, marketQuestion, context, reprocess } = event.data;
-    
+    const { requestId, marketId, marketQuestion, resolutionCriteria, existingEvidence, reprocess } = event.data;
+
     console.log(`[AI Oracle] Starting resolution for market ${marketId}, request ${requestId}`);
 
     // Step 1: Initialize and validate
     const initResult = await step.run('initialize-resolution', async () => {
       const supabase = await createServiceClient();
-      
-      // Fetch current oracle request
+
       const { data: request, error } = await (supabase
         .from('oracle_requests')
         .select('*')
@@ -49,87 +88,100 @@ export const aiOracleResolution = inngest.createFunction(
       }
 
       if (request.status === 'resolved' && !reprocess) {
-        return { skipped: true, reason: 'Already resolved' };
+        return { skipped: true as const, reason: 'Already resolved' };
       }
 
-      // Update status to processing
       await (supabase
         .from('oracle_requests')
-        .update({ 
+        .update({
           status: 'pending',
           updated_at: new Date().toISOString()
         })
         .eq('id', requestId) as any);
 
-      return { request, marketId };
+      return { request, marketId, skipped: false as const };
     });
 
-    // Step 2: Run AI Orchestration Pipeline
-    const aiResult = await step.run('run-ai-orchestration', async () => {
-      console.log(`[AI Oracle] Running AI orchestration for ${marketId}`);
-      
-      const result = await aiOrchestrator.resolve(
-        marketId,
-        marketQuestion,
-        {
-          ...context,
-          requestId,
-          source: 'inngest_workflow',
-        }
-      );
+    if (initResult.skipped) {
+      console.log(`[AI Oracle] Skipping market ${marketId}: ${(initResult as any).reason}`);
+      return { success: true, skipped: true, reason: (initResult as any).reason };
+    }
 
-      if (!result.success) {
-        console.error(`[AI Oracle] Orchestration failed:`, result.error);
+    // Step 2: Run MiniMax Oracle Engine
+    let oracleResult: OracleResolutionResult;
+    try {
+      oracleResult = await step.run('run-minimax-oracle', async () => {
+        return await resolveWithMiniMaxOracle(
+          marketId,
+          marketQuestion,
+          resolutionCriteria,
+          existingEvidence
+        );
+      });
+    } catch (error: any) {
+      // OracleParsingError → DO NOT RETRY. Escalate immediately.
+      if (error instanceof OracleParsingError) {
+        console.error(`[AI Oracle] OracleParsingError for market ${marketId}:`, error.message);
+
+        await step.run('escalate-parsing-error', async () => {
+          const supabase = await createServiceClient();
+          await (supabase.from('human_review_queue') as any).insert({
+            pipeline_id: `parse_err_${Date.now()}_${marketId.slice(0, 8)}`,
+            market_id: marketId,
+            market_question: marketQuestion,
+            ai_outcome: 'UNRESOLVED',
+            ai_confidence: 0,
+            ai_explanation: `OracleParsingError: ${error.message}`,
+            evidence_summary: { raw_response: error.rawResponse.slice(0, 5000) },
+            status: 'pending',
+            priority: 'critical',
+            created_at: new Date().toISOString(),
+            deadline_at: new Date(Date.now() + 86400000).toISOString(), // 24h
+          });
+
+          await (supabase.from('oracle_requests') as any)
+            .update({ status: 'escalated', updated_at: new Date().toISOString() })
+            .eq('id', requestId);
+        });
+
         return {
           success: false,
-          outcome: 'UNCERTAIN',
-          confidence: 0,
-          reasoning: result.error?.message || 'AI orchestration failed',
-          sources: [],
-          actionTaken: 'failed',
+          requestId,
+          marketId,
+          outcome: 'UNRESOLVED',
+          reason: 'PARSING_ERROR',
+          escalated: true,
         };
       }
 
-      return {
-        success: true,
-        outcome: result.pipeline.finalOutcome || 'UNCERTAIN',
-        confidence: result.pipeline.finalConfidence || 0,
-        reasoning: result.pipeline.explanation?.summary || result.pipeline.deliberation?.summaryText || 'AI resolution completed',
-        sources: result.pipeline.retrieval?.corpus?.sources || [],
-        actionTaken: result.actionTaken,
-        pipelineId: result.pipeline.pipelineId,
-        confidenceLevel: result.pipeline.confidenceLevel,
-        verificationStatus: result.pipeline.verification?.verificationStatus,
-        verificationBlockers: result.pipeline.verification?.blockers || [],
-      };
-    });
+      // Other errors → let Inngest retry (up to 3 times)
+      throw error;
+    }
 
-    // Step 3: Update oracle request with AI results
-    const updateResult = await step.run('update-oracle-request', async () => {
+    // Step 3: Determine action based on confidence threshold
+    const action = determineResolutionAction(oracleResult);
+    const canAutoResolve = action === 'auto_resolve';
+
+    // Step 4: Update oracle request with results
+    await step.run('update-oracle-request', async () => {
       const supabase = await createServiceClient();
-      
+
       const updateData: any = {
-        status: aiResult.actionTaken === 'auto_resolved' ? 'proposed' : 'pending',
-        proposed_outcome: aiResult.outcome,
-        confidence_score: aiResult.confidence,
-        evidence_text: aiResult.reasoning,
-        evidence_urls: aiResult.sources.map((s: any) => s.url).filter(Boolean),
+        status: canAutoResolve ? 'proposed' : 'pending',
+        proposed_outcome: oracleResult.resolution,
+        confidence_score: oracleResult.confidence_score,
+        evidence_text: oracleResult.reasoning,
+        evidence_urls: oracleResult.sources,
         ai_analysis: {
-          pipelineId: aiResult.pipelineId,
-          confidenceLevel: aiResult.confidenceLevel,
-          verificationStatus: aiResult.verificationStatus,
-          verificationBlockers: aiResult.verificationBlockers,
-          actionTaken: aiResult.actionTaken,
-          stages: {
-            retrieval: aiResult.sources.length > 0,
-            synthesis: aiResult.confidence > 0,
-            deliberation: aiResult.outcome !== 'UNCERTAIN',
-          },
+          provider: oracleResult.provider,
+          fallback_triggered: oracleResult.fallback_triggered,
+          audit_log_id: oracleResult.audit_log_id,
+          sources: oracleResult.sources,
         },
         updated_at: new Date().toISOString(),
       };
 
-      if (aiResult.actionTaken === 'auto_resolved') {
+      if (canAutoResolve) {
         updateData.processed_at = new Date().toISOString();
       }
 
@@ -139,124 +191,80 @@ export const aiOracleResolution = inngest.createFunction(
         .eq('id', requestId) as any);
 
       if (error) {
-        console.error(`[AI Oracle] Failed to update oracle request:`, error);
         throw new Error(`Failed to update oracle request: ${error.message}`);
       }
 
       return { updated: true };
     });
 
-    // Step 4: Create AI resolution pipeline record
-    const pipelineResult = await step.run('create-pipeline-record', async () => {
-      const supabase = await createServiceClient();
-      
-      const pipelineId = aiResult.pipelineId || `pipeline_${Date.now()}_${marketId.slice(0, 8)}`;
-
-      const { error } = await (supabase
-        .from('ai_resolution_pipelines')
-        .insert({
-          pipeline_id: pipelineId,
-          market_id: marketId,
-          request_id: requestId,
-          status: aiResult.actionTaken === 'failed' ? 'failed' : 'completed',
-          query: marketQuestion,
-          final_outcome: aiResult.outcome,
-          final_confidence: aiResult.confidence * 100,
-          confidence_level: aiResult.confidenceLevel || 'unknown',
-          recommended_action: aiResult.actionTaken,
-          retrieval_output: aiResult.sources.length > 0 ? { sourceCount: aiResult.sources.length } : null,
-          verification_output: {
-            status: aiResult.verificationStatus,
-            blockers: aiResult.verificationBlockers,
-          },
-          deliberation_output: {
-            outcome: aiResult.outcome,
-            confidence: aiResult.confidence,
-          },
-        }) as any);
-
-      if (error) {
-        console.warn(`[AI Oracle] Failed to create pipeline record (non-fatal):`, error.message);
-      }
-
-      return { pipelineId };
-    });
-
     // Step 5: Handle resolution action
-    if (aiResult.actionTaken === 'auto_resolved' && aiResult.confidence >= 0.9 && aiResult.outcome !== 'UNCERTAIN') {
+    if (canAutoResolve) {
       await step.run('auto-resolve-market', async () => {
-        console.log(`[AI Oracle] Auto-resolving market ${marketId} with outcome ${aiResult.outcome}`);
-        
+        console.log(`[AI Oracle] ✅ Auto-resolving market ${marketId}: ${oracleResult.resolution} @ ${oracleResult.confidence_score}%`);
+
         const supabase = await createServiceClient();
 
-        // Update market status
         const { error: marketError } = await (supabase
           .from('markets')
           .update({
             status: 'resolved',
-            winning_outcome: aiResult.outcome,
+            winning_outcome: oracleResult.resolution,
             resolved_at: new Date().toISOString(),
-            resolution_source: 'ai_oracle',
+            resolution_source: oracleResult.fallback_triggered ? 'ai_oracle_fallback' : 'ai_oracle',
           })
           .eq('id', marketId) as any);
 
         if (marketError) {
-          console.error(`[AI Oracle] Failed to update market:`, marketError);
           throw new Error(`Failed to update market: ${marketError.message}`);
         }
 
-        // Update oracle request as resolved
-        await (supabase
-          .from('oracle_requests')
+        await (supabase.from('oracle_requests') as any)
           .update({
             status: 'resolved',
             resolved_at: new Date().toISOString(),
           })
-          .eq('id', requestId) as any);
+          .eq('id', requestId);
 
-        return { resolved: true, outcome: aiResult.outcome };
+        return { resolved: true, outcome: oracleResult.resolution };
       });
 
-      // Trigger settlement workflow
       await step.run('trigger-settlement', async () => {
         console.log(`[AI Oracle] Triggering settlement for market ${marketId}`);
-        // Settlement is handled by the market/resolve event listener
         return { triggered: true };
       });
     } else {
-      // Queue for human review or escalate
-      await step.run('queue-human-review', async () => {
-        console.log(`[AI Oracle] Market ${marketId} queued for review. Action: ${aiResult.actionTaken}`);
-        
+      // Queue for human tribunal
+      await step.run('queue-human-tribunal', async () => {
+        console.log(`[AI Oracle] ⏳ Market ${marketId} queued for Human Tribunal. Confidence: ${oracleResult.confidence_score}% (< ${MIN_CONFIDENCE_THRESHOLD}%)`);
+
         const supabase = await createServiceClient();
 
-        // Insert into human review queue
-        await (supabase
-          .from('human_review_queue')
-          .insert({
-            request_id: requestId,
-            market_id: marketId,
-            priority: aiResult.confidence >= 0.8 ? 'medium' : 'high',
-            status: 'pending',
-            notes: `AI confidence: ${(aiResult.confidence * 100).toFixed(1)}%. Action: ${aiResult.actionTaken}`,
-            created_at: new Date().toISOString(),
-          }) as any);
+        await (supabase.from('human_review_queue') as any).insert({
+          pipeline_id: oracleResult.audit_log_id || `tribunal_${Date.now()}_${marketId.slice(0, 8)}`,
+          market_id: marketId,
+          market_question: marketQuestion,
+          ai_outcome: oracleResult.resolution,
+          ai_confidence: oracleResult.confidence_score / 100, // numeric(5,4)
+          ai_explanation: oracleResult.reasoning,
+          evidence_summary: { sources: oracleResult.sources, provider: oracleResult.provider },
+          status: 'pending',
+          priority: oracleResult.confidence_score >= 70 ? 'medium' : 'high',
+          created_at: new Date().toISOString(),
+          deadline_at: new Date(Date.now() + 86400000).toISOString(),
+        });
 
         return { queued: true };
       });
     }
 
-    // Step 6: Return final result
     return {
-      success: aiResult.success,
+      success: true,
       requestId,
       marketId,
-      outcome: aiResult.outcome,
-      confidence: aiResult.confidence,
-      confidenceLevel: aiResult.confidenceLevel,
-      actionTaken: aiResult.actionTaken,
-      needsManualReview: aiResult.actionTaken !== 'auto_resolved',
-      pipelineId: pipelineResult.pipelineId,
+      outcome: oracleResult.resolution,
+      confidence: oracleResult.confidence_score,
+      action: canAutoResolve ? 'auto_resolved' : 'human_tribunal',
+      needsManualReview: !canAutoResolve,
     };
   }
 );
@@ -276,7 +284,6 @@ export const challengeResolution = inngest.createFunction(
     const challengeResult = await step.run('record-challenge', async () => {
       const supabase = await createServiceClient();
 
-      // Create dispute record
       const { data: dispute, error } = await (supabase
         .from('oracle_disputes')
         .insert({
@@ -293,18 +300,15 @@ export const challengeResolution = inngest.createFunction(
         throw new Error(`Failed to create dispute: ${error.message}`);
       }
 
-      // Update oracle request status
-      await (supabase
-        .from('oracle_requests')
+      await (supabase.from('oracle_requests') as any)
         .update({ status: 'disputed' })
-        .eq('id', requestId) as any);
+        .eq('id', requestId);
 
       return { disputeId: dispute.id };
     });
 
-    // Notify admins of challenge
     await step.run('notify-admins', async () => {
-      console.log(`[Challenge] Challenge recorded, admins notified for request ${requestId}`);
+      console.log(`[Challenge] Admins notified for request ${requestId}`);
       return { notified: true };
     });
 

@@ -1,0 +1,148 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: polymarket-postgres
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+    tmpfs:
+      - /tmp:noexec,nosuid,size=100m
+      - /var/run/postgresql:size=10m
+    ports:
+      - "127.0.0.1:5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+      POSTGRES_DB: polymarket
+    volumes:
+      - supabase-data:/var/lib/postgresql/data
+    networks:
+      - db_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    secrets:
+      - db_password
+
+  postgrest:
+    image: postgrest/postgrest:v12.0.1
+    container_name: polymarket-postgrest
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    environment:
+      PGRST_DB_URI_FILE: /run/secrets/db_uri
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_ANON_ROLE: anon
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - db_net
+      - api_net
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    secrets:
+      - db_uri
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:1.70.0
+    container_name: polymarket-n8n-main
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+    tmpfs:
+      - /tmp:noexec,nosuid,size=100m
+    ports:
+      - "127.0.0.1:5678:5678"
+    environment:
+      N8N_HOST: ${N8N_HOST:-localhost}
+      N8N_PORT: 5678
+      N8N_PROTOCOL: https
+      NODE_ENV: production
+      WEBHOOK_URL: https://${N8N_HOST:-localhost}/
+      GENERIC_TIMEZONE: ${GENERIC_TIMEZONE:-Asia/Dhaka}
+    volumes:
+      - n8n_data:/home/node/.n8n
+    networks:
+      - api_net
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+
+  kyc-ai:
+    build:
+      context: ./apps/ai-kyc
+      dockerfile: Dockerfile
+    container_name: polymarket-kyc-ai
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:noexec,nosuid,size=50m
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      PYTHONUNBUFFERED: "1"
+    networks:
+      - api_net
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+
+volumes:
+  supabase-data:
+    name: polymarket-supabase-data
+  n8n_data:
+    name: polymarket-n8n-data
+
+networks:
+  db_net:
+    internal: true  # No external access — DB isolated
+  api_net:
+    driver: bridge
+
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt
+  db_uri:
+    file: ./secrets/db_uri.txt

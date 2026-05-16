@@ -1,7 +1,8 @@
 /**
- * Upstash Redis Client
- * For rate limiting, locking, and caching
- * Uses Vercel KV / Upstash Redis environment variables
+ * Upstash Redis Client — Burst Optimized
+ *
+ * - Exponential backoff retry (max 5 attempts)
+ * - Used for rate limiting, locking, caching, circuit breaker state
  */
 
 const KV_REST_API_URL = process.env.KV_REST_API_URL;
@@ -12,39 +13,84 @@ interface RedisResponse {
   error?: string;
 }
 
-export async function redisCommand(command: string, ...args: (string | number)[]): Promise<any> {
+const MAX_RETRIES = 5;
+const BASE_DELAY_MS = 100;
+
+async function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Execute Redis command with retry logic.
+ */
+export async function redisCommand(
+  command: string,
+  ...args: (string | number)[]
+): Promise<any> {
   if (!KV_REST_API_URL || !KV_REST_API_TOKEN) {
-    console.warn('Vercel KV / Upstash Redis not configured');
+    console.warn("[Redis] Vercel KV / Upstash Redis not configured");
     return null;
   }
 
-  const response = await fetch(`${KV_REST_API_URL}`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${KV_REST_API_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify([command, ...args]),
-  });
+  let lastError: Error | undefined;
 
-  if (!response.ok) {
-    throw new Error(`Redis command failed: ${response.status}`);
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const response = await fetch(`${KV_REST_API_URL}`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${KV_REST_API_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify([command, ...args]),
+      });
+
+      if (!response.ok) {
+        const status = response.status;
+        // Retry on rate limit (429) or server errors (5xx)
+        if (status === 429 || status >= 500) {
+          lastError = new Error(`Redis command failed: HTTP ${status}`);
+          const delay = BASE_DELAY_MS * Math.pow(2, attempt - 1);
+          console.warn(
+            `[Redis] Retry ${attempt}/${MAX_RETRIES} for ${command} after ${delay}ms (HTTP ${status})`
+          );
+          await sleep(delay);
+          continue;
+        }
+        throw new Error(`Redis command failed: HTTP ${status}`);
+      }
+
+      const data: RedisResponse = await response.json();
+      return data.result;
+    } catch (error: any) {
+      lastError = error;
+      // Network errors → retry with backoff
+      if (attempt < MAX_RETRIES) {
+        const delay = BASE_DELAY_MS * Math.pow(2, attempt - 1);
+        console.warn(
+          `[Redis] Retry ${attempt}/${MAX_RETRIES} for ${command} after ${delay}ms: ${error.message}`
+        );
+        await sleep(delay);
+      }
+    }
   }
 
-  const data: RedisResponse = await response.json();
-  return data.result;
+  throw lastError || new Error(`Redis command failed after ${MAX_RETRIES} retries`);
 }
 
 /**
  * Set a lock with expiration (for rate limiting)
  */
-export async function setLock(key: string, value: string, ttlSeconds: number): Promise<boolean> {
+export async function setLock(
+  key: string,
+  value: string,
+  ttlSeconds: number
+): Promise<boolean> {
   try {
-    // SET key value EX ttl NX (only if not exists)
-    const result = await redisCommand('SET', key, value, 'EX', ttlSeconds, 'NX');
-    return result === 'OK';
+    const result = await redisCommand("SET", key, value, "EX", ttlSeconds, "NX");
+    return result === "OK";
   } catch (error) {
-    console.error('Redis setLock error:', error);
+    console.error("[Redis] setLock error:", error);
     return false;
   }
 }
@@ -54,9 +100,9 @@ export async function setLock(key: string, value: string, ttlSeconds: number): P
  */
 export async function checkLock(key: string): Promise<string | null> {
   try {
-    return await redisCommand('GET', key);
+    return await redisCommand("GET", key);
   } catch (error) {
-    console.error('Redis checkLock error:', error);
+    console.error("[Redis] checkLock error:", error);
     return null;
   }
 }
@@ -66,9 +112,9 @@ export async function checkLock(key: string): Promise<string | null> {
  */
 export async function deleteLock(key: string): Promise<void> {
   try {
-    await redisCommand('DEL', key);
+    await redisCommand("DEL", key);
   } catch (error) {
-    console.error('Redis deleteLock error:', error);
+    console.error("[Redis] deleteLock error:", error);
   }
 }
 
@@ -77,9 +123,9 @@ export async function deleteLock(key: string): Promise<void> {
  */
 export async function expire(key: string, ttlSeconds: number): Promise<void> {
   try {
-    await redisCommand('EXPIRE', key, ttlSeconds);
+    await redisCommand("EXPIRE", key, ttlSeconds);
   } catch (error) {
-    console.error('Redis expire error:', error);
+    console.error("[Redis] expire error:", error);
   }
 }
 
@@ -88,9 +134,9 @@ export async function expire(key: string, ttlSeconds: number): Promise<void> {
  */
 export async function getTTL(key: string): Promise<number> {
   try {
-    return await redisCommand('TTL', key);
+    return await redisCommand("TTL", key);
   } catch (error) {
-    console.error('Redis getTTL error:', error);
+    console.error("[Redis] getTTL error:", error);
     return -1;
   }
 }
@@ -100,9 +146,9 @@ export async function getTTL(key: string): Promise<number> {
  */
 export async function increment(key: string): Promise<number> {
   try {
-    return await redisCommand('INCR', key);
+    return await redisCommand("INCR", key);
   } catch (error) {
-    console.error('Redis increment error:', error);
+    console.error("[Redis] increment error:", error);
     return 0;
   }
 }
@@ -110,11 +156,15 @@ export async function increment(key: string): Promise<number> {
 /**
  * Set a value with expiration
  */
-export async function setex(key: string, ttlSeconds: number, value: string): Promise<void> {
+export async function setex(
+  key: string,
+  ttlSeconds: number,
+  value: string
+): Promise<void> {
   try {
-    await redisCommand('SETEX', key, ttlSeconds, value);
+    await redisCommand("SETEX", key, ttlSeconds, value);
   } catch (error) {
-    console.error('Redis setex error:', error);
+    console.error("[Redis] setex error:", error);
   }
 }
 
@@ -123,9 +173,9 @@ export async function setex(key: string, ttlSeconds: number, value: string): Pro
  */
 export async function get(key: string): Promise<string | null> {
   try {
-    return await redisCommand('GET', key);
+    return await redisCommand("GET", key);
   } catch (error) {
-    console.error('Redis get error:', error);
+    console.error("[Redis] get error:", error);
     return null;
   }
 }
@@ -135,5 +185,5 @@ export const redis = {
   setex,
   del: deleteLock,
   incr: increment,
-  expire: expire
+  expire,
 };

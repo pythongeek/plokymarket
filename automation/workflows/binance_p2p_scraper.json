@@ -59,6 +59,11 @@
                     "timeout": 30000,
                     "redirect": {
                         "redirect": {}
+                    },
+                    "retry": {
+                        "limit": 3,
+                        "statusCodes": "429,500,502,503,504",
+                        "errorCodes": "ECONNRESET,ETIMEDOUT,ECONNREFUSED"
                     }
                 }
             },
@@ -73,7 +78,7 @@
         },
         {
             "parameters": {
-                "jsCode": "const html = $input.json().data || $input.json().body;\nconst cheerio = require('cheerio');\nconst $ = cheerio.load(html);\nconst method = $('[data-method]').val() || 'bkash'; // Fallback or logic\n\nconst sellers = [];\n\n$('.css-1c82c04').each((index, element) => {\n  if (index >= 10) return;\n  \n  try {\n    const name = $(element).find('[data-testid=\"c2c-user-info\"] .css-1c82c04').text().trim();\n    const priceText = $(element).find('[data-testid=\"c2c-price\"]').text().trim();\n    const availableText = $(element).find('[data-testid=\"c2c-available\"]').text().trim();\n    const limitsText = $(element).find('[data-testid=\"c2c-limit\"]').text().trim();\n    const completionText = $(element).find('[data-testid=\"c2c-completion-rate\"]').text().trim();\n    \n    const priceMatch = priceText.match(/[\\d,]+\\.?\\d*/);\n    const price = priceMatch ? parseFloat(priceMatch[0].replace(/,/g, '')) : 0;\n    \n    const isVerified = $(element).text().includes('Verified') || \n                      $(element).text().includes('বাইন্যান্সে যাচাইকৃত');\n    \n    const sellerId = $(element).attr('data-seller-id') || `seller_${index}`;\n    \n    if (name && price > 0) {\n      sellers.push({\n        seller_id: sellerId,\n        nickname: name,\n        price_bdt: price,\n        available_usdt: availableText || 'N/A',\n        limits: limitsText || 'N/A',\n        completion_rate: completionText || 'N/A',\n        verified: isVerified,\n        payment_methods: [method.toUpperCase()]\n      });\n    }\n  } catch (e) {}\n});\n\nsellers.sort((a, b) => a.price_bdt - b.price_bdt);\n\nif (sellers.length === 0) {\n  return { sellers: generateMockData(method), is_mock: true };\n}\n\nreturn { sellers, count: sellers.length, method };\n\nfunction generateMockData(m) {\n  return [{ nickname: \"FastTrader_BD\", price_bdt: 122.50, verified: true }];\n}"
+                "jsCode": "const html = $input.json().data || $input.json().body;\nconst cheerio = require('cheerio');\nconst $ = cheerio.load(html);\nconst method = $('[data-method]').val() || 'bkash'; // Fallback or logic\n\nconst sellers = [];\n\n$('.css-1c82c04').each((index, element) => {\n  if (index >= 10) return;\n  \n  try {\n    const name = $(element).find('[data-testid=\"c2c-user-info\"] .css-1c82c04').text().trim();\n    const priceText = $(element).find('[data-testid=\"c2c-price\"]').text().trim();\n    const availableText = $(element).find('[data-testid=\"c2c-available\"]').text().trim();\n    const limitsText = $(element).find('[data-testid=\"c2c-limit\"]').text().trim();\n    const completionText = $(element).find('[data-testid=\"c2c-completion-rate\"]').text().trim();\n    \n    const priceMatch = priceText.match(/[\\d,]+\\.?\\d*/);\n    const price = priceMatch ? parseFloat(priceMatch[0].replace(/,/g, '')) : 0;\n    \n    const isVerified = $(element).text().includes('Verified') || \n                      $(element).text().includes('\u09ac\u09be\u0987\u09a8\u09cd\u09af\u09be\u09a8\u09cd\u09b8\u09c7 \u09af\u09be\u099a\u09be\u0987\u0995\u09c3\u09a4');\n    \n    const sellerId = $(element).attr('data-seller-id') || `seller_${index}`;\n    \n    if (name && price > 0) {\n      sellers.push({\n        seller_id: sellerId,\n        nickname: name,\n        price_bdt: price,\n        available_usdt: availableText || 'N/A',\n        limits: limitsText || 'N/A',\n        completion_rate: completionText || 'N/A',\n        verified: isVerified,\n        payment_methods: [method.toUpperCase()]\n      });\n    }\n  } catch (e) {}\n});\n\nsellers.sort((a, b) => a.price_bdt - b.price_bdt);\n\nif (sellers.length === 0) {\n  return { sellers: generateMockData(method), is_mock: true };\n}\n\nreturn { sellers, count: sellers.length, method };\n\nfunction generateMockData(m) {\n  return [{ nickname: \"FastTrader_BD\", price_bdt: 122.50, verified: true }];\n}"
             },
             "id": "i4g4i8h7-8e5f-8g4i-df6e-bf7a8b9c0d1e",
             "name": "Data Extraction",
@@ -106,6 +111,50 @@
             "position": [
                 1050,
                 300
+            ]
+        },
+        {
+            "parameters": {},
+            "id": "error-trigger",
+            "name": "Error Trigger",
+            "type": "n8n-nodes-base.errorTrigger",
+            "typeVersion": 1,
+            "position": [
+                250,
+                500
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "={{ $env.ALERT_WEBHOOK_URL }}",
+                "sendBody": true,
+                "contentType": "json",
+                "body": {
+                    "embeds": [
+                        {
+                            "title": "[CRITICAL] n8n Workflow Failure",
+                            "description": "=Workflow: {{ $workflow.name }}\\nNode: {{ $json.error.node.name }}\\nError: {{ $json.error.message }}",
+                            "color": 15158332,
+                            "timestamp": "={{ $now }}"
+                        }
+                    ]
+                },
+                "options": {
+                    "retry": {
+                        "limit": 3,
+                        "statusCodes": "429,500,502,503,504",
+                        "errorCodes": "ECONNRESET,ETIMEDOUT,ECONNREFUSED"
+                    }
+                }
+            },
+            "id": "alert-webhook",
+            "name": "Send Alert",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4,
+            "position": [
+                470,
+                500
             ]
         }
     ],
@@ -148,6 +197,17 @@
                 [
                     {
                         "node": "Supabase Cache",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Error Trigger": {
+            "main": [
+                [
+                    {
+                        "node": "Send Alert",
                         "type": "main",
                         "index": 0
                     }

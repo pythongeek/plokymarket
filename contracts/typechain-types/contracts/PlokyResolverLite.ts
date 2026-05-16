@@ -95,6 +95,7 @@ export interface PlokyResolverLiteInterface extends Interface {
       | "DisputeRaised"
       | "DisputeResolved"
       | "EvidenceSubmitted"
+      | "QuestionCancelled"
       | "QuestionCreated"
       | "RoleAdminChanged"
       | "RoleGranted"
@@ -396,6 +397,19 @@ export namespace EvidenceSubmittedEvent {
     submitter: string;
     cid: string;
     etype: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace QuestionCancelledEvent {
+  export type InputTuple = [id: BytesLike, by: AddressLike];
+  export type OutputTuple = [id: string, by: string];
+  export interface OutputObject {
+    id: string;
+    by: string;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -1056,6 +1070,13 @@ export interface PlokyResolverLite extends BaseContract {
     EvidenceSubmittedEvent.OutputObject
   >;
   getEvent(
+    key: "QuestionCancelled"
+  ): TypedContractEvent<
+    QuestionCancelledEvent.InputTuple,
+    QuestionCancelledEvent.OutputTuple,
+    QuestionCancelledEvent.OutputObject
+  >;
+  getEvent(
     key: "QuestionCreated"
   ): TypedContractEvent<
     QuestionCreatedEvent.InputTuple,
@@ -1162,6 +1183,17 @@ export interface PlokyResolverLite extends BaseContract {
       EvidenceSubmittedEvent.InputTuple,
       EvidenceSubmittedEvent.OutputTuple,
       EvidenceSubmittedEvent.OutputObject
+    >;
+
+    "QuestionCancelled(bytes32,address)": TypedContractEvent<
+      QuestionCancelledEvent.InputTuple,
+      QuestionCancelledEvent.OutputTuple,
+      QuestionCancelledEvent.OutputObject
+    >;
+    QuestionCancelled: TypedContractEvent<
+      QuestionCancelledEvent.InputTuple,
+      QuestionCancelledEvent.OutputTuple,
+      QuestionCancelledEvent.OutputObject
     >;
 
     "QuestionCreated(bytes32,string,address,uint256,string,uint8)": TypedContractEvent<

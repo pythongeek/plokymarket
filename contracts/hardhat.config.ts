@@ -31,6 +31,7 @@ const config: HardhatUserConfig = {
       url: process.env.AMOY_RPC || "https://rpc-amoy.polygon.technology",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
       chainId: 80002,
+      gasPrice: 30000000000, // 30 gwei fallback for Amoy testnet stability
     },
     polygon: {
       url: process.env.POLYGON_RPC || "https://polygon-rpc.com",

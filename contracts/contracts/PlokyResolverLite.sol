@@ -2,9 +2,10 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-contract PlokyResolverLite is AccessControl {
+contract PlokyResolverLite is AccessControl, ReentrancyGuard {
     bytes32 public constant RESOLVER_ROLE = keccak256("RESOLVER_ROLE");
     bytes32 public constant AI_ORACLE_ROLE = keccak256("AI_ORACLE_ROLE");
     bytes32 public constant ARBITER_ROLE = keccak256("ARBITER_ROLE");
@@ -69,6 +70,7 @@ contract PlokyResolverLite is AccessControl {
     event AIAnalysis(bytes32 qId, uint256 confidence, uint8 outcome);
     event Staked(address resolver, uint256 amount);
     event Unstaked(address resolver, uint256 amount);
+    event QuestionCancelled(bytes32 id, address by);
 
     constructor(address _plky, address _admin, uint256 _quorum) {
         plkyToken = IERC20(_plky);
@@ -87,7 +89,7 @@ contract PlokyResolverLite is AccessControl {
         emit Staked(msg.sender, amount);
     }
 
-    function unstake(uint256 amount) external onlyRole(RESOLVER_ROLE) {
+    function unstake(uint256 amount) external nonReentrant onlyRole(RESOLVER_ROLE) {
         require(stakes[msg.sender] >= amount, "Insufficient stake");
         stakes[msg.sender] -= amount;
         if (stakes[msg.sender] < STAKE_MIN) _revokeRole(RESOLVER_ROLE, msg.sender);
@@ -127,7 +129,7 @@ contract PlokyResolverLite is AccessControl {
         emit EvidenceSubmitted(qId, msg.sender, cid, etype);
     }
 
-    function proposeVerdict(bytes32 qId, Outcome outcome, bytes32 reasonCID) external onlyRole(RESOLVER_ROLE) {
+    function proposeVerdict(bytes32 qId, Outcome outcome, bytes32 reasonCID) external nonReentrant onlyRole(RESOLVER_ROLE) {
         Question storage q = questions[qId];
         require(q.status == QStatus.OPEN, "Not open");
         require(plkyToken.transferFrom(msg.sender, address(this), VERDICT_BOND), "Bond failed");
@@ -158,7 +160,7 @@ contract PlokyResolverLite is AccessControl {
         }
     }
 
-    function executeVerdict(bytes32 qId) external {
+    function executeVerdict(bytes32 qId) external nonReentrant {
         Question storage q = questions[qId];
         require(q.status == QStatus.TIMELOCK, "Not timelock");
         Proposal storage p = proposals[q.activeProposalId];
@@ -174,7 +176,7 @@ contract PlokyResolverLite is AccessControl {
         emit VerdictExecuted(qId, uint8(p.outcome), msg.sender);
     }
 
-    function raiseDispute(bytes32 qId, string calldata reason, bytes32 evidenceCID) external {
+    function raiseDispute(bytes32 qId, string calldata reason, bytes32 evidenceCID) external nonReentrant {
         Question storage q = questions[qId];
         require(q.status == QStatus.RESOLVED, "Not resolved");
         require(plkyToken.transferFrom(msg.sender, address(this), DISPUTE_BOND), "Bond failed");
@@ -192,7 +194,7 @@ contract PlokyResolverLite is AccessControl {
         emit DisputeRaised(qId, disputes[qId].length - 1, msg.sender);
     }
 
-    function resolveDispute(bytes32 qId, uint256 idx, bool accept) external onlyRole(ARBITER_ROLE) {
+    function resolveDispute(bytes32 qId, uint256 idx, bool accept) external nonReentrant onlyRole(ARBITER_ROLE) {
         Dispute storage d = disputes[qId][idx];
         require(!d.resolved, "Already resolved");
         d.resolved = true;
@@ -200,8 +202,9 @@ contract PlokyResolverLite is AccessControl {
         if (accept) {
             require(plkyToken.transfer(d.disputer, d.bondAmount + d.bondAmount / 2), "Reward failed");
             d.bondReturned = true;
-            questions[qId].status = QStatus.OPEN;
-            questions[qId].outcome = Outcome.UNRESOLVED;
+            Question storage q = questions[qId];
+            q.status = QStatus.OPEN;
+            q.outcome = Outcome.UNRESOLVED;
         } else {
             require(plkyToken.transfer(address(this), d.bondAmount), "Seize failed");
         }
@@ -223,6 +226,7 @@ contract PlokyResolverLite is AccessControl {
 
     function cancelQuestion(bytes32 qId) external onlyRole(DEFAULT_ADMIN_ROLE) {
         questions[qId].status = QStatus.CANCELLED;
+        emit QuestionCancelled(qId, msg.sender);
     }
 
     function getAllIds() external view returns (bytes32[] memory) {

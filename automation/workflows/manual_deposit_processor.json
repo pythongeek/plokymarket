@@ -18,7 +18,7 @@
         {
             "parameters": {
                 "chatId": "YOUR_TELEGRAM_CHAT_ID",
-                "text": "=🚨 *নতুন ডিপোজিট রিকোয়েস্ট*\n\nমাধ্যম: {{ $json.body.data.method.toUpperCase() }}\nপরিমাণ: ৳{{ $json.body.data.amount_bdt }}\nTrxID: {{ $json.body.data.transaction_id }}\nফোন: {{ $json.body.data.user_phone_number }}\n\n⏱️ সময়সীমা: ১০ মিনিট\nলিংক: {{ $env.ADMIN_PANEL_URL }}/deposits/{{ $json.body.data.id }}",
+                "text": "=\ud83d\udea8 *\u09a8\u09a4\u09c1\u09a8 \u09a1\u09bf\u09aa\u09cb\u099c\u09bf\u099f \u09b0\u09bf\u0995\u09cb\u09af\u09bc\u09c7\u09b8\u09cd\u099f*\n\n\u09ae\u09be\u09a7\u09cd\u09af\u09ae: {{ $json.body.data.method.toUpperCase() }}\n\u09aa\u09b0\u09bf\u09ae\u09be\u09a3: \u09f3{{ $json.body.data.amount_bdt }}\nTrxID: {{ $json.body.data.transaction_id }}\n\u09ab\u09cb\u09a8: {{ $json.body.data.user_phone_number }}\n\n\u23f1\ufe0f \u09b8\u09ae\u09af\u09bc\u09b8\u09c0\u09ae\u09be: \u09e7\u09e6 \u09ae\u09bf\u09a8\u09bf\u099f\n\u09b2\u09bf\u0982\u0995: {{ $env.ADMIN_PANEL_URL }}/deposits/{{ $json.body.data.id }}",
                 "additionalFields": {
                     "parse_mode": "Markdown"
                 }
@@ -104,7 +104,7 @@
         {
             "parameters": {
                 "chatId": "YOUR_TELEGRAM_CHAT_ID",
-                "text": "=⚠️ *URGENT: ডিপোজিট পেন্ডিং!*\n\nআইডি: {{ $node[\"Webhook\"].json.body.data.id }}\nইউজার ১০ মিনিট ধরে অপেক্ষা করছে। দয়া করে দ্রুত প্রসেস করুন।",
+                "text": "=\u26a0\ufe0f *URGENT: \u09a1\u09bf\u09aa\u09cb\u099c\u09bf\u099f \u09aa\u09c7\u09a8\u09cd\u09a1\u09bf\u0982!*\n\n\u0986\u0987\u09a1\u09bf: {{ $node[\"Webhook\"].json.body.data.id }}\n\u0987\u0989\u099c\u09be\u09b0 \u09e7\u09e6 \u09ae\u09bf\u09a8\u09bf\u099f \u09a7\u09b0\u09c7 \u0985\u09aa\u09c7\u0995\u09cd\u09b7\u09be \u0995\u09b0\u099b\u09c7\u0964 \u09a6\u09df\u09be \u0995\u09b0\u09c7 \u09a6\u09cd\u09b0\u09c1\u09a4 \u09aa\u09cd\u09b0\u09b8\u09c7\u09b8 \u0995\u09b0\u09c1\u09a8\u0964",
                 "additionalFields": {
                     "parse_mode": "Markdown"
                 }
@@ -122,6 +122,50 @@
                     "name": "Telegram Account"
                 }
             }
+        },
+        {
+            "parameters": {},
+            "id": "error-trigger",
+            "name": "Error Trigger",
+            "type": "n8n-nodes-base.errorTrigger",
+            "typeVersion": 1,
+            "position": [
+                250,
+                500
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "={{ $env.ALERT_WEBHOOK_URL }}",
+                "sendBody": true,
+                "contentType": "json",
+                "body": {
+                    "embeds": [
+                        {
+                            "title": "[CRITICAL] n8n Workflow Failure",
+                            "description": "=Workflow: {{ $workflow.name }}\\nNode: {{ $json.error.node.name }}\\nError: {{ $json.error.message }}",
+                            "color": 15158332,
+                            "timestamp": "={{ $now }}"
+                        }
+                    ]
+                },
+                "options": {
+                    "retry": {
+                        "limit": 3,
+                        "statusCodes": "429,500,502,503,504",
+                        "errorCodes": "ECONNRESET,ETIMEDOUT,ECONNREFUSED"
+                    }
+                }
+            },
+            "id": "alert-webhook",
+            "name": "Send Alert",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4,
+            "position": [
+                470,
+                500
+            ]
         }
     ],
     "connections": {
@@ -174,6 +218,17 @@
                 [
                     {
                         "node": "Urgent Alert",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Error Trigger": {
+            "main": [
+                [
+                    {
+                        "node": "Send Alert",
                         "type": "main",
                         "index": 0
                     }

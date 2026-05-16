@@ -89,6 +89,8 @@ export default async function RootLayout({
   return (
     <html lang={locale} suppressHydrationWarning>
       <head>
+        <link rel="preconnect" href="https://polymarketbd.com" />
+        <link rel="dns-prefetch" href="https://polymarketbd.com" />
         {(process.env.NODE_ENV === "development" || process.env.VERCEL_ENV === "preview") && (
           // eslint-disable-next-line @next/next/no-sync-scripts
           <script

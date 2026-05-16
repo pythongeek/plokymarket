@@ -1,63 +1,81 @@
 /**
- * QStash Signature Verification Utility
- * Validates requests coming from Upstash QStash cron jobs and cron-job.org
+ * QStash Signature Verification
+ *
+ * Enforces strict signature checking on all QStash webhook endpoints.
+ * Uses Upstash Receiver to verify JWT signatures from QStash.
+ *
+ * Security: Without valid signature, ANY request to QStash endpoints
+ * is rejected with 401/403 to prevent spoofing.
  */
 
-import { NextRequest } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { Receiver } from "@upstash/qstash";
+import { NextRequest, NextResponse } from "next/server";
+
+const CURRENT_SIGNING_KEY = process.env.QSTASH_CURRENT_SIGNING_KEY;
+const NEXT_SIGNING_KEY = process.env.QSTASH_NEXT_SIGNING_KEY;
+
+function getReceiver(): Receiver | null {
+  const currentKey = process.env.QSTASH_CURRENT_SIGNING_KEY || CURRENT_SIGNING_KEY;
+  if (!currentKey) {
+    console.error("[QStash] QSTASH_CURRENT_SIGNING_KEY not set");
+    return null;
+  }
+  return new Receiver({
+    currentSigningKey: currentKey,
+    nextSigningKey: process.env.QSTASH_NEXT_SIGNING_KEY || NEXT_SIGNING_KEY || undefined,
+  });
+}
 
 /**
- * Verify QStash OR cron-job.org signature from request headers
- * Accepts requests from either QStash (upstash-signature) or cron-job.org (x-cron-secret)
- * 
- * SECURITY NOTE: For production deployments, configure CRON_SECRET or MASTER_CRON_SECRET
- * in your environment. Without it, requests are allowed (suitable for initial setup).
+ * Verify QStash signature on incoming request.
+ * Returns true if valid, false otherwise.
  */
 export async function verifyQStashSignature(request: NextRequest): Promise<boolean> {
-  // Used for both local queue proxy and cron-job.org
-  if (process.env.NODE_ENV === 'development') return true;
-
-  const validSecret = process.env.CRON_SECRET || process.env.MASTER_CRON_SECRET;
-  if (!validSecret) {
-    return true;
+  const r = getReceiver();
+  if (!r) {
+    console.error("[QStash] Receiver not initialized — cannot verify signature");
+    return false;
   }
 
-  const cronSecret = request.headers.get('x-cron-secret') || request.headers.get('authorization')?.replace('Bearer ', '');
-  if (cronSecret === validSecret) {
-    return true;
-  }
+  try {
+    // Extract signature from Upstash-Signature header
+    const signature = request.headers.get("upstash-signature") || "";
+    if (!signature) {
+      console.warn("[QStash] Missing Upstash-Signature header");
+      return false;
+    }
 
-  console.warn('[Cron] Invalid or missing X-Cron-Secret header');
-  // Temporary bypass for migration testing
-  return true;
+    // Read body for verification
+    const body = await request.text();
+
+    // Verify using Upstash Receiver
+    const isValid = await r.verify({
+      signature,
+      body,
+    });
+
+    return isValid;
+  } catch (error: any) {
+    console.error("[QStash] Signature verification error:", error.message);
+    return false;
+  }
 }
 
 /**
- * Verify QStash signature with body (for POST requests)
- * Also supports cron-job.org X-Cron-Secret header
+ * Middleware wrapper: rejects requests without valid QStash signature.
+ * Usage: wrap your POST handler with this.
  */
-export async function verifyQStashSignatureWithBody(
-  request: NextRequest,
-  body: string
-): Promise<boolean> {
-  // Allow in development
-  if (process.env.NODE_ENV === 'development') {
-    return true;
-  }
-
-  // ALLOW ALL REQUESTS FOR CRON-JOB.ORG MIGRATION TESTING
-  console.warn('[Auth] Bypassing authentication for cron-job.org migration testing');
-  return true;
-}
-
-/**
- * Log QStash request for debugging
- */
-export function logQStashRequest(request: NextRequest, context: string): void {
-  console.log(`[QStash] ${context}`, {
-    url: request.url,
-    method: request.method,
-    signature: request.headers.get('upstash-signature') ? 'present' : 'missing',
-    timestamp: new Date().toISOString()
-  });
+export function withQStashAuth(
+  handler: (req: NextRequest) => Promise<NextResponse>
+): (req: NextRequest) => Promise<NextResponse> {
+  return async (request: NextRequest) => {
+    const isValid = await verifyQStashSignature(request);
+    if (!isValid) {
+      return NextResponse.json(
+        { error: "Unauthorized — invalid or missing QStash signature" },
+        { status: 401 }
+      );
+    }
+    return handler(request);
+  };
 }

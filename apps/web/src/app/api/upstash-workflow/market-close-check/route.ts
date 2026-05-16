@@ -9,37 +9,49 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { withQStashAuth } from '@/lib/qstash/verify';
+import { acquireIdempotencyLock, generateIdempotencyKey } from '@/lib/qstash/idempotency';
 
 export const runtime = 'edge';
 export const preferredRegion = 'sin1';
 
 /**
- * POST handler for Upstash Workflow
- * Steps:
- * 1. find-closing-markets - Find markets closing in next hour
- * 2. notify-followers - Send notifications to followers
- * 3. mark-warned - Mark markets as warned
+ * POST handler for Upstash Workflow — Market Close Check
+ * Secured by QStash signature verification + idempotency.
  */
-export async function POST(request: NextRequest) {
+export const POST = withQStashAuth(async (request: NextRequest) => {
   const startTime = Date.now();
 
   let payload: Record<string, unknown> = {};
   let step = 'find-closing-markets';
   let workflowData: Record<string, unknown> = {};
 
-  // Try to parse JSON body, fall back to defaults if empty or invalid
   try {
-    const contentType = request.headers.get('content-type');
-    if (contentType && contentType.includes('application/json')) {
-      const text = await request.text();
-      if (text && text.trim()) {
-        payload = JSON.parse(text);
-        step = (payload.step as string) || step;
-        workflowData = (payload.data as Record<string, unknown>) || {};
-      }
+    const text = await request.text();
+    if (text && text.trim()) {
+      payload = JSON.parse(text);
+      step = (payload.step as string) || step;
+      workflowData = (payload.data as Record<string, unknown>) || {};
     }
-  } catch (parseError) {
+  } catch {
     console.log('[MarketCloseCheck] No valid JSON payload, using defaults');
+  }
+
+  // Idempotency: generate key from workflow type + step + timestamp bucket
+  const idempotencyKey = generateIdempotencyKey(
+    'market-close-check',
+    (payload.marketId as string) || 'global',
+    step
+  );
+  const { acquired, wasProcessed } = await acquireIdempotencyLock(idempotencyKey, { step });
+
+  if (!acquired && wasProcessed) {
+    console.log(`[MarketCloseCheck] Idempotency hit for ${idempotencyKey} — skipping`);
+    return NextResponse.json({
+      status: 'skipped',
+      reason: 'Already processed',
+      idempotencyKey,
+    });
   }
 
   try {
@@ -185,7 +197,7 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
 
 /**
  * GET: Workflow status

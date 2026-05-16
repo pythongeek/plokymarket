@@ -1,0 +1,31 @@
+### Phase 2 Confirmation Report
+
+- **Goal Status:** Success
+- **Files Modified:**
+  - `src/lib/ai/oracle-parsing-error.ts` (NEW) — Custom error class for unparseable oracle responses
+  - `src/lib/ai/minimax-oracle.ts` (NEW) — MiniMax Oracle Engine with strict CoT JSON prompt, unified 85% threshold, Vertex fallback, audit logging
+  - `src/lib/oracle/resolution-service.ts` (MODIFIED) — Updated to use MiniMax Oracle Engine, unified threshold, human tribunal routing
+  - `src/lib/ai/minimax-oracle.test.ts` (NEW) — 9 intent-based tests
+- **Prompt Schema Verified:** Yes
+  - Strict JSON schema enforced: `{ reasoning: string, confidence_score: number (0-100), resolution: "YES" | "NO" | "UNKNOWN", sources: string[] }`
+  - Chain-of-Thought mandatory: model must reason step-by-step before conclusion
+  - `OracleParsingError` thrown on any schema violation
+- **Threshold Routing Verified:** Yes
+  - `MIN_CONFIDENCE_THRESHOLD = 85` (unified, not category-specific)
+  - `< 85%` OR `resolution === "UNKNOWN"` → `human_tribunal` action
+  - `≥ 85%` AND `resolution !== "UNKNOWN"` → `auto_resolve` action
+- **Tests Passing:** 9/9 tests passed
+  - Test A: 95% confidence YES → auto-resolution proceeds
+  - Test B: 80% confidence YES → routes to Human Tribunal
+  - Test C: UNKNOWN at 99% confidence → routes to Tribunal regardless
+  - Test D: Malformed response → OracleParsingError, no state change
+  - Test E: Missing reasoning field → OracleParsingError
+  - Test F: Confidence score clamped to 0-100
+  - Test G: MiniMax 502 → Vertex fallback
+  - Test H: MiniMax 401 → NO fallback, fails loud
+  - Test I: Threshold constant is exactly 85
+- **Anomalies/Conflicts Surfaced:**
+  - Pre-existing `VertexOracleGuardianAgent.ts` uses Gemini REST API directly — now superseded by `minimax-oracle.ts`. The old agent should be deprecated but kept as reference.
+  - Category-specific thresholds (Political 95%, Sports 90%) were replaced with unified 85%. This is a stricter policy that routes more cases to human review, increasing safety.
+  - `ai-oracle-resolution.ts` (Inngest workflow) still uses `AIOrchestrator` class — a separate integration point that should be updated to use `resolveWithMiniMaxOracle()` in a future phase.
+  - Audit logging writes to `audit_logs` table (existing schema). If `human_review_queue` table doesn't exist, the INSERT will fail gracefully with console.error.

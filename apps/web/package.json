@@ -45,6 +45,7 @@
     "@tanstack/react-query-devtools": "^5.91.3",
     "@tanstack/react-virtual": "^3.13.18",
     "@types/canvas-confetti": "^1.9.0",
+    "@upstash/qstash": "^2.11.0",
     "@upstash/redis": "^1.37.0",
     "canvas-confetti": "^1.9.4",
     "chart.js": "^4.5.1",
@@ -107,6 +108,7 @@
     "puppeteer": "^24.37.1",
     "supabase": "^2.78.1",
     "tailwindcss": "^3.4.7",
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "vitest": "^4.1.6"
   }
 }

@@ -1,293 +1,462 @@
 {
-  "name": "Plokymarket Cleanup Expired Deposits",
-  "nodes": [
-    {
-      "parameters": {
-        "rule": {
-          "interval": [
-            {
-              "field": "cronExpression",
-              "expression": "0 0 * * *"
-            }
-          ]
-        }
-      },
-      "id": "schedule-trigger",
-      "name": "Schedule Trigger",
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.2,
-      "position": [250, 300],
-      "events": [
+    "name": "Plokymarket Cleanup Expired Deposits",
+    "nodes": [
         {
-          "type": "scheduledTime",
-          "resetSchedule": false
+            "parameters": {
+                "rule": {
+                    "interval": [
+                        {
+                            "field": "cronExpression",
+                            "expression": "0 0 * * *"
+                        }
+                    ]
+                }
+            },
+            "id": "schedule-trigger",
+            "name": "Schedule Trigger",
+            "type": "n8n-nodes-base.scheduleTrigger",
+            "typeVersion": 1.2,
+            "position": [
+                250,
+                300
+            ],
+            "events": [
+                {
+                    "type": "scheduledTime",
+                    "resetSchedule": false
+                }
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "// Query expired pending deposits (older than 24 hours)\nreturn {\n  json: {\n    query: `\n      SELECT d.id, d.user_id, d.amount, d.status, d.created_at,\n             u.email, u.full_name\n      FROM deposits d\n      JOIN users u ON u.id = d.user_id\n      WHERE d.status = 'pending'\n        AND d.created_at < NOW() - INTERVAL '24 hours'\n      ORDER BY d.created_at ASC\n      LIMIT 50\n    `\n  }\n};"
+            },
+            "id": "prepare-query",
+            "name": "Prepare Query",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                470,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "={{ $env.SUPABASE_URL }}/rest/v1/rpc/execute_sql",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "apikey",
+                            "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+                        },
+                        {
+                            "name": "Authorization",
+                            "value": "Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+                        },
+                        {
+                            "name": "Content-Type",
+                            "value": "application/json"
+                        },
+                        {
+                            "name": "Prefer",
+                            "value": "return=representation"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "name": "sql",
+                            "value": "={{ $json.query }}"
+                        }
+                    ]
+                },
+                "options": {
+                    "retry": {
+                        "limit": 3,
+                        "statusCodes": "429,500,502,503,504",
+                        "errorCodes": "ECONNRESET,ETIMEDOUT,ECONNREFUSED"
+                    }
+                }
+            },
+            "id": "query-expired",
+            "name": "Query Expired Deposits",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                690,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "// Extract expired deposits\nconst response = $input.first().json;\nconst deposits = Array.isArray(response) ? response : [response].filter(Boolean);\n\n// Build rejection query\nconst depositIds = deposits.map(d => d.id);\nconst userNotifications = deposits.map(d => ({\n  user_id: d.user_id,\n  type: 'deposit_expired',\n  title: '\u274c \u09a1\u09bf\u09aa\u09cb\u099c\u09bf\u099f \u09ac\u09be\u09a4\u09bf\u09b2 \u09b9\u09af\u09bc\u09c7\u099b\u09c7',\n  title_bn: '\u274c \u09a1\u09bf\u09aa\u09cb\u099c\u09bf\u099f \u09ac\u09be\u09a4\u09bf\u09b2 \u09b9\u09af\u09bc\u09c7\u099b\u09c7',\n  body: `\u0986\u09aa\u09a8\u09be\u09b0 \u09f3${d.amount} \u09a1\u09bf\u09aa\u09cb\u099c\u09bf\u099f ${new Date(d.created_at).toLocaleDateString('bn-BD')}-\u098f \u09ac\u09be\u09a4\u09bf\u09b2 \u0995\u09b0\u09be \u09b9\u09af\u09bc\u09c7\u099b\u09c7\u0964 \u0986\u09ac\u09be\u09b0 \u099a\u09c7\u09b7\u09cd\u099f\u09be \u0995\u09b0\u09c1\u09a8\u0964`,\n  body_bn: `\u0986\u09aa\u09a8\u09be\u09b0 \u09f3${d.amount} \u09a1\u09bf\u09aa\u09cb\u099c\u09bf\u099f ${new Date(d.created_at).toLocaleDateString('bn-BD')}-\u098f \u09ac\u09be\u09a4\u09bf\u09b2 \u0995\u09b0\u09be \u09b9\u09af\u09bc\u09c7\u099b\u09c7\u0964 \u0986\u09ac\u09be\u09b0 \u099a\u09c7\u09b7\u09cd\u099f\u09be \u0995\u09b0\u09c1\u09a8\u0964`,\n  action_url: '/wallet/deposit',\n  created_at: new Date().toISOString()\n}));\n\nreturn {\n  json: {\n    deposits,\n    depositIds,\n    notifications: userNotifications,\n    count: deposits.length\n  }\n};"
+            },
+            "id": "extract-deposits",
+            "name": "Extract Deposits",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                910,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "// Build update query for deposits\nconst data = $input.first().json;\n\nif (data.count === 0) {\n  return {\n    json: { skip: true, message: 'No expired deposits to clean up' }\n  };\n}\n\nconst ids = data.depositIds.map(id => `'${id}'`).join(',');\n\nreturn {\n  json: {\n    updateQuery: `\n      UPDATE deposits\n      SET status = 'rejected', updated_at = NOW()\n      WHERE id IN (${ids})\n    `,\n    notifications: data.notifications,\n    count: data.count\n  }\n};"
+            },
+            "id": "prepare-update",
+            "name": "Prepare Update",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                1130,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "={{ $env.SUPABASE_URL }}/rest/v1/rpc/execute_sql",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "apikey",
+                            "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+                        },
+                        {
+                            "name": "Authorization",
+                            "value": "Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+                        },
+                        {
+                            "name": "Content-Type",
+                            "value": "application/json"
+                        },
+                        {
+                            "name": "Prefer",
+                            "value": "return=minimal"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "name": "sql",
+                            "value": "={{ $json.updateQuery }}"
+                        }
+                    ]
+                },
+                "options": {
+                    "retry": {
+                        "limit": 3,
+                        "statusCodes": "429,500,502,503,504",
+                        "errorCodes": "ECONNRESET,ETIMEDOUT,ECONNREFUSED"
+                    }
+                }
+            },
+            "id": "update-deposits",
+            "name": "Reject Deposits",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                1350,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "={{ $env.SUPABASE_URL }}/rest/v1/notifications",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "apikey",
+                            "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+                        },
+                        {
+                            "name": "Authorization",
+                            "value": "Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+                        },
+                        {
+                            "name": "Content-Type",
+                            "value": "application/json"
+                        },
+                        {
+                            "name": "Prefer",
+                            "value": "return=minimal"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "sendBodyType": "json",
+                "body": "={{ $json.notifications }}",
+                "options": {
+                    "retry": {
+                        "limit": 3,
+                        "statusCodes": "429,500,502,503,504",
+                        "errorCodes": "ECONNRESET,ETIMEDOUT,ECONNREFUSED"
+                    }
+                }
+            },
+            "id": "insert-notifications",
+            "name": "Insert Notifications",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                1570,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "// Format admin summary in Bengali\nconst data = $input.first().json;\n\nconst message = `\n\ud83e\uddf9 <b>\u09a1\u09bf\u09aa\u09cb\u099c\u09bf\u099f \u0995\u09cd\u09b2\u09bf\u09a8\u0986\u09aa \u09b0\u09bf\u09aa\u09cb\u09b0\u09cd\u099f</b>\n\n\ud83d\udcca <b>\u09ac\u09be\u09a4\u09bf\u09b2 \u09a1\u09bf\u09aa\u09cb\u099c\u09bf\u099f:</b> ${data.count}\u099f\u09bf\n\u23f1\ufe0f <b>\u09b8\u09ae\u09af\u09bc:</b> ${new Date().toLocaleString('bn-BD')}\n\n${data.count > 0 ? `\u2705 \u09b8\u09ac \u09ac\u09be\u09a4\u09bf\u09b2 \u09a1\u09bf\u09aa\u09cb\u099c\u09bf\u099f \u0986\u09aa\u09a1\u09c7\u099f \u0995\u09b0\u09be \u09b9\u09af\u09bc\u09c7\u099b\u09c7\n\ud83d\udcec \u09ac\u09cd\u09af\u09ac\u09b9\u09be\u09b0\u0995\u09be\u09b0\u09c0\u09a6\u09c7\u09b0 \u09a8\u09cb\u099f\u09bf\u09ab\u09bf\u0995\u09c7\u09b6\u09a8 \u09aa\u09be\u09a0\u09be\u09a8\u09cb \u09b9\u09af\u09bc\u09c7\u099b\u09c7` : '\u0995\u09cb\u09a8\u09cb expired deposit \u09a8\u09c7\u0987\u0964'}\n`.trim();\n\nreturn {\n  json: {\n    message,\n    count: data.count\n  }\n};"
+            },
+            "id": "format-telegram",
+            "name": "Format Report",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                1790,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "Content-Type",
+                            "value": "application/json"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "name": "chat_id",
+                            "value": "={{ $env.TELEGRAM_CHAT_ID }}"
+                        },
+                        {
+                            "name": "text",
+                            "value": "={{ $json.message }}"
+                        },
+                        {
+                            "name": "parse_mode",
+                            "value": "HTML"
+                        }
+                    ]
+                },
+                "options": {
+                    "retry": {
+                        "limit": 3,
+                        "statusCodes": "429,500,502,503,504",
+                        "errorCodes": "ECONNRESET,ETIMEDOUT,ECONNREFUSED"
+                    }
+                }
+            },
+            "id": "send-telegram",
+            "name": "Send Telegram",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                2010,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "// Final result\nconst data = $input.first().json;\nreturn {\n  json: {\n    success: true,\n    deposits_cleaned: data.count,\n    notifications_sent: data.count,\n    timestamp: new Date().toISOString()\n  }\n};"
+            },
+            "id": "final-result",
+            "name": "Result",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                2230,
+                300
+            ]
+        },
+        {
+            "parameters": {},
+            "id": "error-trigger",
+            "name": "Error Trigger",
+            "type": "n8n-nodes-base.errorTrigger",
+            "typeVersion": 1,
+            "position": [
+                250,
+                500
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "={{ $env.ALERT_WEBHOOK_URL }}",
+                "sendBody": true,
+                "contentType": "json",
+                "body": {
+                    "embeds": [
+                        {
+                            "title": "[CRITICAL] n8n Workflow Failure",
+                            "description": "=Workflow: {{ $workflow.name }}\\nNode: {{ $json.error.node.name }}\\nError: {{ $json.error.message }}",
+                            "color": 15158332,
+                            "timestamp": "={{ $now }}"
+                        }
+                    ]
+                },
+                "options": {
+                    "retry": {
+                        "limit": 3,
+                        "statusCodes": "429,500,502,503,504",
+                        "errorCodes": "ECONNRESET,ETIMEDOUT,ECONNREFUSED"
+                    }
+                }
+            },
+            "id": "alert-webhook",
+            "name": "Send Alert",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4,
+            "position": [
+                470,
+                500
+            ]
         }
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "// Query expired pending deposits (older than 24 hours)\nreturn {\n  json: {\n    query: `\n      SELECT d.id, d.user_id, d.amount, d.status, d.created_at,\n             u.email, u.full_name\n      FROM deposits d\n      JOIN users u ON u.id = d.user_id\n      WHERE d.status = 'pending'\n        AND d.created_at < NOW() - INTERVAL '24 hours'\n      ORDER BY d.created_at ASC\n      LIMIT 50\n    `\n  }\n};"
-      },
-      "id": "prepare-query",
-      "name": "Prepare Query",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [470, 300]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $env.SUPABASE_URL }}/rest/v1/rpc/execute_sql",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "apikey",
-              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
-            },
-            {
-              "name": "Authorization",
-              "value": "Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            },
-            {
-              "name": "Prefer",
-              "value": "return=representation"
-            }
-          ]
+    ],
+    "connections": {
+        "Schedule Trigger": {
+            "main": [
+                [
+                    {
+                        "node": "Prepare Query",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
         },
-        "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "sql",
-              "value": "={{ $json.query }}"
-            }
-          ]
+        "Prepare Query": {
+            "main": [
+                [
+                    {
+                        "node": "Query Expired Deposits",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
         },
-        "options": {}
-      },
-      "id": "query-expired",
-      "name": "Query Expired Deposits",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [690, 300]
-    },
-    {
-      "parameters": {
-        "jsCode": "// Extract expired deposits\nconst response = $input.first().json;\nconst deposits = Array.isArray(response) ? response : [response].filter(Boolean);\n\n// Build rejection query\nconst depositIds = deposits.map(d => d.id);\nconst userNotifications = deposits.map(d => ({\n  user_id: d.user_id,\n  type: 'deposit_expired',\n  title: '❌ ডিপোজিট বাতিল হয়েছে',\n  title_bn: '❌ ডিপোজিট বাতিল হয়েছে',\n  body: `আপনার ৳${d.amount} ডিপোজিট ${new Date(d.created_at).toLocaleDateString('bn-BD')}-এ বাতিল করা হয়েছে। আবার চেষ্টা করুন।`,\n  body_bn: `আপনার ৳${d.amount} ডিপোজিট ${new Date(d.created_at).toLocaleDateString('bn-BD')}-এ বাতিল করা হয়েছে। আবার চেষ্টা করুন।`,\n  action_url: '/wallet/deposit',\n  created_at: new Date().toISOString()\n}));\n\nreturn {\n  json: {\n    deposits,\n    depositIds,\n    notifications: userNotifications,\n    count: deposits.length\n  }\n};"
-      },
-      "id": "extract-deposits",
-      "name": "Extract Deposits",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [910, 300]
-    },
-    {
-      "parameters": {
-        "jsCode": "// Build update query for deposits\nconst data = $input.first().json;\n\nif (data.count === 0) {\n  return {\n    json: { skip: true, message: 'No expired deposits to clean up' }\n  };\n}\n\nconst ids = data.depositIds.map(id => `'${id}'`).join(',');\n\nreturn {\n  json: {\n    updateQuery: `\n      UPDATE deposits\n      SET status = 'rejected', updated_at = NOW()\n      WHERE id IN (${ids})\n    `,\n    notifications: data.notifications,\n    count: data.count\n  }\n};"
-      },
-      "id": "prepare-update",
-      "name": "Prepare Update",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1130, 300]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $env.SUPABASE_URL }}/rest/v1/rpc/execute_sql",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "apikey",
-              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
-            },
-            {
-              "name": "Authorization",
-              "value": "Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            },
-            {
-              "name": "Prefer",
-              "value": "return=minimal"
-            }
-          ]
+        "Query Expired Deposits": {
+            "main": [
+                [
+                    {
+                        "node": "Extract Deposits",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
         },
-        "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "sql",
-              "value": "={{ $json.updateQuery }}"
-            }
-          ]
+        "Extract Deposits": {
+            "main": [
+                [
+                    {
+                        "node": "Prepare Update",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
         },
-        "options": {}
-      },
-      "id": "update-deposits",
-      "name": "Reject Deposits",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [1350, 300]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $env.SUPABASE_URL }}/rest/v1/notifications",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "apikey",
-              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
-            },
-            {
-              "name": "Authorization",
-              "value": "Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            },
-            {
-              "name": "Prefer",
-              "value": "return=minimal"
-            }
-          ]
+        "Prepare Update": {
+            "main": [
+                [
+                    {
+                        "node": "Reject Deposits",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
         },
-        "sendBody": true,
-        "sendBodyType": "json",
-        "body": "={{ $json.notifications }}",
-        "options": {}
-      },
-      "id": "insert-notifications",
-      "name": "Insert Notifications",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [1570, 300]
-    },
-    {
-      "parameters": {
-        "jsCode": "// Format admin summary in Bengali\nconst data = $input.first().json;\n\nconst message = `\n🧹 <b>ডিপোজিট ক্লিনআপ রিপোর্ট</b>\n\n📊 <b>বাতিল ডিপোজিট:</b> ${data.count}টি\n⏱️ <b>সময়:</b> ${new Date().toLocaleString('bn-BD')}\n\n${data.count > 0 ? `✅ সব বাতিল ডিপোজিট আপডেট করা হয়েছে\n📬 ব্যবহারকারীদের নোটিফিকেশন পাঠানো হয়েছে` : 'কোনো expired deposit নেই।'}\n`.trim();\n\nreturn {\n  json: {\n    message,\n    count: data.count\n  }\n};"
-      },
-      "id": "format-telegram",
-      "name": "Format Report",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1790, 300]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
+        "Reject Deposits": {
+            "main": [
+                [
+                    {
+                        "node": "Insert Notifications",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
         },
-        "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "chat_id",
-              "value": "={{ $env.TELEGRAM_CHAT_ID }}"
-            },
-            {
-              "name": "text",
-              "value": "={{ $json.message }}"
-            },
-            {
-              "name": "parse_mode",
-              "value": "HTML"
-            }
-          ]
+        "Insert Notifications": {
+            "main": [
+                [
+                    {
+                        "node": "Format Report",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
         },
-        "options": {}
-      },
-      "id": "send-telegram",
-      "name": "Send Telegram",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [2010, 300]
+        "Format Report": {
+            "main": [
+                [
+                    {
+                        "node": "Send Telegram",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Send Telegram": {
+            "main": [
+                [
+                    {
+                        "node": "Result",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Error Trigger": {
+            "main": [
+                [
+                    {
+                        "node": "Send Alert",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
     },
-    {
-      "parameters": {
-        "jsCode": "// Final result\nconst data = $input.first().json;\nreturn {\n  json: {\n    success: true,\n    deposits_cleaned: data.count,\n    notifications_sent: data.count,\n    timestamp: new Date().toISOString()\n  }\n};"
-      },
-      "id": "final-result",
-      "name": "Result",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [2230, 300]
-    }
-  ],
-  "connections": {
-    "Schedule Trigger": {
-      "main": [
-        [{ "node": "Prepare Query", "type": "main", "index": 0 }]
-      ]
+    "settings": {
+        "executionOrder": "v1",
+        "saveManualExecutions": true,
+        "callerPolicy": "workflowsFromSameOwner"
     },
-    "Prepare Query": {
-      "main": [
-        [{ "node": "Query Expired Deposits", "type": "main", "index": 0 }]
-      ]
-    },
-    "Query Expired Deposits": {
-      "main": [
-        [{ "node": "Extract Deposits", "type": "main", "index": 0 }]
-      ]
-    },
-    "Extract Deposits": {
-      "main": [
-        [{ "node": "Prepare Update", "type": "main", "index": 0 }]
-      ]
-    },
-    "Prepare Update": {
-      "main": [
-        [{ "node": "Reject Deposits", "type": "main", "index": 0 }]
-      ]
-    },
-    "Reject Deposits": {
-      "main": [
-        [{ "node": "Insert Notifications", "type": "main", "index": 0 }]
-      ]
-    },
-    "Insert Notifications": {
-      "main": [
-        [{ "node": "Format Report", "type": "main", "index": 0 }]
-      ]
-    },
-    "Format Report": {
-      "main": [
-        [{ "node": "Send Telegram", "type": "main", "index": 0 }]
-      ]
-    },
-    "Send Telegram": {
-      "main": [
-        [{ "node": "Result", "type": "main", "index": 0 }]
-      ]
-    }
-  },
-  "settings": {
-    "executionOrder": "v1",
-    "saveManualExecutions": true,
-    "callerPolicy": "workflowsFromSameOwner"
-  },
-  "staticData": null,
-  "tags": [
-    { "name": "plokymarket", "id": "tag-plokymarket" },
-    { "name": "cleanup", "id": "tag-cleanup" }
-  ]
+    "staticData": null,
+    "tags": [
+        {
+            "name": "plokymarket",
+            "id": "tag-plokymarket"
+        },
+        {
+            "name": "cleanup",
+            "id": "tag-cleanup"
+        }
+    ]
 }

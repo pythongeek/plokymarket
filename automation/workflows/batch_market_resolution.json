@@ -1,222 +1,369 @@
 {
-  "name": "Plokymarket Batch Market Resolution",
-  "nodes": [
-    {
-      "parameters": {
-        "path": "plokymarket-batch-resolution",
-        "httpMethod": "POST",
-        "responseMode": "responseNode",
-        "options": {}
-      },
-      "id": "webhook-trigger",
-      "name": "Webhook",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
-      "position": [250, 300],
-      "webhookId": "plokymarket-batch-resolution"
-    },
-    {
-      "parameters": {
-        "jsCode": "// Query markets ready for resolution\n// Returns markets where status='closed' and resolution_source_type='AI'\n// Max 5 markets per batch\n\nreturn {\n  json: {\n    query: `\n      SELECT id, question, category, trading_closes_at, status, \n             resolution_source, resolution_source_type\n      FROM markets \n      WHERE status = 'closed' \n        AND resolution_source_type = 'AI'\n        AND resolution_source IS NOT NULL\n      ORDER BY trading_closes_at ASC\n      LIMIT 5\n    `,\n    timestamp: new Date().toISOString()\n  }\n};"
-      },
-      "id": "prepare-query",
-      "name": "Prepare Query",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [470, 300]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $env.SUPABASE_URL }}/rest/v1/rpc/execute_sql",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "apikey",
-              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+    "name": "Plokymarket Batch Market Resolution",
+    "nodes": [
+        {
+            "parameters": {
+                "path": "plokymarket-batch-resolution",
+                "httpMethod": "POST",
+                "responseMode": "responseNode",
+                "options": {}
             },
-            {
-              "name": "Authorization",
-              "value": "Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            },
-            {
-              "name": "Prefer",
-              "value": "return=minimal"
-            }
-          ]
+            "id": "webhook-trigger",
+            "name": "Webhook",
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 2,
+            "position": [
+                250,
+                300
+            ],
+            "webhookId": "plokymarket-batch-resolution"
         },
-        "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "sql",
-              "value": "={{ $json.query }}"
-            }
-          ]
+        {
+            "parameters": {
+                "jsCode": "// Query markets ready for resolution\n// Returns markets where status='closed' and resolution_source_type='AI'\n// Max 5 markets per batch\n\nreturn {\n  json: {\n    query: `\n      SELECT id, question, category, trading_closes_at, status, \n             resolution_source, resolution_source_type\n      FROM markets \n      WHERE status = 'closed' \n        AND resolution_source_type = 'AI'\n        AND resolution_source IS NOT NULL\n      ORDER BY trading_closes_at ASC\n      LIMIT 5\n    `,\n    timestamp: new Date().toISOString()\n  }\n};"
+            },
+            "id": "prepare-query",
+            "name": "Prepare Query",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                470,
+                300
+            ]
         },
-        "options": {}
-      },
-      "id": "query-markets",
-      "name": "Query Markets",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [690, 300]
-    },
-    {
-      "parameters": {
-        "jsCode": "// Extract markets from response\nconst response = $input.first().json;\nconst markets = Array.isArray(response) ? response : [response];\n\n// Filter valid markets with IDs\nconst validMarkets = markets.filter(m => m.id).map(m => ({\n  market_id: m.id,\n  question: m.question,\n  category: m.category\n}));\n\nreturn {\n  json: {\n    markets: validMarkets,\n    count: validMarkets.length\n  }\n};"
-      },
-      "id": "extract-markets",
-      "name": "Extract Markets",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [910, 300]
-    },
-    {
-      "parameters": {
-        "jsCode": "// For each market, trigger the AI oracle resolution\nconst data = $input.first().json;\nconst markets = data.markets || [];\n\n// Create a simple array to iterate\nreturn markets.map((market, index) => ({\n  json: {\n    market_id: market.market_id,\n    question: market.question,\n    category: market.category,\n    index,\n    total: markets.length\n  }\n}));"
-      },
-      "id": "split-markets",
-      "name": "Split Markets",
-      "type": "n8n-nodes-base.splitInBatches",
-      "typeVersion": 2,
-      "position": [1130, 300]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $env.N8N_WEBHOOK_URL }}/webhook/plokymarket-resolution",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "={{ $env.SUPABASE_URL }}/rest/v1/rpc/execute_sql",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "apikey",
+                            "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+                        },
+                        {
+                            "name": "Authorization",
+                            "value": "Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+                        },
+                        {
+                            "name": "Content-Type",
+                            "value": "application/json"
+                        },
+                        {
+                            "name": "Prefer",
+                            "value": "return=minimal"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "name": "sql",
+                            "value": "={{ $json.query }}"
+                        }
+                    ]
+                },
+                "options": {
+                    "retry": {
+                        "limit": 3,
+                        "statusCodes": "429,500,502,503,504",
+                        "errorCodes": "ECONNRESET,ETIMEDOUT,ECONNREFUSED"
+                    }
+                }
             },
-            {
-              "name": "x-n8n-api-key",
-              "value": "={{ $env.N8N_API_KEY }}"
-            }
-          ]
+            "id": "query-markets",
+            "name": "Query Markets",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                690,
+                300
+            ]
         },
-        "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "market_id",
-              "value": "={{ $json.market_id }}"
+        {
+            "parameters": {
+                "jsCode": "// Extract markets from response\nconst response = $input.first().json;\nconst markets = Array.isArray(response) ? response : [response];\n\n// Filter valid markets with IDs\nconst validMarkets = markets.filter(m => m.id).map(m => ({\n  market_id: m.id,\n  question: m.question,\n  category: m.category\n}));\n\nreturn {\n  json: {\n    markets: validMarkets,\n    count: validMarkets.length\n  }\n};"
             },
-            {
-              "name": "question",
-              "value": "={{ $json.question }}"
-            },
-            {
-              "name": "category",
-              "value": "={{ $json.category }}"
-            },
-            {
-              "name": "trigger_source",
-              "value": "=batch_resolution"
-            }
-          ]
+            "id": "extract-markets",
+            "name": "Extract Markets",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                910,
+                300
+            ]
         },
-        "options": {
-          "timeout": 60000
+        {
+            "parameters": {
+                "jsCode": "// For each market, trigger the AI oracle resolution\nconst data = $input.first().json;\nconst markets = data.markets || [];\n\n// Create a simple array to iterate\nreturn markets.map((market, index) => ({\n  json: {\n    market_id: market.market_id,\n    question: market.question,\n    category: market.category,\n    index,\n    total: markets.length\n  }\n}));"
+            },
+            "id": "split-markets",
+            "name": "Split Markets",
+            "type": "n8n-nodes-base.splitInBatches",
+            "typeVersion": 2,
+            "position": [
+                1130,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "={{ $env.N8N_WEBHOOK_URL }}/webhook/plokymarket-resolution",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "Content-Type",
+                            "value": "application/json"
+                        },
+                        {
+                            "name": "x-n8n-api-key",
+                            "value": "={{ $env.N8N_API_KEY }}"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "name": "market_id",
+                            "value": "={{ $json.market_id }}"
+                        },
+                        {
+                            "name": "question",
+                            "value": "={{ $json.question }}"
+                        },
+                        {
+                            "name": "category",
+                            "value": "={{ $json.category }}"
+                        },
+                        {
+                            "name": "trigger_source",
+                            "value": "=batch_resolution"
+                        }
+                    ]
+                },
+                "options": {
+                    "timeout": 60000,
+                    "retry": {
+                        "limit": 3,
+                        "statusCodes": "429,500,502,503,504",
+                        "errorCodes": "ECONNRESET,ETIMEDOUT,ECONNREFUSED"
+                    }
+                }
+            },
+            "id": "trigger-oracle",
+            "name": "Trigger Oracle",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                1350,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "// Wait for oracle result and process\nconst oracleResult = $input.first().json;\n\n// Log the result\nconsole.log('Oracle result:', JSON.stringify(oracleResult));\n\nreturn {\n  json: {\n    market_id: oracleResult.market_id,\n    outcome: oracleResult.outcome,\n    confidence: oracleResult.confidence,\n    auto_resolved: oracleResult.auto_resolved,\n    needs_manual_review: oracleResult.needs_manual_review,\n    success: oracleResult.success\n  }\n};"
+            },
+            "id": "process-result",
+            "name": "Process Result",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                1570,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "// Compile final results\nconst allResults = [];\n\n// Collect all batch item results\nfor (const item of $input.all()) {\n  allResults.push(item.json);\n}\n\nconst successful = allResults.filter(r => r.success);\nconst autoResolved = allResults.filter(r => r.auto_resolved);\nconst needsReview = allResults.filter(r => r.needs_manual_review);\n\nreturn {\n  json: {\n    total_processed: allResults.length,\n    successful: successful.length,\n    auto_resolved: autoResolved.length,\n    needs_manual_review: needsReview.length,\n    results: allResults,\n    timestamp: new Date().toISOString()\n  }\n};"
+            },
+            "id": "compile-results",
+            "name": "Compile Results",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                1790,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "={{ JSON.stringify($json) }}"
+            },
+            "id": "respond-webhook",
+            "name": "Respond",
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1,
+            "position": [
+                2010,
+                300
+            ]
+        },
+        {
+            "parameters": {},
+            "id": "error-trigger",
+            "name": "Error Trigger",
+            "type": "n8n-nodes-base.errorTrigger",
+            "typeVersion": 1,
+            "position": [
+                250,
+                500
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "={{ $env.ALERT_WEBHOOK_URL }}",
+                "sendBody": true,
+                "contentType": "json",
+                "body": {
+                    "embeds": [
+                        {
+                            "title": "[CRITICAL] n8n Workflow Failure",
+                            "description": "=Workflow: {{ $workflow.name }}\\nNode: {{ $json.error.node.name }}\\nError: {{ $json.error.message }}",
+                            "color": 15158332,
+                            "timestamp": "={{ $now }}"
+                        }
+                    ]
+                },
+                "options": {
+                    "retry": {
+                        "limit": 3,
+                        "statusCodes": "429,500,502,503,504",
+                        "errorCodes": "ECONNRESET,ETIMEDOUT,ECONNREFUSED"
+                    }
+                }
+            },
+            "id": "alert-webhook",
+            "name": "Send Alert",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4,
+            "position": [
+                470,
+                500
+            ]
         }
-      },
-      "id": "trigger-oracle",
-      "name": "Trigger Oracle",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [1350, 300]
+    ],
+    "connections": {
+        "Webhook": {
+            "main": [
+                [
+                    {
+                        "node": "Prepare Query",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Prepare Query": {
+            "main": [
+                [
+                    {
+                        "node": "Query Markets",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Query Markets": {
+            "main": [
+                [
+                    {
+                        "node": "Extract Markets",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Extract Markets": {
+            "main": [
+                [
+                    {
+                        "node": "Split Markets",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Split Markets": {
+            "main": [
+                [
+                    {
+                        "node": "Trigger Oracle",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Trigger Oracle": {
+            "main": [
+                [
+                    {
+                        "node": "Process Result",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Process Result": {
+            "main": [
+                [
+                    {
+                        "node": "Compile Results",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Compile Results": {
+            "main": [
+                [
+                    {
+                        "node": "Respond",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Error Trigger": {
+            "main": [
+                [
+                    {
+                        "node": "Send Alert",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
     },
-    {
-      "parameters": {
-        "jsCode": "// Wait for oracle result and process\nconst oracleResult = $input.first().json;\n\n// Log the result\nconsole.log('Oracle result:', JSON.stringify(oracleResult));\n\nreturn {\n  json: {\n    market_id: oracleResult.market_id,\n    outcome: oracleResult.outcome,\n    confidence: oracleResult.confidence,\n    auto_resolved: oracleResult.auto_resolved,\n    needs_manual_review: oracleResult.needs_manual_review,\n    success: oracleResult.success\n  }\n};"
-      },
-      "id": "process-result",
-      "name": "Process Result",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1570, 300]
+    "settings": {
+        "executionOrder": "v1",
+        "saveManualExecutions": true,
+        "callerPolicy": "workflowsFromSameOwner"
     },
-    {
-      "parameters": {
-        "jsCode": "// Compile final results\nconst allResults = [];\n\n// Collect all batch item results\nfor (const item of $input.all()) {\n  allResults.push(item.json);\n}\n\nconst successful = allResults.filter(r => r.success);\nconst autoResolved = allResults.filter(r => r.auto_resolved);\nconst needsReview = allResults.filter(r => r.needs_manual_review);\n\nreturn {\n  json: {\n    total_processed: allResults.length,\n    successful: successful.length,\n    auto_resolved: autoResolved.length,\n    needs_manual_review: needsReview.length,\n    results: allResults,\n    timestamp: new Date().toISOString()\n  }\n};"
-      },
-      "id": "compile-results",
-      "name": "Compile Results",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1790, 300]
-    },
-    {
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ JSON.stringify($json) }}"
-      },
-      "id": "respond-webhook",
-      "name": "Respond",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
-      "position": [2010, 300]
-    }
-  ],
-  "connections": {
-    "Webhook": {
-      "main": [
-        [{ "node": "Prepare Query", "type": "main", "index": 0 }]
-      ]
-    },
-    "Prepare Query": {
-      "main": [
-        [{ "node": "Query Markets", "type": "main", "index": 0 }]
-      ]
-    },
-    "Query Markets": {
-      "main": [
-        [{ "node": "Extract Markets", "type": "main", "index": 0 }]
-      ]
-    },
-    "Extract Markets": {
-      "main": [
-        [{ "node": "Split Markets", "type": "main", "index": 0 }]
-      ]
-    },
-    "Split Markets": {
-      "main": [
-        [{ "node": "Trigger Oracle", "type": "main", "index": 0 }]
-      ]
-    },
-    "Trigger Oracle": {
-      "main": [
-        [{ "node": "Process Result", "type": "main", "index": 0 }]
-      ]
-    },
-    "Process Result": {
-      "main": [
-        [{ "node": "Compile Results", "type": "main", "index": 0 }]
-      ]
-    },
-    "Compile Results": {
-      "main": [
-        [{ "node": "Respond", "type": "main", "index": 0 }]
-      ]
-    }
-  },
-  "settings": {
-    "executionOrder": "v1",
-    "saveManualExecutions": true,
-    "callerPolicy": "workflowsFromSameOwner"
-  },
-  "staticData": null,
-  "tags": [
-    { "name": "plokymarket", "id": "tag-plokymarket" },
-    { "name": "resolution", "id": "tag-resolution" }
-  ]
+    "staticData": null,
+    "tags": [
+        {
+            "name": "plokymarket",
+            "id": "tag-plokymarket"
+        },
+        {
+            "name": "resolution",
+            "id": "tag-resolution"
+        }
+    ]
 }

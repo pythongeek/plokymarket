@@ -308,6 +308,7 @@ export interface PlokyResolverInterface extends Interface {
   getEvent(
     nameOrSignatureOrTopic:
       | "AIAnalysisSubmitted"
+      | "AIThresholdChanged"
       | "BondReturned"
       | "BondSeized"
       | "CommunityVoteFinalized"
@@ -328,6 +329,8 @@ export interface PlokyResolverInterface extends Interface {
       | "RoleAdminChanged"
       | "RoleGranted"
       | "RoleRevoked"
+      | "StuckTokensWithdrawn"
+      | "TreasuryChanged"
       | "UMAEnabled"
       | "UMARequested"
       | "Unpaused"
@@ -915,6 +918,24 @@ export namespace AIAnalysisSubmittedEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
+export namespace AIThresholdChangedEvent {
+  export type InputTuple = [
+    old_: BigNumberish,
+    new_: BigNumberish,
+    by: AddressLike
+  ];
+  export type OutputTuple = [old_: bigint, new_: bigint, by: string];
+  export interface OutputObject {
+    old_: bigint;
+    new_: bigint;
+    by: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
 export namespace BondReturnedEvent {
   export type InputTuple = [
     user: AddressLike,
@@ -1301,6 +1322,42 @@ export namespace RoleRevokedEvent {
     role: string;
     account: string;
     sender: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace StuckTokensWithdrawnEvent {
+  export type InputTuple = [
+    token: AddressLike,
+    to: AddressLike,
+    amount: BigNumberish
+  ];
+  export type OutputTuple = [token: string, to: string, amount: bigint];
+  export interface OutputObject {
+    token: string;
+    to: string;
+    amount: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace TreasuryChangedEvent {
+  export type InputTuple = [
+    old_: AddressLike,
+    new_: AddressLike,
+    by: AddressLike
+  ];
+  export type OutputTuple = [old_: string, new_: string, by: string];
+  export interface OutputObject {
+    old_: string;
+    new_: string;
+    by: string;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -2479,6 +2536,13 @@ export interface PlokyResolver extends BaseContract {
     AIAnalysisSubmittedEvent.OutputObject
   >;
   getEvent(
+    key: "AIThresholdChanged"
+  ): TypedContractEvent<
+    AIThresholdChangedEvent.InputTuple,
+    AIThresholdChangedEvent.OutputTuple,
+    AIThresholdChangedEvent.OutputObject
+  >;
+  getEvent(
     key: "BondReturned"
   ): TypedContractEvent<
     BondReturnedEvent.InputTuple,
@@ -2619,6 +2683,20 @@ export interface PlokyResolver extends BaseContract {
     RoleRevokedEvent.OutputObject
   >;
   getEvent(
+    key: "StuckTokensWithdrawn"
+  ): TypedContractEvent<
+    StuckTokensWithdrawnEvent.InputTuple,
+    StuckTokensWithdrawnEvent.OutputTuple,
+    StuckTokensWithdrawnEvent.OutputObject
+  >;
+  getEvent(
+    key: "TreasuryChanged"
+  ): TypedContractEvent<
+    TreasuryChangedEvent.InputTuple,
+    TreasuryChangedEvent.OutputTuple,
+    TreasuryChangedEvent.OutputObject
+  >;
+  getEvent(
     key: "UMAEnabled"
   ): TypedContractEvent<
     UMAEnabledEvent.InputTuple,
@@ -2671,6 +2749,17 @@ export interface PlokyResolver extends BaseContract {
       AIAnalysisSubmittedEvent.InputTuple,
       AIAnalysisSubmittedEvent.OutputTuple,
       AIAnalysisSubmittedEvent.OutputObject
+    >;
+
+    "AIThresholdChanged(uint256,uint256,address)": TypedContractEvent<
+      AIThresholdChangedEvent.InputTuple,
+      AIThresholdChangedEvent.OutputTuple,
+      AIThresholdChangedEvent.OutputObject
+    >;
+    AIThresholdChanged: TypedContractEvent<
+      AIThresholdChangedEvent.InputTuple,
+      AIThresholdChangedEvent.OutputTuple,
+      AIThresholdChangedEvent.OutputObject
     >;
 
     "BondReturned(address,uint256,string)": TypedContractEvent<
@@ -2891,6 +2980,28 @@ export interface PlokyResolver extends BaseContract {
       RoleRevokedEvent.InputTuple,
       RoleRevokedEvent.OutputTuple,
       RoleRevokedEvent.OutputObject
+    >;
+
+    "StuckTokensWithdrawn(address,address,uint256)": TypedContractEvent<
+      StuckTokensWithdrawnEvent.InputTuple,
+      StuckTokensWithdrawnEvent.OutputTuple,
+      StuckTokensWithdrawnEvent.OutputObject
+    >;
+    StuckTokensWithdrawn: TypedContractEvent<
+      StuckTokensWithdrawnEvent.InputTuple,
+      StuckTokensWithdrawnEvent.OutputTuple,
+      StuckTokensWithdrawnEvent.OutputObject
+    >;
+
+    "TreasuryChanged(address,address,address)": TypedContractEvent<
+      TreasuryChangedEvent.InputTuple,
+      TreasuryChangedEvent.OutputTuple,
+      TreasuryChangedEvent.OutputObject
+    >;
+    TreasuryChanged: TypedContractEvent<
+      TreasuryChangedEvent.InputTuple,
+      TreasuryChangedEvent.OutputTuple,
+      TreasuryChangedEvent.OutputObject
     >;
 
     "UMAEnabled(address)": TypedContractEvent<

@@ -6,24 +6,15 @@ const withNextIntl = createNextIntlPlugin();
 /** @type {import('next').NextConfig} */
 const nextConfig = {
     output: 'standalone',
-    // TypeScript and ESLint are now enabled for production builds
-    // Unified types ensure type safety across the codebase
-    eslint: {
-        ignoreDuringBuilds: true,
-    },
-    // Disable TypeScript type checking during build
-    // This allows the build to succeed even with type errors
-    // which can be fixed incrementally
-    typescript: {
-        ignoreBuildErrors: true,
-    },
-    // Keep pg and pgpass as node_modules (don't bundle them in Edge Runtime)
+    eslint: { ignoreDuringBuilds: true },
+    typescript: { ignoreBuildErrors: true },
     serverExternalPackages: ['pg', 'pgpass', 'pg-pool'],
-    // Ensure service worker is not bundled by Next.js
+    // Reduce JS chunks — 30 → ~10-15 for faster load
+    experimental: {
+        optimizePackageImports: ['lucide-react', '@radix-ui', 'framer-motion', 'recharts'],
+    },
     webpack: (config, { isServer, isEdge }) => {
         if (isEdge) {
-            // Edge runtime: completely ignore pg-related packages
-            // Add aliases to prevent webpack from trying to bundle them
             config.resolve.alias = {
                 ...config.resolve.alias,
                 'pgpass': false,
@@ -32,17 +23,29 @@ const nextConfig = {
             };
         }
         if (!isServer || isEdge) {
-            // Edge runtime and client need fallbacks for Node.js core modules
             config.resolve.fallback = {
                 ...config.resolve.fallback,
-                fs: false,
-                path: false,
-                net: false,
-                dns: false,
-                tls: false,
-                'pg-native': false,
-                stream: false,
-                string_decoder: false,
+                fs: false, path: false, net: false, dns: false, tls: false,
+                'pg-native': false, stream: false, string_decoder: false,
+            };
+        }
+        // Aggressive chunk splitting — fewer files = fewer round trips
+        if (!isServer) {
+            config.optimization.splitChunks = {
+                chunks: 'all',
+                cacheGroups: {
+                    vendor: {
+                        test: /[\\/]node_modules[\\/]/,
+                        name: 'vendors',
+                        chunks: 'all',
+                        enforce: true,
+                    },
+                    common: {
+                        minChunks: 2,
+                        chunks: 'all',
+                        enforce: true,
+                    },
+                },
             };
         }
         return config;
@@ -52,7 +55,9 @@ const nextConfig = {
 module.exports = withNextIntl(withSentryConfig(nextConfig, {
     org: "bdowneer-llc",
     project: "sentry-bronze-marble",
-
-    // Upload source maps for readable stack traces
     authToken: process.env.SENTRY_AUTH_TOKEN,
+    // DISABLE Sentry webpack injection — reduces bundle size + build time
+    disableServerWebpackPlugin: true,
+    disableClientWebpackPlugin: true,
+    silent: true,
 }));

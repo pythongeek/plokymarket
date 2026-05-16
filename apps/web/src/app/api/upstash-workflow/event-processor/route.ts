@@ -7,13 +7,29 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { withQStashAuth } from '@/lib/qstash/verify';
+import { acquireIdempotencyLock, generateIdempotencyKey } from '@/lib/qstash/idempotency';
 
 export const runtime = 'edge';
 
 // Initialize Supabase admin client is managed via createServiceClient
 
 // Workflow steps
-export async function POST(request: NextRequest) {
+export const POST = withQStashAuth(async (request: NextRequest) => {
+    // Idempotency check
+    let payload;
+    try { payload = await request.json(); } catch { payload = {}; }
+    const idempotencyKey = generateIdempotencyKey(
+      'workflow',
+      (payload?.eventId as string) || (payload?.event_id as string) || (payload?.data?.event_id as string) || 'global',
+      payload?.step
+    );
+    const { acquired, wasProcessed } = await acquireIdempotencyLock(idempotencyKey, { step: payload?.step });
+    if (!acquired && wasProcessed) {
+      console.log(`[Workflow] Idempotency hit for ${idempotencyKey} — skipping`);
+      return new Response(JSON.stringify({ status: 'skipped', reason: 'Already processed', idempotencyKey }), { status: 200 });
+    }
+
   const startTime = Date.now();
 
   try {
@@ -171,4 +187,4 @@ Return JSON format:
       { status: 500 }
     );
   }
-}
+});

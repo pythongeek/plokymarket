@@ -1,15 +1,15 @@
 {
-  "network": "hardhat",
-  "chainId": 31337,
-  "deployer": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-  "timestamp": "2026-05-09T19:33:58.314Z",
+  "network": "amoy",
+  "chainId": 80002,
+  "deployer": "0x0027EEA003d0595BdD7F4B16FD8B0C763A0CA358",
+  "timestamp": "2026-05-15T17:10:52.294Z",
   "contracts": {
-    "PlokyToken": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
-    "PlokyResolver": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"
+    "PlokyToken": "0x23A04B3247c06A918F416Dbabc4aD40565e395bc",
+    "PlokyResolver": "0x889730Cd6Fe2601f4e35e16e8687De96eD318B94"
   },
   "config": {
     "quorum": 2,
-    "aiOracle": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+    "aiOracle": "0x0027EEA003d0595BdD7F4B16FD8B0C763A0CA358",
     "initialMint": "100000"
   }
 }

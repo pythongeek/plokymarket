@@ -11,6 +11,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { withQStashAuth } from '@/lib/qstash/verify';
+import { acquireIdempotencyLock, generateIdempotencyKey } from '@/lib/qstash/idempotency';
 
 export const runtime = 'edge';
 export const preferredRegion = 'sin1';
@@ -22,7 +24,21 @@ export const preferredRegion = 'sin1';
  * 2. cleanup-notifications - Remove old read notifications
  * 3. cleanup-price-history - Archive old price data (optional)
  */
-export async function POST(request: NextRequest) {
+export const POST = withQStashAuth(async (request: NextRequest) => {
+    // Idempotency check
+    let payload;
+    try { payload = await request.json(); } catch { payload = {}; }
+    const idempotencyKey = generateIdempotencyKey(
+      'workflow',
+      (payload?.eventId as string) || (payload?.event_id as string) || (payload?.data?.event_id as string) || 'global',
+      payload?.step
+    );
+    const { acquired, wasProcessed } = await acquireIdempotencyLock(idempotencyKey, { step: payload?.step });
+    if (!acquired && wasProcessed) {
+      console.log(`[Workflow] Idempotency hit for ${idempotencyKey} — skipping`);
+      return new Response(JSON.stringify({ status: 'skipped', reason: 'Already processed', idempotencyKey }), { status: 200 });
+    }
+
   const startTime = Date.now();
 
   try {
@@ -92,11 +108,7 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-/**
- * GET: Workflow status
- */
+});
 export async function GET(request: NextRequest) {
   return NextResponse.json({
     status: 'active',

@@ -1,0 +1,15 @@
+{
+  "network": "amoy",
+  "chainId": 80002,
+  "deployer": "0x0027EEA003d0595BdD7F4B16FD8B0C763A0CA358",
+  "timestamp": "2026-05-15T17:10:52.294Z",
+  "contracts": {
+    "PlokyToken": "0x23A04B3247c06A918F416Dbabc4aD40565e395bc",
+    "PlokyResolver": "0x889730Cd6Fe2601f4e35e16e8687De96eD318B94"
+  },
+  "config": {
+    "quorum": 2,
+    "aiOracle": "0x0027EEA003d0595BdD7F4B16FD8B0C763A0CA358",
+    "initialMint": "100000"
+  }
+}
