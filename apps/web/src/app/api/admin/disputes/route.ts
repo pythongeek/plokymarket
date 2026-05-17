@@ -3,13 +3,11 @@
  * Uses local PostgreSQL (pg) for all data operations
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdmin } from '@/lib/admin/auth-guard';
+import { admin } from '@/lib/admin/auth-guard';
 
 export async function GET(req: NextRequest) {
-  const admin = await requireAdmin();
-  if (admin.error) {
-    return NextResponse.json({ error: admin.error }, { status: admin.status });
-  }
+  const authResult = await admin();
+  if (authResult.error) return authResult.error;
 
   const { searchParams } = new URL(req.url);
   const tab = searchParams.get('tab') || 'disputes';
@@ -44,7 +42,7 @@ export async function GET(req: NextRequest) {
 
       query += ` ORDER BY mrq.priority DESC, mrq.created_at ASC`;
 
-      const result = await admin.pool.query(query, params);
+      const result = await authResult.pool.query(query, params);
       return NextResponse.json({ data: result.rows });
     } else {
       // Fetch dispute records
@@ -68,7 +66,7 @@ export async function GET(req: NextRequest) {
 
       query += ` ORDER BY dr.created_at DESC`;
 
-      const result = await admin.pool.query(query, params);
+      const result = await authResult.pool.query(query, params);
       return NextResponse.json({ data: result.rows });
     }
   } catch (err) {
@@ -81,10 +79,8 @@ export async function GET(req: NextRequest) {
  * POST /api/admin/disputes - Create a new dispute record
  */
 export async function POST(req: NextRequest) {
-  const admin = await requireAdmin();
-  if (admin.error) {
-    return NextResponse.json({ error: admin.error }, { status: admin.status });
-  }
+  const authResult = await admin();
+  if (authResult.error) return authResult.error;
 
   try {
     const body = await req.json();
@@ -93,7 +89,7 @@ export async function POST(req: NextRequest) {
       evidence_urls, bond_amount, status
     } = body;
 
-    const result = await admin.pool.query(
+    const result = await authResult.pool.query(
       `INSERT INTO dispute_records 
         (event_id, disputed_by, dispute_type, dispute_reason, evidence_urls, bond_amount, status)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -112,10 +108,8 @@ export async function POST(req: NextRequest) {
  * PATCH /api/admin/disputes - Update dispute, manual review, resolve dispute, or manual resolve
  */
 export async function PATCH(req: NextRequest) {
-  const admin = await requireAdmin();
-  if (admin.error) {
-    return NextResponse.json({ error: admin.error }, { status: admin.status });
-  }
+  const authResult = await admin();
+  if (authResult.error) return authResult.error;
 
   try {
     const body = await req.json();
@@ -127,7 +121,7 @@ export async function PATCH(req: NextRequest) {
       const ruling = resolution === 'upheld' ? 'upheld' : 'dismissed';
       const ruling_at = new Date().toISOString();
 
-      const result = await admin.pool.query(
+      const result = await authResult.pool.query(
         `UPDATE dispute_records 
          SET ruling = $2, ruling_reason = $3, ruling_at = $4, 
              status = CASE WHEN $2 = 'upheld' THEN 'accepted' ELSE 'rejected' END,
@@ -150,7 +144,7 @@ export async function PATCH(req: NextRequest) {
       const winning_outcome = outcome === 1 ? 'YES' : 'NO';
 
       // Update market resolution
-      const marketResult = await admin.pool.query(
+      const marketResult = await authResult.pool.query(
         `UPDATE markets 
          SET resolution = $2, winning_outcome = $3, resolved_at = now(), updated_at = now()
          WHERE id = $1 RETURNING *`,
@@ -159,7 +153,7 @@ export async function PATCH(req: NextRequest) {
 
       // Update manual review status
       if (id) {
-        await admin.pool.query(
+        await authResult.pool.query(
           `UPDATE manual_review_queue SET status = 'approved', updated_at = now() WHERE id = $1`,
           [id]
         );
@@ -184,7 +178,7 @@ export async function PATCH(req: NextRequest) {
       const setClause = fields.map((f, i) => `${f} = $${i + 2}`).join(', ');
       const values = fields.map(f => updates[f]);
       
-      result = await admin.pool.query(
+      result = await authResult.pool.query(
         `UPDATE dispute_records SET ${setClause}, updated_at = now() WHERE id = $1 RETURNING *`,
         [id, ...values]
       );
@@ -196,7 +190,7 @@ export async function PATCH(req: NextRequest) {
       const setClause = fields.map((f, i) => `${f} = $${i + 2}`).join(', ');
       const values = fields.map(f => updates[f]);
       
-      result = await admin.pool.query(
+      result = await authResult.pool.query(
         `UPDATE manual_review_queue SET ${setClause}, updated_at = now() WHERE id = $1 RETURNING *`,
         [id, ...values]
       );

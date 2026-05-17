@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { createClient } from '@/lib/supabase/server';
 
 // PMF Types - Position Margin Feed for prediction markets

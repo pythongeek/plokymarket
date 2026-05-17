@@ -52,6 +52,24 @@ interface ResolutionSystem {
   };
 }
 
+/**
+ * Admin fetch utility with auth header
+ */
+async function adminFetch(url: string, options?: RequestInit) {
+  const token = localStorage.getItem('admin_token');
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      ...(options?.headers || {}),
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || `Request failed: ${res.status}`);
+  return data;
+}
+
 export function ResolutionPanel() {
   const { t } = useTranslation();
   const [resolutions, setResolutions] = useState<ResolutionSystem[]>([]);
@@ -113,8 +131,6 @@ export function ResolutionPanel() {
       });
 
       if (!resolveRes.success) throw new Error(resolveRes.error || 'Resolution failed');
-        throw new Error(`Settlement failed: ${settlementError.message}`);
-      }
 
       setSuccess(`Market resolved as ${resolvingOutcome}`);
       setResolveDialogOpen(false);

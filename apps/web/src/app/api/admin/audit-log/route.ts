@@ -40,10 +40,26 @@ export async function GET(req: NextRequest) {
   const total = parseInt(countResult.rows[0].count);
 
   const dataResult = await pool.query(
-    `SELECT a.*, u.email as admin_email, p.full_name as admin_name
+    `SELECT 
+      a.id,
+      a.admin_id,
+      a.action,
+      a.entity_type AS target_type,
+      a.entity_id AS target_id,
+      a.old_value,
+      a.new_value,
+      a.reason,
+      a.ip_address,
+      a.created_at,
+      u.email AS admin_email,
+      p.full_name AS admin_name,
+      COALESCE(
+        jsonb_build_object('old', a.old_value, 'new', a.new_value),
+        '{}'
+      ) AS details
      FROM admin_audit_log a
-     LEFT JOIN users u ON a.performed_by = u.id
-     LEFT JOIN user_profiles p ON a.performed_by = p.id
+     LEFT JOIN users u ON a.admin_id = u.id
+     LEFT JOIN user_profiles p ON a.admin_id = p.id
      ${where}
      ORDER BY a.created_at DESC
      LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`,

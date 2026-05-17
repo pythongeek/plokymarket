@@ -8,7 +8,8 @@ import { requireAdminUser } from '@/lib/admin/admin-auth';
 export async function GET(req: NextRequest) {
   try {
     const authResult = await requireAdminUser(req);
-
+    if ('error' in authResult) return authResult.error;
+    const userId = authResult.user.id;
 
     // Check admin status
     const profileResult = await pool.query(

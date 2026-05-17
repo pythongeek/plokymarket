@@ -11,6 +11,8 @@ export async function GET(request: NextRequest) {
     try {
         // 1. Authenticate and Admin Check
         const authResult = await requireAdminUser(request);
+        if ('error' in authResult) return authResult.error;
+        const userId = authResult.user.id;
 
 
         const profiles = await query<{ is_admin: boolean; is_super_admin: boolean }>(

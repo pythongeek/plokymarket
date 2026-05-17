@@ -7,21 +7,21 @@ import { NextRequest, NextResponse } from 'next/server';
 import { admin } from '@/lib/admin/auth-guard';
 
 export async function GET(req: NextRequest) {
-  const result = await admin();
-  if (result.error) return result.error;
+  const authResult = await admin();
+  if (authResult.error) return authResult.error;
 
   const { searchParams } = new URL(req.url);
   const type = searchParams.get('type') || 'configs';
 
   try {
     if (type === 'logs') {
-      const { rows } = await result.pool.query(`
+      const { rows } = await authResult.pool.query(`
         SELECT * FROM ai_usage_logs
         ORDER BY created_at DESC LIMIT 100
       `);
       return NextResponse.json({ data: rows });
     } else {
-      const { rows } = await result.pool.query(`
+      const { rows } = await authResult.pool.query(`
         SELECT * FROM ai_agent_configs
         ORDER BY pipeline ASC
       `);
@@ -34,8 +34,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const result = await admin();
-  if (result.error) return result.error;
+  const authResult = await admin();
+  if (authResult.error) return authResult.error;
 
   try {
     const body = await req.json();
@@ -53,13 +53,21 @@ export async function PATCH(req: NextRequest) {
       setClauses.push(`status = $${paramIdx++}`);
       values.push(updates.status);
     }
+    if (updates.system_prompt !== undefined) {
+      setClauses.push(`system_prompt = $${paramIdx++}`);
+      values.push(updates.system_prompt);
+    }
+    if (updates.model_name !== undefined) {
+      setClauses.push(`model_name = $${paramIdx++}`);
+      values.push(updates.model_name);
+    }
+    if (updates.temperature !== undefined) {
+      setClauses.push(`temperature = $${paramIdx++}`);
+      values.push(updates.temperature);
+    }
     if (updates.daily_token_limit !== undefined) {
       setClauses.push(`daily_token_limit = $${paramIdx++}`);
       values.push(updates.daily_token_limit);
-    }
-    if (updates.updated_at !== undefined) {
-      setClauses.push(`updated_at = $${paramIdx++}`);
-      values.push(updates.updated_at);
     }
 
     if (setClauses.length === 0) {
@@ -67,7 +75,7 @@ export async function PATCH(req: NextRequest) {
     }
 
     values.push(id);
-    const { rows } = await result.pool.query(
+    const { rows } = await authResult.pool.query(
       `UPDATE ai_agent_configs SET ${setClauses.join(', ')}, updated_at = NOW()
        WHERE id = $${paramIdx} RETURNING *`,
       values

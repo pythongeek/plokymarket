@@ -7,60 +7,16 @@ import { pool, query, insert, update, remove } from '@/lib/admin/local-db';
 
 export const runtime = 'nodejs';
 
-// Verify admin authentication — uses cloud Supabase for token validation,
-// then checks admin flag against local DB
-async function verifyAdmin(request: Request): Promise<{ isAdmin: boolean; userId?: string; error?: string }> {
-    const authHeader = request.headers.get('authorization');
-
-    if (!authHeader?.startsWith('Bearer ')) {
-        return { isAdmin: false, error: 'Missing authorization header' };
-    }
-
-    const token = authHeader.split(' ')[1];
-
-    // Validate token against cloud Supabase (for JWT verification)
-    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://polymarketbd.com';
-    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'apikey': process.env.SUPABASE_ANON_KEY || ''
-        }
-    });
-
-    if (!cloudRes.ok) {
-        return { isAdmin: false, error: 'Invalid token' };
-    }
-
-    const userData = await cloudRes.json();
-    const userId = userData?.id;
-
-    if (!userId) {
-        return { isAdmin: false, error: 'Invalid token payload' };
-    }
-
-    // Check admin flag in local DB
-    const profiles = await query<{ is_admin: boolean }>(
-        'SELECT is_admin FROM user_profiles WHERE id = $1',
-        [userId]
-    );
-
-    if (!profiles[0]?.is_admin) {
-        return { isAdmin: false, error: 'Not an admin' };
-    }
-
-    return { isAdmin: true, userId };
-}
+import { requireAdminUser } from '@/lib/admin/admin-auth';
 
 /**
  * GET /api/admin/daily-topics
  * List all AI daily topics with filtering
  */
 export async function GET(request: Request) {
-    const adminCheck = await verifyAdmin(request);
-
-    if (!adminCheck.isAdmin) {
-        return NextResponse.json({ error: adminCheck.error || 'Unauthorized' }, { status: 401 });
-    }
+    const authResult = await requireAdminUser(request as any);
+    if ('error' in authResult) return authResult.error;
+    const adminUserId = authResult.user.id;
 
     try {
         const { searchParams } = new URL(request.url);
@@ -87,12 +43,18 @@ export async function GET(request: Request) {
 
         const rows = await query(sql, params);
 
-        const countResult = await query<{ count: string }>(
-            'SELECT COUNT(*) as count FROM ai_daily_topics WHERE 1=1' +
-            (status ? ` AND status = '${status}'` : '') +
-            (category ? ` AND category = '${category}'` : ''),
-            []
-        );
+        let countSql = 'SELECT COUNT(*) as count FROM ai_daily_topics WHERE 1=1';
+        const countParams: any[] = [];
+        let countIdx = 1;
+        if (status) {
+            countSql += ` AND status = $${countIdx++}`;
+            countParams.push(status);
+        }
+        if (category) {
+            countSql += ` AND category = $${countIdx++}`;
+            countParams.push(category);
+        }
+        const countResult = await query<{ count: string }>(countSql, countParams);
 
         return NextResponse.json({
             success: true,
@@ -113,11 +75,9 @@ export async function GET(request: Request) {
  * Approve a topic and create market, or reject it
  */
 export async function POST(request: Request) {
-    const adminCheck = await verifyAdmin(request);
-
-    if (!adminCheck.isAdmin || !adminCheck.userId) {
-        return NextResponse.json({ error: adminCheck.error || 'Unauthorized' }, { status: 401 });
-    }
+    const authResult = await requireAdminUser(request as any);
+    if ('error' in authResult) return authResult.error;
+    const adminUserId = authResult.user.id;
 
     const client = await pool.connect();
 
@@ -152,7 +112,7 @@ export async function POST(request: Request) {
                 trading_closes_at: market_data?.trading_closes_at || topic.trading_end_date,
                 event_date: market_data?.event_date || topic.trading_end_date,
                 status: 'active',
-                creator_id: adminCheck.userId,
+                creator_id: adminUserId,
                 resolution_source_type: 'AI',
                 created_at: new Date().toISOString()
             });
@@ -163,7 +123,7 @@ export async function POST(request: Request) {
                 {
                     status: 'approved',
                     approved_at: new Date().toISOString(),
-                    approved_by: adminCheck.userId,
+                    approved_by: adminUserId,
                     market_id: market?.id
                 },
                 { id: topic_id }
@@ -182,7 +142,7 @@ export async function POST(request: Request) {
                 {
                     status: 'rejected',
                     rejected_at: new Date().toISOString(),
-                    rejected_by: adminCheck.userId,
+                    rejected_by: adminUserId,
                     rejection_reason: rejection_reason || null
                 },
                 { id: topic_id }
@@ -213,11 +173,8 @@ export async function POST(request: Request) {
  * Delete a topic
  */
 export async function DELETE(request: Request) {
-    const adminCheck = await verifyAdmin(request);
-
-    if (!adminCheck.isAdmin) {
-        return NextResponse.json({ error: adminCheck.error || 'Unauthorized' }, { status: 401 });
-    }
+    const authResult = await requireAdminUser(request as any);
+    if ('error' in authResult) return authResult.error;
 
     try {
         const { searchParams } = new URL(request.url);

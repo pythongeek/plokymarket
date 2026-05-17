@@ -6,12 +6,12 @@ import { NextResponse } from 'next/server';
 import { admin } from '@/lib/admin/auth-guard';
 
 export async function GET() {
-  const result = await admin();
-  if (result.error) return result.error;
+  const authResult = await admin();
+  if (authResult.error) return authResult.error;
 
   try {
     // Check market_creation_drafts pending count
-    const { rows } = await result.pool.query(`
+    const { rows } = await authResult.pool.query(`
       SELECT COUNT(*) as count FROM market_creation_drafts
       WHERE legal_review_status = 'pending'
     `);

@@ -1,6 +1,5 @@
 import { Metadata } from 'next';
 import WithdrawalProcessing from '@/components/admin/WithdrawalProcessing';
-import { SecureAdminLayout } from '@/components/admin/SecureAdminLayout';
 
 export const metadata: Metadata = {
   title: 'উইথড্র ম্যানেজমেন্ট | Admin',
@@ -8,9 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default function WithdrawalsPage() {
-  return (
-    <SecureAdminLayout>
-      <WithdrawalProcessing />
-    </SecureAdminLayout>
-  );
+  return <WithdrawalProcessing />;
 }

@@ -9,6 +9,8 @@ import path from 'path';
 export async function POST(request: Request) {
     try {
         const authResult = await requireAdminUser(request);
+        if ('error' in authResult) return authResult.error;
+        const userId = authResult.user.id;
 
 
         const profileResult = await pool.query(

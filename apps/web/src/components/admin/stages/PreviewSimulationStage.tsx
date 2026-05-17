@@ -7,7 +7,6 @@ import {
   BarChart2,
   TrendingUp,
   Users,
-  Clock,
   ArrowRight,
   ArrowLeft,
   RefreshCw,
@@ -15,7 +14,11 @@ import {
   ShieldOff,
   DollarSign,
   Activity,
-  Zap
+  Zap,
+  Cpu,
+  Settings,
+  Layers,
+  Wallet
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -30,6 +33,7 @@ interface PreviewSimulationStageProps {
   isSaving: boolean;
   errors: string[];
   adminBypass?: { liquidity: boolean; legal_review: boolean; simulation: boolean };
+  aiScore?: any;
 }
 
 interface SimulationResult {
@@ -49,7 +53,8 @@ export function PreviewSimulationStage({
   onBack,
   isSaving,
   errors,
-  adminBypass
+  adminBypass,
+  aiScore
 }: PreviewSimulationStageProps) {
   const isBypassed = adminBypass?.simulation || false;
   const [isRunning, setIsRunning] = useState(false);
@@ -58,27 +63,26 @@ export function PreviewSimulationStage({
     draft?.simulation_results as SimulationResult | null
   );
 
+  const marketLogic = aiScore?.marketLogic;
+  const hasAiData = !!marketLogic;
+
   const runSimulation = async () => {
     setIsRunning(true);
-
-    // Simulate delay
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise(resolve => setTimeout(resolve, 1500));
 
     const liquidity = draft?.liquidity_amount || draft?.liquidity_commitment || 1000;
-    const fee = draft?.trading_fee_percent || 2;
+    const fee = draft?.trading_fee_percent || marketLogic?.tradingFee * 100 || 2;
 
+    // Use AI recommendations where available, fallback to estimates
     const simResults: SimulationResult = {
-      totalTrades: Math.floor(Math.random() * 500) + 100,
-      totalVolume: Math.floor(liquidity * (2 + Math.random() * 8)),
-      avgPrice: Math.round((40 + Math.random() * 20) * 100) / 100,
-      priceRange: [
-        Math.round((10 + Math.random() * 20) * 100) / 100,
-        Math.round((60 + Math.random() * 30) * 100) / 100
-      ],
-      uniqueTraders: Math.floor(Math.random() * 200) + 20,
-      liquidityDepth: Math.round(liquidity * (1.5 + Math.random())),
-      expectedFees: Math.round(liquidity * (fee / 100) * (2 + Math.random() * 5)),
-      spreadPercent: Math.round((0.5 + Math.random() * 2) * 100) / 100
+      totalTrades: Math.floor(liquidity / (marketLogic?.minTradeAmount || 10)),
+      totalVolume: Math.floor(liquidity * 3.5),
+      avgPrice: 50,
+      priceRange: [20, 80] as [number, number],
+      uniqueTraders: Math.floor(liquidity / 50),
+      liquidityDepth: Math.round(liquidity * (marketLogic?.bParameter ? marketLogic.bParameter / 500 : 1.5)),
+      expectedFees: Math.round(liquidity * (fee / 100) * 4),
+      spreadPercent: Math.round((fee / 100 + 0.3) * 100) / 100
     };
 
     setResults(simResults);
@@ -140,9 +144,79 @@ export function PreviewSimulationStage({
         </div>
       </Card>
 
+      {/* AI Market Logic Recommendations */}
+      {hasAiData && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-3"
+        >
+          <h4 className="text-sm font-semibold text-white flex items-center gap-2">
+            <Cpu className="w-4 h-4 text-violet-400" />
+            AI মার্কেট প্যারামিটার (AI Recommendations)
+          </h4>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <Card className="bg-violet-900/10 border-violet-700/30 p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <Wallet className="w-4 h-4 text-violet-400" />
+                <span className="text-xs text-slate-400">প্রস্তাবিত তারল্য</span>
+              </div>
+              <p className="text-lg font-bold text-white">
+                ${marketLogic.liquidityRecommendation?.toLocaleString() || 'N/A'}
+              </p>
+            </Card>
+            <Card className="bg-violet-900/10 border-violet-700/30 p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <DollarSign className="w-4 h-4 text-violet-400" />
+                <span className="text-xs text-slate-400">ট্রেডিং ফি</span>
+              </div>
+              <p className="text-lg font-bold text-white">
+                {(marketLogic.tradingFee * 100)?.toFixed(1) || 'N/A'}%
+              </p>
+            </Card>
+            <Card className="bg-violet-900/10 border-violet-700/30 p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <Layers className="w-4 h-4 text-violet-400" />
+                <span className="text-xs text-slate-400">মার্কেট ধরন</span>
+              </div>
+              <p className="text-lg font-bold text-white capitalize">
+                {marketLogic.marketType || 'N/A'}
+              </p>
+            </Card>
+            <Card className="bg-violet-900/10 border-violet-700/30 p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <Settings className="w-4 h-4 text-violet-400" />
+                <span className="text-xs text-slate-400">B প্যারামিটার</span>
+              </div>
+              <p className="text-lg font-bold text-white">
+                {marketLogic.bParameter?.toLocaleString() || 'N/A'}
+              </p>
+            </Card>
+            <Card className="bg-violet-900/10 border-violet-700/30 p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <ArrowRight className="w-4 h-4 text-violet-400" />
+                <span className="text-xs text-slate-400">ন্যূনতম ট্রেড</span>
+              </div>
+              <p className="text-lg font-bold text-white">
+                ${marketLogic.minTradeAmount?.toLocaleString() || 'N/A'}
+              </p>
+            </Card>
+            <Card className="bg-violet-900/10 border-violet-700/30 p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <ArrowLeft className="w-4 h-4 text-violet-400" />
+                <span className="text-xs text-slate-400">সর্বোচ্চ ট্রেড</span>
+              </div>
+              <p className="text-lg font-bold text-white">
+                ${marketLogic.maxTradeAmount?.toLocaleString() || 'N/A'}
+              </p>
+            </Card>
+          </div>
+        </motion.div>
+      )}
+
       {/* Simulation Controls */}
       {!completed && (
-        <div className="text-center py-8">
+        <div className="text-center py-6">
           <div className="w-20 h-20 mx-auto bg-slate-800 rounded-full flex items-center justify-center mb-4">
             {isRunning ? (
               <RefreshCw className="w-10 h-10 text-primary animate-spin" />
@@ -154,7 +228,7 @@ export function PreviewSimulationStage({
             {isRunning ? 'সিমুলেশন চলছে...' : 'সিমুলেশন চালান'}
           </h3>
           <p className="text-sm text-slate-400 mb-4">
-            ভার্চুয়াল ট্রেডিং ডেটা দিয়ে মার্কেটের কার্যকারিতা পরীক্ষা করুন
+            AI-ভিত্তিক প্যারামিটার ব্যবহার করে মার্কেটের কার্যকারিতা পরীক্ষা করুন
           </p>
           {!isRunning && (
             <Button onClick={runSimulation} size="lg">

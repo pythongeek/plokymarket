@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { toast } from '@/components/ui/use-toast';
+import { cn } from '@/lib/utils';
 
 interface Trade {
   id: string;
@@ -32,10 +33,13 @@ interface Trade {
   price: number;
   quantity: number;
   side: 'buy' | 'sell';
+  batch_id?: string;
   created_at: string;
-  // Joined fields
   user_email?: string;
   market_question?: string;
+  is_wash_trade?: boolean;
+  is_volume_spike?: boolean;
+  is_large_trade?: boolean;
 }
 
 interface SuspiciousActivity {
@@ -98,9 +102,12 @@ export function TradeMonitor() {
         ...t,
         user_email: t.user_email,
         market_question: t.market_question,
+        is_wash_trade: !!t.is_wash_trade,
+        is_volume_spike: !!t.is_volume_spike,
+        is_large_trade: !!t.is_large_trade,
       }));
       setTrades(mappedTrades);
-      analyzeSuspiciousActivity(mappedTrades);
+      buildSuspiciousActivity(mappedTrades);
       calculateVolumeDistribution(mappedTrades);
       calculatePriceDistribution(mappedTrades);
     } catch (error) {
@@ -135,71 +142,41 @@ export function TradeMonitor() {
     }
   }, []);
 
-  // Analyze suspicious activity
-  const analyzeSuspiciousActivity = useCallback((tradeData: Trade[]) => {
+  // Build suspicious activity from SERVER flags (not client thresholds)
+  const buildSuspiciousActivity = useCallback((tradeData: Trade[]) => {
     const activity: SuspiciousActivity[] = [];
+    const seenUsers = new Set<string>();
 
-    // Group trades by user
-    const userTrades = new Map<string, Trade[]>();
     tradeData.forEach(t => {
-      const existing = userTrades.get(t.user_id) || [];
-      existing.push(t);
-      userTrades.set(t.user_id, existing);
-    });
-
-    userTrades.forEach((userTradeList, userId) => {
-      // Wash trading: user trading with themselves
-      const eventGroups = new Map<string, Trade[]>();
-      userTradeList.forEach(t => {
-        const existing = eventGroups.get(t.event_id) || [];
-        existing.push(t);
-        eventGroups.set(t.event_id, existing);
-      });
-
-      eventGroups.forEach((eventTrades, eventId) => {
-        const buyVolume = eventTrades
-          .filter(t => t.side === 'buy')
-          .reduce((sum, t) => sum + Number(t.price) * Number(t.quantity), 0);
-        const sellVolume = eventTrades
-          .filter(t => t.side === 'sell')
-          .reduce((sum, t) => sum + Number(t.price) * Number(t.quantity), 0);
-
-        // Self-trading (buy and sell same market)
-        if (buyVolume > 0 && sellVolume > 0 && eventTrades.length > 5) {
-          const firstTrade = userTradeList[0];
-          activity.push({
-            type: 'wash_trading',
-            severity: buyVolume + sellVolume > 50000 ? 'high' : 'medium',
-            userId,
-            userEmail: firstTrade.user_email,
-            description: `একই ব্যবহারকারী একই বাজারে ক্রয় এবং বিক্রয় করছেন`,
-            evidence: [
-              `ক্রয় ভলিউম: ৳${(buyVolume / 1000).toFixed(1)}K`,
-              `বিক্রয় ভলিউম: ৳${(sellVolume / 1000).toFixed(1)}K`,
-              `মোট ট্রেড: ${eventTrades.length}`,
-            ],
-            detectedAt: new Date().toISOString(),
-          });
-        }
-      });
-
-      // Unusual volume spike
-      const totalVolume = userTradeList.reduce(
-        (sum, t) => sum + Number(t.price) * Number(t.quantity),
-        0
-      );
-      if (totalVolume > 100000 && userTradeList.length < 3) {
+      if (t.is_wash_trade && !seenUsers.has(`${t.user_id}-wash`)) {
+        seenUsers.add(`${t.user_id}-wash`);
+        activity.push({
+          type: 'wash_trading',
+          severity: 'high',
+          userId: t.user_id,
+          userEmail: t.user_email,
+          description: `একই ব্যবহারকারী দ্বি-দিক ট্রেড করছেন (AI নির্ণযিত)`,
+          evidence: [
+            `তারিখ: ${new Date(t.created_at).toLocaleString('bn-BD')}`,
+            `বাজার: ${t.market_question || t.event_id.slice(0, 12)}`,
+            `দাম: ৽${(t.price * t.quantity).toFixed(0)}`,
+          ],
+          detectedAt: t.created_at,
+        });
+      }
+      if (t.is_volume_spike && !seenUsers.has(`${t.user_id}-spike`)) {
+        seenUsers.add(`${t.user_id}-spike`);
         activity.push({
           type: 'unusual_volume',
           severity: 'high',
-          userId,
-          userEmail: userTradeList[0]?.user_email,
-          description: `অস্বাভাবিক উচ্চ ভলিউম (কম ট্রেড সহ)`,
+          userId: t.user_id,
+          userEmail: t.user_email,
+          description: `অস্বাভাবিক ভলিউম স্পাইক (AI নির্ণযিত)`,
           evidence: [
-            `মোট ভলিউম: ৳${(totalVolume / 1000).toFixed(1)}K`,
-            `ট্রেড সংখ্যা: ${userTradeList.length}`,
+            `তারিখ: ${new Date(t.created_at).toLocaleString('bn-BD')}`,
+            `মোট দাম: ৽${(t.price * t.quantity).toFixed(0)}`,
           ],
-          detectedAt: new Date().toISOString(),
+          detectedAt: t.created_at,
         });
       }
     });
@@ -444,6 +421,7 @@ export function TradeMonitor() {
                       <TableHead>ব্যবহারকারী</TableHead>
                       <TableHead>বাজার</TableHead>
                       <TableHead>দিক</TableHead>
+                      <TableHead>ব্যাচ</TableHead>
                       <TableHead className="text-right">দাম</TableHead>
                       <TableHead className="text-right">পরিমাণ</TableHead>
                       <TableHead className="text-right">মোট</TableHead>
@@ -451,7 +429,11 @@ export function TradeMonitor() {
                   </TableHeader>
                   <TableBody>
                     {filteredTrades.slice(0, 50).map(trade => (
-                      <TableRow key={trade.id} className="border-slate-800">
+                      <TableRow key={trade.id} className={cn(
+                        "border-slate-800",
+                        trade.is_wash_trade && "bg-red-900/5",
+                        trade.is_volume_spike && "bg-amber-900/5",
+                      )}>
                         <TableCell className="text-slate-400">
                           <div className="flex items-center gap-1">
                             <Clock className="w-3 h-3" />
@@ -476,8 +458,17 @@ export function TradeMonitor() {
                                 : 'bg-red-500/20 text-red-400 border-red-500/30'
                             }
                           >
-                            {trade.side === 'buy' ? 'ক্রয়' : 'বিক্রয়'}
+                            {trade.side === 'buy' ? 'ক্রয়' : 'বিক্রয়'}
                           </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {trade.batch_id ? (
+                            <Badge variant="outline" className="bg-blue-500/20 text-blue-400 border-blue-500/30 text-xs">
+                              Batch {trade.batch_id.slice(0, 8)}
+                            </Badge>
+                          ) : (
+                            <span className="text-slate-600 text-xs">—</span>
+                          )}
                         </TableCell>
                         <TableCell className="text-right">
                           <span className={trade.side === 'buy' ? 'text-green-400' : 'text-red-400'}>
@@ -489,12 +480,31 @@ export function TradeMonitor() {
                         </TableCell>
                         <TableCell className="text-right">
                           ৳{(Number(trade.price) * Number(trade.quantity)).toFixed(2)}
+                          {(trade.is_wash_trade || trade.is_volume_spike || trade.is_large_trade) && (
+                            <div className="flex gap-1 mt-1 justify-end">
+                              {trade.is_wash_trade && (
+                                <Badge className="bg-red-500/20 text-red-400 border-red-500/30 text-[10px] px-1 py-0">
+                                  Wash
+                                </Badge>
+                              )}
+                              {trade.is_volume_spike && (
+                                <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-[10px] px-1 py-0">
+                                  Spike
+                                </Badge>
+                              )}
+                              {trade.is_large_trade && (
+                                <Badge className="bg-violet-500/20 text-violet-400 border-violet-500/30 text-[10px] px-1 py-0">
+                                  Large
+                                </Badge>
+                              )}
+                            </div>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}
                     {filteredTrades.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center text-slate-500 py-8">
+                        <TableCell colSpan={8} className="text-center text-slate-500 py-8">
                           কোনো ট্রেড পাওয়া যায়নি
                         </TableCell>
                       </TableRow>

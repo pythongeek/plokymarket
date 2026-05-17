@@ -8,9 +8,8 @@ export const dynamic = 'force-dynamic';
 // GET /api/admin/metrics/system - Get system health status
 export async function GET(request: NextRequest) {
     try {
-        // Security check - verify user is authenticated
         const authResult = await requireAdminUser(request);
-
+        if ('error' in authResult) return authResult.error;
 
         // Get database status
         let dbStatus: 'healthy' | 'degraded' | 'down' = 'healthy';

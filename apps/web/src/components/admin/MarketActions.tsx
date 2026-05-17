@@ -99,7 +99,11 @@ export function MarketActions({ market }: MarketActionsProps) {
       setFollowerCount(c => Math.max(0, c - 1));
       toast.success('আনফলো করা হয়েছে');
     } else {
-        user_id: userId, market_id: market.id,
+      await fetch(`/api/markets/${market.id}/follow`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, market_id: market.id })
       });
       setIsFollowing(true);
       setFollowerCount(c => c + 1);

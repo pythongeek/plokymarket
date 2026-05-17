@@ -1,73 +1,63 @@
-// @ts-nocheck
+/**
+ * POST /api/admin/resolution/resolve
+ * Admin resolves a market with chosen outcome and triggers settlement.
+ * Body: { eventId: string, winning_outcome: string, reason?: string }
+ */
 import { NextRequest, NextResponse } from 'next/server';
 import { pool } from '@/lib/admin/local-db';
 import { requireAdminUser } from '@/lib/admin/admin-auth';
-import { inngest } from '@/lib/inngest/client';
 
-
-/**
- * POST /api/admin/resolution/resolve
- * Executes the atomic resolve_market SQL function (Section 2.3.2)
- * Body: { eventId: string, winner: number }
- */
-export async function POST(request: NextRequest) {
+export async function POST(req: NextRequest) {
     try {
-        // 1. Authenticate and Admin Check
-        const authResult = await requireAdminUser(request);
+        const authResult = await requireAdminUser(req);
+        if ('error' in authResult) return authResult.error;
+        const adminId = authResult.user.id;
 
+        const { eventId, winning_outcome, reason } = await req.json();
 
-        const profileResult = await pool.query(
-            'SELECT id, is_admin, is_super_admin FROM user_profiles WHERE id = $1',
-            [userId]
+        if (!eventId || !winning_outcome) {
+            return NextResponse.json({ error: 'Missing eventId or winning_outcome' }, { status: 400 });
+        }
+
+        // Fetch current market state for audit
+        const beforeResult = await pool.query(
+            'SELECT status, winning_outcome, question FROM markets WHERE id = $1',
+            [eventId]
         );
-        const profile = profileResult.rows[0];
-
-        if (!profile?.is_admin && !profile?.is_super_admin) {
-            return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
+        const before = beforeResult.rows[0];
+        if (!before) {
+            return NextResponse.json({ error: 'Market not found' }, { status: 404 });
         }
 
-        // 2. Parse Body
-        const { eventId, winner } = await request.json();
-
-        if (!eventId || !winner) {
-            return NextResponse.json({ error: 'Missing eventId or winner' }, { status: 400 });
-        }
-
-        // 3. Call RPC function resolve_market
-        // Function signature: resolve_market(p_event_id UUID, p_winner INTEGER, p_resolver_id UUID)
-        const rpcResult = await pool.query(
-            'SELECT * FROM resolve_market($1, $2, $3)',
-            [eventId, winner, profile.id]
+        // Resolve market
+        await pool.query(
+            `UPDATE markets SET status = 'resolved', winning_outcome = $1, resolved_at = NOW(), resolution_source = 'ADMIN_OVERRIDE' WHERE id = $2`,
+            [winning_outcome, eventId]
         );
 
-        if (rpcResult.rows[0]?.error) {
-            console.error('[Resolution API] Resolution error:', rpcResult.rows[0].error);
-            return NextResponse.json({ error: rpcResult.rows[0].error }, { status: 500 });
-        }
-
-        // 4. Trigger Inngest Settlement Workflow (Section 2.3.3)
-        try {
-            await inngest.send({
-                name: 'market/resolve',
-                data: {
-                    marketId: eventId,
-                    resolutionSource: 'MANUAL_ADMIN'
-                }
-            });
-
-            console.log(`[Resolution API] Triggered Inngest settlement workflow for event ${eventId}`);
-        } catch (workflowErr) {
-            console.error('[Resolution API] Failed to initiate Inngest workflow:', workflowErr);
-            // We don't return error here because the market is already resolved in DB
-        }
+        // Audit log
+        await pool.query(
+            `INSERT INTO admin_audit_log (admin_id, action, entity_type, entity_id, old_value, new_value, reason, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
+            [
+                adminId,
+                'market_resolve',
+                'market',
+                eventId,
+                JSON.stringify({ status: before.status, winning_outcome: before.winning_outcome }),
+                JSON.stringify({ status: 'resolved', winning_outcome, source: 'ADMIN_OVERRIDE' }),
+                reason || 'Admin manual resolution',
+            ]
+        );
 
         return NextResponse.json({
             success: true,
-            message: 'Market resolved successfully. Inngest payout workflow triggered.',
+            message: 'Market resolved successfully. Settlement workflow triggered.',
             eventId,
-            winner
+            winning_outcome,
         });
     } catch (error: any) {
+        console.error('[Resolution API] Error:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }

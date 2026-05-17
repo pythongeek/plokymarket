@@ -4,24 +4,24 @@
  * Uses local PostgreSQL (pg) via admin auth guard
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { admin } from '@/lib/admin/auth-guard';
+import { admin, getAdminUser } from '@/lib/admin/auth-guard';
 
 export async function GET() {
-  const result = await admin();
-  if (result.error) return result.error;
-
   try {
-    // Get admin info from the verified admin session
-    const { rows } = await result.pool.query(`
-      SELECT id, email, full_name, is_admin, is_super_admin
-      FROM user_profiles
-      WHERE is_admin = true OR is_super_admin = true
-      ORDER BY is_super_admin DESC
-      LIMIT 10
-    `);
+    const adminUser = await getAdminUser();
+    if (!adminUser) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
-    // Return the first matching user - in practice the admin guard already validated the user
-    return NextResponse.json({ data: rows[0] || null });
+    return NextResponse.json({
+      data: {
+        id: adminUser.id,
+        email: adminUser.email,
+        full_name: adminUser.profile?.full_name || null,
+        is_admin: adminUser.profile?.is_admin || false,
+        is_super_admin: adminUser.profile?.is_super_admin || false,
+      }
+    });
   } catch (err) {
     console.error('Admin users/me error:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

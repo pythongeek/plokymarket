@@ -7,7 +7,9 @@ import { requireAdminUser } from '@/lib/admin/admin-auth';
  * Auto-create PMF liquidity pool + seed initial liquidity for a market
  */
 export async function POST(req: NextRequest) {
-  const admin = await requireAdminUser(req);
+  const authResult = await requireAdminUser(req);
+  if ('error' in authResult) return authResult.error;
+  const admin = authResult.user;
   if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {

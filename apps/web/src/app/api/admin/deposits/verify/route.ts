@@ -9,6 +9,8 @@ export async function POST(request: Request) {
   try {
     // Get Bearer token from auth header
     const authResult = await requireAdminUser(request);
+    if ('error' in authResult) return authResult.error;
+    const userId = authResult.user.id;
 
 
     // Check if user has admin role — use user_profiles.is_admin
@@ -60,6 +62,13 @@ export async function POST(request: Request) {
     const result = await pool.query(
       'SELECT * FROM verify_and_credit_deposit($1, $2, $3, $4)',
       [depositId, deposit.user_id, deposit.usdt_amount, adminNotes || null]
+    );
+
+    // Audit log: deposit verification
+    await pool.query(
+      `INSERT INTO admin_audit_log (admin_id, action, entity_type, entity_id, new_value, reason, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+      [userId, 'verify_deposit', 'deposit', depositId, JSON.stringify({ status: 'verified', amount: deposit.usdt_amount }), adminNotes || null]
     );
 
     return NextResponse.json({

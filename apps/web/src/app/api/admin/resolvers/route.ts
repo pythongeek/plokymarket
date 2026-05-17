@@ -3,13 +3,11 @@
  * Uses local PostgreSQL (pg) for all data operations
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdmin } from '@/lib/admin/auth-guard';
+import { admin } from '@/lib/admin/auth-guard';
 
 export async function GET(req: NextRequest) {
-  const admin = await requireAdmin();
-  if (admin.error) {
-    return NextResponse.json({ error: admin.error }, { status: admin.status });
-  }
+  const authResult = await admin();
+  if (authResult.error) return authResult.error;
 
   const { searchParams } = new URL(req.url);
   const is_active = searchParams.get('is_active');
@@ -25,7 +23,7 @@ export async function GET(req: NextRequest) {
 
     query += ' ORDER BY name ASC';
 
-    const result = await admin.pool.query(query, params);
+    const result = await authResult.pool.query(query, params);
     return NextResponse.json({ data: result.rows });
   } catch (err) {
     console.error('Error fetching resolvers:', err);
@@ -37,10 +35,8 @@ export async function GET(req: NextRequest) {
  * POST /api/admin/resolvers - Add new resolver
  */
 export async function POST(req: NextRequest) {
-  const admin = await requireAdmin();
-  if (admin.error) {
-    return NextResponse.json({ error: admin.error }, { status: admin.status });
-  }
+  const authResult = await admin();
+  if (authResult.error) return authResult.error;
 
   try {
     const body = await req.json();
@@ -50,7 +46,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'address, name, and type are required' }, { status: 400 });
     }
 
-    const result = await admin.pool.query(
+    const result = await authResult.pool.query(
       `INSERT INTO resolvers (address, name, type, description, website_url)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
@@ -71,10 +67,8 @@ export async function POST(req: NextRequest) {
  * PATCH /api/admin/resolvers - Update resolver
  */
 export async function PATCH(req: NextRequest) {
-  const admin = await requireAdmin();
-  if (admin.error) {
-    return NextResponse.json({ error: admin.error }, { status: admin.status });
-  }
+  const authResult = await admin();
+  if (authResult.error) return authResult.error;
 
   try {
     const body = await req.json();
@@ -91,7 +85,7 @@ export async function PATCH(req: NextRequest) {
     const setClause = fields.map((f, i) => `${f} = $${i + 2}`).join(', ');
     const values = fields.map(f => updates[f]);
 
-    const result = await admin.pool.query(
+    const result = await authResult.pool.query(
       `UPDATE resolvers SET ${setClause} WHERE address = $1 RETURNING *`,
       [address, ...values]
     );
@@ -111,10 +105,8 @@ export async function PATCH(req: NextRequest) {
  * DELETE /api/admin/resolvers - Remove resolver
  */
 export async function DELETE(req: NextRequest) {
-  const admin = await requireAdmin();
-  if (admin.error) {
-    return NextResponse.json({ error: admin.error }, { status: admin.status });
-  }
+  const authResult = await admin();
+  if (authResult.error) return authResult.error;
 
   try {
     const { searchParams } = new URL(req.url);
@@ -124,7 +116,7 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'address is required' }, { status: 400 });
     }
 
-    const result = await admin.pool.query(
+    const result = await authResult.pool.query(
       'DELETE FROM resolvers WHERE address = $1 RETURNING address',
       [address]
     );

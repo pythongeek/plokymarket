@@ -199,18 +199,29 @@ export const aiOracleResolution = inngest.createFunction(
 
     // Step 5: Handle resolution action
     if (canAutoResolve) {
-      await step.run('auto-resolve-market', async () => {
-        console.log(`[AI Oracle] ✅ Auto-resolving market ${marketId}: ${oracleResult.resolution} @ ${oracleResult.confidence_score}%`);
+      // SECURITY FIX: Always queue for admin approval, never auto-resolve
+      await step.run('queue-admin-approval', async () => {
+        console.log(`[AI Oracle] ⏳ High confidence (${oracleResult.confidence_score}%) — holding for admin approval: ${marketId}`);
 
         const supabase = await createServiceClient();
 
         const { error: marketError } = await (supabase
           .from('markets')
           .update({
-            status: 'resolved',
-            winning_outcome: oracleResult.resolution,
-            resolved_at: new Date().toISOString(),
+            status: 'awaiting_admin_approval',
+            proposed_outcome: oracleResult.resolution,
+            proposed_confidence: oracleResult.confidence_score,
             resolution_source: oracleResult.fallback_triggered ? 'ai_oracle_fallback' : 'ai_oracle',
+            resolution_details: JSON.stringify({
+              agent: 'MiniMax_M2.7_Oracle',
+              confidence: oracleResult.confidence_score,
+              reasoning: oracleResult.reasoning,
+              sources: oracleResult.sources,
+              provider: oracleResult.provider,
+              fallback_triggered: oracleResult.fallback_triggered,
+              audit_log_id: oracleResult.audit_log_id,
+              proposed_at: new Date().toISOString(),
+            }),
           })
           .eq('id', marketId) as any);
 
@@ -220,17 +231,14 @@ export const aiOracleResolution = inngest.createFunction(
 
         await (supabase.from('oracle_requests') as any)
           .update({
-            status: 'resolved',
-            resolved_at: new Date().toISOString(),
+            status: 'proposed',
+            proposed_outcome: oracleResult.resolution,
+            confidence_score: oracleResult.confidence_score,
+            updated_at: new Date().toISOString(),
           })
           .eq('id', requestId);
 
-        return { resolved: true, outcome: oracleResult.resolution };
-      });
-
-      await step.run('trigger-settlement', async () => {
-        console.log(`[AI Oracle] Triggering settlement for market ${marketId}`);
-        return { triggered: true };
+        return { held: true, outcome: oracleResult.resolution };
       });
     } else {
       // Queue for human tribunal

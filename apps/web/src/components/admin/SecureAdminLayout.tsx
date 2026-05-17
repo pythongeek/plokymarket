@@ -248,17 +248,9 @@ export function SecureAdminLayout({
         const statusRes = await fetch('/api/admin/system-status');
         const statusData = statusRes.ok ? await statusRes.json() : { pending_markets: 0 };
         pendingMarkets = statusData.pending_markets || 0;
-
-        if (error) {
-          // Log but don't fail - RLS might block unauthenticated requests
-          console.warn('market_creation_drafts query blocked by RLS:', error.message);
-          pendingMarkets = 0;
-        } else {
-          pendingMarkets = count || 0;
-        }
       } catch (err: any) {
         // Table may not exist or network error - graceful degradation
-        console.warn('market_creation_drafts table unavailable:', err?.message);
+        console.warn('System status fetch failed:', err?.message);
         pendingMarkets = 0;
       }
 

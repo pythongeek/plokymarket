@@ -103,11 +103,19 @@ export async function PATCH(
                 values
             );
 
-            if (result.error) {
-                console.error('Error updating event:', result.error);
-                return NextResponse.json({ error: result.error.message }, { status: 500 });
-            }
-            return NextResponse.json({ data: result.rows[0] });
+        if (result.error) {
+            console.error('Error updating event:', result.error);
+            return NextResponse.json({ error: result.error.message }, { status: 500 });
+        }
+
+        // Audit log: event updated
+        await pool.query(
+            `INSERT INTO admin_audit_log (admin_id, action, entity_type, entity_id, old_value, new_value, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+            [userId, 'update_event', 'event', id, null, JSON.stringify(updates)]
+        );
+
+        return NextResponse.json({ data: result.rows[0] });
         }
 
         // Fallback: markets table
@@ -123,6 +131,13 @@ export async function PATCH(
             console.error('Error updating market:', result.error);
             return NextResponse.json({ error: result.error.message }, { status: 500 });
         }
+
+        // Audit log: market updated
+        await pool.query(
+            `INSERT INTO admin_audit_log (admin_id, action, entity_type, entity_id, old_value, new_value, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+            [userId, 'update_market', 'market', id, null, JSON.stringify(updates)]
+        );
 
         return NextResponse.json({ data: result.rows[0] });
     } catch (error) {
@@ -153,12 +168,27 @@ export async function DELETE(
             await pool.query('DELETE FROM markets WHERE event_id = $1', [id]);
             const result = await pool.query('DELETE FROM events WHERE id = $1', [id]);
             if (result.error) return NextResponse.json({ error: result.error.message }, { status: 500 });
+
+            // Audit log: event deleted
+            await pool.query(
+                `INSERT INTO admin_audit_log (admin_id, action, entity_type, entity_id, created_at)
+                 VALUES ($1, $2, $3, $4, NOW())`,
+                [userId, 'delete_event', 'event', id]
+            );
+
             return NextResponse.json({ success: true });
         }
 
         // Fallback: markets table
         const result = await pool.query('DELETE FROM markets WHERE id = $1', [id]);
         if (result.error) return NextResponse.json({ error: result.error.message }, { status: 500 });
+
+        // Audit log: market deleted
+        await pool.query(
+            `INSERT INTO admin_audit_log (admin_id, action, entity_type, entity_id, created_at)
+             VALUES ($1, $2, $3, $4, NOW())`,
+            [userId, 'delete_market', 'market', id]
+        );
 
         return NextResponse.json({ success: true });
     } catch (error) {

@@ -13,6 +13,8 @@ export async function POST(request: Request) {
   try {
     // Get Bearer token from auth header
     const authResult = await requireAdminUser(request);
+    if ('error' in authResult) return authResult.error;
+    const userId = authResult.user.id;
 
 
     // 2. Authorization Check (Admin Only) — use user_profiles.is_admin
@@ -62,6 +64,13 @@ export async function POST(request: Request) {
     );
 
     if (updateResult.error) throw updateResult.error;
+
+    // Audit log: withdrawal processing started
+    await pool.query(
+      `INSERT INTO admin_audit_log (admin_id, action, entity_type, entity_id, new_value, reason, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+      [userId, 'process_withdrawal', 'withdrawal', withdrawalId, JSON.stringify({ status: 'processing' }), notes || null]
+    );
 
     return NextResponse.json({
       success: true,

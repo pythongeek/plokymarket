@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
 import { createPublicClient } from '@/lib/supabase/server';
 import { jwtVerify } from 'jose';
@@ -9,7 +8,7 @@ import { jwtVerify } from 'jose';
  * Returns: { liked: boolean, likeCount: number }
  */
 const JWT_SECRET = new TextEncoder().encode(
-  process.env.NEXT_PUBLIC_JWT_SECRET || 'P10kyM@rket.BD.2026.JWT.SECRET.XX'
+  process.env.JWT_SECRET || process.env.SUPABASE_JWT_SECRET || 'P10kyM@rket.BD.2026.JWT.SECRET'
 );
 
 async function getUserFromRequest(request: Request) {
@@ -31,14 +30,13 @@ async function getUserFromRequest(request: Request) {
   } catch { return null; }
 }
 
-
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = createPublicClient();
-    const user = await getUserFromRequest(request);
+    const user = await getUserFromRequest(req);
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -87,7 +85,7 @@ export async function GET(
 ) {
   try {
     const supabase = createPublicClient();
-    const user = await getUserFromRequest(request);
+    const user = await getUserFromRequest(req);
     const { id: commentId } = await params;
 
     // Get like count regardless of auth status

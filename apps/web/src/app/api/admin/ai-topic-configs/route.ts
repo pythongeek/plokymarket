@@ -7,58 +7,15 @@ import { pool, query, insert, update, remove } from '@/lib/admin/local-db';
 
 export const runtime = 'nodejs';
 
-// Verify admin authentication
-async function verifyAdmin(request: Request): Promise<{ isAdmin: boolean; userId?: string; error?: string }> {
-    const authHeader = request.headers.get('authorization');
-
-    if (!authHeader?.startsWith('Bearer ')) {
-        return { isAdmin: false, error: 'Missing authorization header' };
-    }
-
-    const token = authHeader.split(' ')[1];
-
-    // Validate token against cloud Supabase
-    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://polymarketbd.com';
-    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'apikey': process.env.SUPABASE_ANON_KEY || ''
-        }
-    });
-
-    if (!cloudRes.ok) {
-        return { isAdmin: false, error: 'Invalid token' };
-    }
-
-    const userData = await cloudRes.json();
-    const userId = userData?.id;
-
-    if (!userId) {
-        return { isAdmin: false, error: 'Invalid token payload' };
-    }
-
-    const profiles = await query<{ is_admin: boolean }>(
-        'SELECT is_admin FROM user_profiles WHERE id = $1',
-        [userId]
-    );
-
-    if (!profiles[0]?.is_admin) {
-        return { isAdmin: false, error: 'Not an admin' };
-    }
-
-    return { isAdmin: true, userId };
-}
+import { requireAdminUser } from '@/lib/admin/admin-auth';
 
 /**
  * GET /api/admin/ai-topic-configs
  * List all configurations
  */
 export async function GET(request: Request) {
-    const adminCheck = await verifyAdmin(request);
-
-    if (!adminCheck.isAdmin) {
-        return NextResponse.json({ error: adminCheck.error || 'Unauthorized' }, { status: 401 });
-    }
+    const authResult = await requireAdminUser(request as any);
+    if ('error' in authResult) return authResult.error;
 
     try {
         const { searchParams } = new URL(request.url);
@@ -98,11 +55,9 @@ export async function GET(request: Request) {
  * Create or update configuration
  */
 export async function POST(request: Request) {
-    const adminCheck = await verifyAdmin(request);
-
-    if (!adminCheck.isAdmin || !adminCheck.userId) {
-        return NextResponse.json({ error: adminCheck.error || 'Unauthorized' }, { status: 401 });
-    }
+    const authResult = await requireAdminUser(request as any);
+    if ('error' in authResult) return authResult.error;
+    const adminUserId = authResult.user.id;
 
     try {
         const body = await request.json();
@@ -122,7 +77,7 @@ export async function POST(request: Request) {
             // Create new
             const inserted = await insert('ai_topic_configs', {
                 ...configData,
-                created_by: adminCheck.userId,
+                created_by: adminUserId,
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString()
             }, '*');
@@ -145,11 +100,8 @@ export async function POST(request: Request) {
  * Delete a configuration
  */
 export async function DELETE(request: Request) {
-    const adminCheck = await verifyAdmin(request);
-
-    if (!adminCheck.isAdmin) {
-        return NextResponse.json({ error: adminCheck.error || 'Unauthorized' }, { status: 401 });
-    }
+    const authResult = await requireAdminUser(request as any);
+    if ('error' in authResult) return authResult.error;
 
     try {
         const { searchParams } = new URL(request.url);

@@ -49,8 +49,12 @@ interface ParameterConfigurationStageProps {
   onBack?: () => void;
   isSaving: boolean;
   errors: string[];
+  adminBypass?: { liquidity: boolean; legal_review: boolean; simulation: boolean };
+  aiScore?: any;
+  setAiScore?: (score: any) => void;
+  isAnalyzing?: boolean;
+  setIsAnalyzing?: (v: boolean) => void;
 }
-
 const CATEGORIES = [
   { id: 'Sports', bn: 'খেলাধুলা' },
   { id: 'Politics', bn: 'রাজনীতি' },
@@ -86,7 +90,11 @@ export function ParameterConfigurationStage({
   onSave,
   onBack,
   isSaving,
-  errors
+  errors,
+  aiScore,
+  setAiScore,
+  isAnalyzing,
+  setIsAnalyzing,
 }: ParameterConfigurationStageProps) {
   // Basic fields
   const [question, setQuestion] = useState(draft?.question || '');
@@ -125,7 +133,7 @@ export function ParameterConfigurationStage({
   const [unit, setUnit] = useState(draft?.unit || 'USD');
 
   // Categorical market
-  const [outcomes, setOutcomes] = useState<Array<{ id: string; label: string }>>(
+  const [outcomes, setOutcomes] = useState<Array<{ id: string; label: string; label_bn?: string }>>(
     draft?.outcomes || [
       { id: '1', label: '' },
       { id: '2', label: '' }
@@ -142,6 +150,46 @@ export function ParameterConfigurationStage({
     };
     fetchResolvers();
   }, []);
+
+  const handleAnalyze = async () => {
+    if (!setIsAnalyzing || !setAiScore) return;
+    setIsAnalyzing(true);
+    try {
+      const payload = {
+        title: question,
+        description,
+        category,
+        outcomes: draft?.market_type === 'categorical'
+          ? outcomes.filter(o => o.label.trim()).map(o => o.label.trim())
+          : ['Yes', 'No'],
+        resolution_date: resolutionDeadline,
+        trading_closes_at: resolutionDeadline,
+        resolution_criteria: {
+          yes: resolutionCriteria,
+          no: `Inverse of: ${resolutionCriteria}`,
+        },
+        resolution_source: {
+          name: resolutionSource,
+          url: resolutionSourceUrl,
+        },
+      };
+      const res = await fetch('/api/admin/markets/score', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAiScore(data);
+      } else {
+        console.error('[Analyze] Failed:', data.error);
+      }
+    } catch (err) {
+      console.error('[Analyze] Error:', err);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
 
   const handleSubmit = async () => {
     const data: Record<string, any> = {
@@ -177,7 +225,10 @@ export function ParameterConfigurationStage({
     }
 
     if (draft?.market_type === 'categorical') {
-      data.outcomes = outcomes.filter(o => o.label.trim());
+      data.outcomes = outcomes.filter(o => o.label.trim()).map(o => ({
+        label: o.label.trim(),
+        label_bn: o.label_bn?.trim() || o.label.trim(),
+      }));
     }
 
     await onSave(data);
@@ -207,6 +258,12 @@ export function ParameterConfigurationStage({
   const updateOutcome = (index: number, label: string) => {
     const updated = [...outcomes];
     updated[index] = { ...updated[index], label };
+    setOutcomes(updated);
+  };
+
+  const updateOutcomeLabelBn = (index: number, label_bn: string) => {
+    const updated = [...outcomes];
+    updated[index] = { ...updated[index], label_bn };
     setOutcomes(updated);
   };
 
@@ -372,22 +429,30 @@ export function ParameterConfigurationStage({
           </h3>
           <div className="space-y-2">
             {outcomes.map((outcome, index) => (
-              <div key={index} className="flex gap-2">
+              <div key={index} className="space-y-2">
+                <div className="flex gap-2">
+                  <Input
+                    value={outcome.label}
+                    onChange={(e) => updateOutcome(index, e.target.value)}
+                    placeholder={`Outcome ${index + 1} (English)`}
+                    className="bg-slate-900 border-slate-700 text-white placeholder:text-slate-600"
+                  />
+                  {outcomes.length > 2 && (
+                    <Button variant="ghost" size="sm" onClick={() => removeOutcome(index)} className="text-red-400 hover:text-red-300">
+                      <X className="w-4 h-4" />
+                    </Button>
+                  )}
+                </div>
                 <Input
-                  value={outcome.label}
-                  onChange={(e) => updateOutcome(index, e.target.value)}
-                  placeholder={`ফলাফল ${index + 1}`}
+                  value={outcome.label_bn || ''}
+                  onChange={(e) => updateOutcomeLabelBn(index, e.target.value)}
+                  placeholder={`ফলাফল ${index + 1} (বাংলা)`}
                   className="bg-slate-900 border-slate-700 text-white placeholder:text-slate-600"
                 />
-                {outcomes.length > 2 && (
-                  <Button variant="ghost" size="sm" onClick={() => removeOutcome(index)} className="text-red-400 hover:text-red-300">
-                    <X className="w-4 h-4" />
-                  </Button>
-                )}
               </div>
             ))}
             <Button variant="outline" size="sm" onClick={addOutcome} className="border-slate-700 text-slate-300 hover:text-white">
-              <Plus className="w-4 h-4 mr-1" /> ফলাফল যোগ করুন
+              <Plus className="w-4 h-4 mr-1" /> Add Outcome
             </Button>
           </div>
         </div>
@@ -725,24 +790,43 @@ export function ParameterConfigurationStage({
             পিছনে
           </Button>
         )}
-        <Button
-          onClick={handleSubmit}
-          disabled={isSaving}
-          className="ml-auto"
-          size="lg"
-        >
-          {isSaving ? (
-            <>
-              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
-              সংরক্ষণ হচ্ছে...
-            </>
-          ) : (
-            <>
-              পরবর্তী ধাপ
-              <ArrowRight className="w-4 h-4 ml-2" />
-            </>
-          )}
-        </Button>
+        <div className="flex gap-2 ml-auto">
+          <Button
+            variant="outline"
+            onClick={handleAnalyze}
+            disabled={isAnalyzing || !question.trim()}
+            className="border-violet-500/30 text-violet-300 hover:text-violet-200 hover:bg-violet-500/10"
+          >
+            {isAnalyzing ? (
+              <>
+                <div className="w-4 h-4 border-2 border-violet-300/30 border-t-violet-300 rounded-full animate-spin mr-2" />
+                Analyzing...
+              </>
+            ) : (
+              <>
+                <Cpu className="w-4 h-4 mr-2" />
+                Analyze with AI
+              </>
+            )}
+          </Button>
+          <Button
+            onClick={handleSubmit}
+            disabled={isSaving}
+            size="lg"
+          >
+            {isSaving ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
+                সংরক্ষণ হচ্ছে...
+              </>
+            ) : (
+              <>
+                পরবর্তী ধাপ
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </>
+            )}
+          </Button>
+        </div>
       </div>
     </div>
   );

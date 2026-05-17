@@ -1,13 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { pool } from '@/lib/admin/local-db';
+import { requireAdminUser } from '@/lib/admin/admin-auth';
 import { OrderBookService } from '@/lib/clob/service';
 
 export async function GET(request: NextRequest) {
+    // 1. Admin JWT authentication (primary gate)
+    const authResult = await requireAdminUser(request);
+    if ('error' in authResult) return authResult.error;
+
+    // 2. Optional secondary key check (for internal test isolation)
     const { searchParams } = new URL(request.url);
     const authKey = request.headers.get('x-verify-key') || searchParams.get('key');
-
     if (authKey !== 'polymarket-bangladesh-verify-99') {
-        return NextResponse.json({ error: 'Unauthorized. Please provide ?key=polymarket-bangladesh-verify-99' }, { status: 401 });
+        return NextResponse.json({ error: 'Unauthorized. Missing internal verification key.' }, { status: 401 });
     }
 
     const TEST_USER_ID = '51bedd0f-3476-4350-88d5-428c9794f448';

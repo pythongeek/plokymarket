@@ -8,6 +8,7 @@ import { NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 import { pool } from '@/lib/admin/local-db';
+import { AdminUser } from '@/lib/admin/admin-auth';
 
 const JWT_SECRET = process.env.LOCAL_JWT_SECRET || process.env.JWT_SECRET || 'P10kyM@rket.BD.2026.JWT.SECRET';
 // Encode for jose
@@ -21,13 +22,6 @@ export interface AdminProfile {
   is_admin: boolean;
   is_super_admin: boolean;
   full_name: string | null;
-}
-
-export interface AdminUser {
-  id: string;
-  email: string;
-  profile: AdminProfile;
-  level: AdminLevel;
 }
 
 export interface AdminResult {

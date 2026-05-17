@@ -3,13 +3,11 @@
  * Uses local PostgreSQL (pg) for all data operations
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdmin } from '@/lib/admin/auth-guard';
+import { admin } from '@/lib/admin/auth-guard';
 
 export async function GET(req: NextRequest) {
-  const admin = await requireAdmin();
-  if (admin.error) {
-    return NextResponse.json({ error: admin.error }, { status: admin.status });
-  }
+  const authResult = await admin();
+  if (authResult.error) return authResult.error;
 
   const { searchParams } = new URL(req.url);
   const tab = searchParams.get('tab') || 'experts';
@@ -35,11 +33,11 @@ export async function GET(req: NextRequest) {
         query += ` WHERE ev.expert_id = $${params.length}`;
       }
       query += ` ORDER BY ev.created_at DESC LIMIT 100`;
-      const result = await admin.pool.query(query, params);
+      const result = await authResult.pool.query(query, params);
       return NextResponse.json({ data: result.rows });
     } else if (tab === 'reviews') {
       // Fetch expert panel reviews
-      const result = await admin.pool.query(`
+      const result = await authResult.pool.query(`
         SELECT 
           epr.*,
           dr.dispute_reason as dispute_reason
@@ -51,7 +49,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ data: result.rows });
     } else {
       // Fetch expert panel members
-      const result = await admin.pool.query(`
+      const result = await authResult.pool.query(`
         SELECT 
           ep.*,
           up.full_name,
@@ -73,16 +71,14 @@ export async function GET(req: NextRequest) {
  * POST /api/admin/experts - Add new expert panel member
  */
 export async function POST(req: NextRequest) {
-  const admin = await requireAdmin();
-  if (admin.error) {
-    return NextResponse.json({ error: admin.error }, { status: admin.status });
-  }
+  const authResult = await admin();
+  if (authResult.error) return authResult.error;
 
   try {
     const body = await req.json();
     const { user_id, expert_name, credentials, specializations, bio, email } = body;
 
-    const result = await admin.pool.query(
+    const result = await authResult.pool.query(
       `INSERT INTO expert_panel (user_id, expert_name, credentials, specializations, bio, email)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
@@ -100,10 +96,8 @@ export async function POST(req: NextRequest) {
  * PATCH /api/admin/experts - Update expert record
  */
 export async function PATCH(req: NextRequest) {
-  const admin = await requireAdmin();
-  if (admin.error) {
-    return NextResponse.json({ error: admin.error }, { status: admin.status });
-  }
+  const authResult = await admin();
+  if (authResult.error) return authResult.error;
 
   try {
     const body = await req.json();
@@ -114,7 +108,7 @@ export async function PATCH(req: NextRequest) {
     }
 
     if (action === 'verify') {
-      const result = await admin.pool.query(
+      const result = await authResult.pool.query(
         `UPDATE expert_panel 
          SET is_verified = true, verified_by = $2, verified_at = now(), updated_at = now()
          WHERE id = $1 RETURNING *`,
@@ -124,7 +118,7 @@ export async function PATCH(req: NextRequest) {
     }
 
     if (action === 'toggle_active') {
-      const result = await admin.pool.query(
+      const result = await authResult.pool.query(
         `UPDATE expert_panel SET is_active = NOT is_active, updated_at = now() WHERE id = $1 RETURNING *`,
         [id]
       );
@@ -139,7 +133,7 @@ export async function PATCH(req: NextRequest) {
     const setClause = fields.map((f, i) => `${f} = $${i + 2}`).join(', ');
     const values = fields.map(f => updates[f]);
 
-    const result = await admin.pool.query(
+    const result = await authResult.pool.query(
       `UPDATE expert_panel SET ${setClause}, updated_at = now() WHERE id = $1 RETURNING *`,
       [id, ...values]
     );
@@ -159,10 +153,8 @@ export async function PATCH(req: NextRequest) {
  * DELETE /api/admin/experts - Remove expert panel member
  */
 export async function DELETE(req: NextRequest) {
-  const admin = await requireAdmin();
-  if (admin.error) {
-    return NextResponse.json({ error: admin.error }, { status: admin.status });
-  }
+  const authResult = await admin();
+  if (authResult.error) return authResult.error;
 
   try {
     const { searchParams } = new URL(req.url);
@@ -172,7 +164,7 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 });
     }
 
-    const result = await admin.pool.query(
+    const result = await authResult.pool.query(
       'DELETE FROM expert_panel WHERE id = $1 RETURNING id',
       [id]
     );

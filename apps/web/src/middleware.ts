@@ -104,6 +104,12 @@ export async function middleware(request: NextRequest) {
     // Validate JWT from cookie using jose (Edge Runtime compatible)
     const token = request.cookies.get('sb-access-token')?.value;
     if (!token) {
+      if (isApiAdminPath(pathname)) {
+        return new NextResponse(
+          JSON.stringify({ error: 'Unauthorized', code: 'NO_TOKEN' }),
+          { status: 401, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
       const authUrl = new URL(SECURE_PATHS.auth, request.url);
       authUrl.searchParams.set('redirect', pathname);
       return NextResponse.redirect(authUrl);
@@ -116,6 +122,12 @@ export async function middleware(request: NextRequest) {
       decoded = payload;
     } catch (jwtErr) {
       console.warn('JWT validation failed:', (jwtErr as Error).message);
+      if (isApiAdminPath(pathname)) {
+        return new NextResponse(
+          JSON.stringify({ error: 'Unauthorized', code: 'INVALID_TOKEN' }),
+          { status: 401, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
       const authUrl = new URL(SECURE_PATHS.auth, request.url);
       authUrl.searchParams.set('redirect', pathname);
       authUrl.searchParams.set('error', 'invalid_token');

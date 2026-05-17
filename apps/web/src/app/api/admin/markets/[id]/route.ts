@@ -37,7 +37,7 @@ const MARKET_SELECT = `
   m.event_slug,
   m.tick_size, m.min_price, m.max_price,
   m.fee_percent, m.initial_liquidity, m.maker_rebate_percent,
-  m.market_type, m.neg_risk, m.condition_id,
+  m.market_type, m.neg_risk, m.condition_id, m.risk_score,
   m.yes_price_change_24h, m.no_price_change_24h,
   m.resolution_delay_hours
 `;
@@ -48,8 +48,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const mockReq = _req as unknown as NextRequest;
-  const authResult = await requireAdminUser(request);
+  const authResult = await requireAdminUser(_req);
   if ('error' in authResult) return authResult.error;
 
   const result = await pool.query(
@@ -97,6 +96,7 @@ export async function PATCH(
     answer_type:        'event_answer_type',
     initial_liquidity:  'initial_liquidity',
     fee_percent:        'fee_percent',
+    risk_score:         'risk_score',
     min_price:          'min_price',
     max_price:          'max_price',
     tick_size:          'tick_size',
@@ -120,6 +120,25 @@ export async function PATCH(
   );
 
   if (!result.rows[0]) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+  // Audit log: record each changed field
+  const adminId = authResult.user.id;
+  const oldData = await pool.query(
+    'SELECT ' + Object.keys(updates).filter(k => k !== 'updated_at').join(', ') + ' FROM markets WHERE id = $1',
+    [id]
+  );
+  // Note: we already updated, so oldData won't help. We skip per-field old values
+  // and log the action with new state.
+  try {
+    await pool.query(
+      `INSERT INTO admin_audit_log (admin_id, action, entity_type, entity_id, new_value, created_at)
+       VALUES ($1, $2, $3, $4, $5, NOW())`,
+      [adminId, 'UPDATE', 'market', id, JSON.stringify(updates)]
+    );
+  } catch (auditErr) {
+    console.error('[Market PATCH] Audit log failed:', auditErr);
+  }
+
   return NextResponse.json({ data: result.rows[0] });
 }
 
@@ -129,8 +148,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const mockReq = _req as unknown as NextRequest;
-  const authResult = await requireAdminUser(request);
+  const authResult = await requireAdminUser(_req);
   if ('error' in authResult) return authResult.error;
 
   const result = await pool.query(

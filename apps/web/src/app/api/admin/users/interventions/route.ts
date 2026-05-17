@@ -9,7 +9,8 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const authResult = await requireAdminUser(req);
-
+    if ('error' in authResult) return authResult.error;
+    const userId = authResult.user.id;
 
     // Check admin status
     const profileResult = await pool.query(

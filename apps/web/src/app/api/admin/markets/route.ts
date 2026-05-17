@@ -75,7 +75,7 @@ export async function GET(req: NextRequest) {
       m.event_slug,
       m.publish_status,
       m.starts_at,
-      m.answer1,
+      m.market_type,
       m.answer2,
       m.answer3,
       m.answer4
@@ -112,12 +112,14 @@ export async function POST(req: NextRequest) {
     title, question, description, category, tags,
     image_url, source_url, trading_closes_at, event_date,
     is_featured, initial_liquidity, answer_type, resolution_method,
-    slug,
+    slug, market_type, outcomes,
   } = body;
 
   if (!title?.trim()) return NextResponse.json({ error: 'title is required' }, { status: 400 });
   if (!question?.trim()) return NextResponse.json({ error: 'question is required' }, { status: 400 });
   if (!category?.trim()) return NextResponse.json({ error: 'category is required' }, { status: 400 });
+
+  const mappedMarketType = market_type === 'categorical' ? 'multi_outcome' : (market_type || 'binary');
 
   const rpcPayload = {
     title: title.trim(),
@@ -131,7 +133,7 @@ export async function POST(req: NextRequest) {
     event_date: event_date ? new Date(event_date).toISOString() : null,
     is_featured: !!is_featured,
     initial_liquidity: parseFloat(initial_liquidity) || 1000,
-    answer_type: answer_type || 'binary',
+    answer_type: mappedMarketType,
     resolution_method: resolution_method || 'manual_admin',
     slug: slug || '',
   };
@@ -144,6 +146,26 @@ export async function POST(req: NextRequest) {
   const out = rpcResult.rows[0]?.result;
   if (!out?.success) {
     return NextResponse.json({ error: out?.message || 'Creation failed' }, { status: 500 });
+  }
+
+  // Insert outcomes for multi_outcome markets
+  if (mappedMarketType === 'multi_outcome' && Array.isArray(outcomes) && outcomes.length >= 2) {
+    try {
+      await pool.query(
+        `INSERT INTO outcomes (market_id, label, label_bn, current_price, display_order)
+         SELECT $1, UNNEST($2::text[]), UNNEST($3::text[]), UNNEST($4::float[]), generate_series(0, $5)`,
+        [
+          out.market_id,
+          outcomes.map((o: any) => o.label),
+          outcomes.map((o: any) => o.label_bn || o.label),
+          outcomes.map(() => 1 / outcomes.length),
+          outcomes.length - 1
+        ]
+      );
+      await pool.query("UPDATE markets SET market_type = 'multi_outcome' WHERE id = $1", [out.market_id]);
+    } catch (err: any) {
+      console.error('[Admin Markets POST] Outcomes insert failed:', err);
+    }
   }
 
   return NextResponse.json({

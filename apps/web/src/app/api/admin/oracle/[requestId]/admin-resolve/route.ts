@@ -60,6 +60,21 @@ export async function POST(
             [winning_outcome, now, oracleRequest.market_id]
         );
 
+        // 3) Audit log
+        await pool.query(
+            `INSERT INTO admin_audit_log (admin_id, action, entity_type, entity_id, new_value, reason, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [
+                userId,
+                'admin_override_resolve',
+                'oracle_request',
+                requestId,
+                JSON.stringify({ market_id: oracleRequest.market_id, winning_outcome, source: 'ADMIN_OVERRIDE' }),
+                reason,
+                now,
+            ]
+        );
+
         return NextResponse.json({
             data: {
                 success: true,

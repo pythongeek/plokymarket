@@ -8,20 +8,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import { admin } from '@/lib/admin/auth-guard';
 
 export async function GET(req: NextRequest) {
-  const result = await admin();
-  if (result.error) return result.error;
+  const authResult = await admin();
+  if (authResult.error) return authResult.error;
 
   const { searchParams } = new URL(req.url);
   const id = searchParams.get('id');
 
   try {
     if (id) {
-      const { rows } = await result.pool.query(
+      const { rows } = await authResult.pool.query(
         'SELECT * FROM agent_wallets WHERE id = $1', [id]
       );
       return NextResponse.json({ data: rows[0] || null });
     }
-    const { rows } = await result.pool.query(
+    const { rows } = await authResult.pool.query(
       'SELECT * FROM agent_wallets ORDER BY created_at DESC'
     );
     return NextResponse.json({ data: rows });
@@ -32,14 +32,14 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const result = await admin();
-  if (result.error) return result.error;
+  const authResult = await admin();
+  if (authResult.error) return authResult.error;
 
   try {
     const body = await req.json();
     const { account_name, address, network, is_active = true } = body;
 
-    const { rows } = await result.pool.query(
+    const { rows } = await authResult.pool.query(
       `INSERT INTO agent_wallets (account_name, address, network, is_active)
        VALUES ($1, $2, $3, $4) RETURNING *`,
       [account_name, address, network, is_active]
@@ -52,8 +52,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const result = await admin();
-  if (result.error) return result.error;
+  const authResult = await admin();
+  if (authResult.error) return authResult.error;
 
   const { searchParams } = new URL(req.url);
   const id = searchParams.get('id');
@@ -61,7 +61,7 @@ export async function DELETE(req: NextRequest) {
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
 
   try {
-    await result.pool.query('DELETE FROM agent_wallets WHERE id = $1', [id]);
+    await authResult.pool.query('DELETE FROM agent_wallets WHERE id = $1', [id]);
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error('Agent wallets DELETE error:', err);

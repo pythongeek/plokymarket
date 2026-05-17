@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { createClient } from '@/lib/supabase/server';
 
 export type AnalyticsPeriod = '24h' | '7d' | '30d' | 'all';

@@ -11,7 +11,7 @@ import { jwtVerify } from 'jose';
  * - Each outcome has a current_price representing its probability
  */
 const JWT_SECRET = new TextEncoder().encode(
-  process.env.NEXT_PUBLIC_JWT_SECRET || 'P10kyM@rket.BD.2026.JWT.SECRET.XX'
+  process.env.JWT_SECRET || process.env.SUPABASE_JWT_SECRET || 'P10kyM@rket.BD.2026.JWT.SECRET'
 );
 
 async function getUserFromRequest(request: Request) {
@@ -120,7 +120,7 @@ export async function POST(
 ) {
   try {
     const supabase = await createPublicClient();
-    const user = await getUserFromRequest(request);
+    const user = await getUserFromRequest(req);
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

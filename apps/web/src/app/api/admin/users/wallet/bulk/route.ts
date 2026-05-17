@@ -7,6 +7,8 @@ import { requireAdminUser } from '@/lib/admin/admin-auth';
 export async function POST(request: NextRequest) {
     try {
         const authResult = await requireAdminUser(request);
+        if ('error' in authResult) return authResult.error;
+        const userId = authResult.user.id;
 
 
         // Verify admin status

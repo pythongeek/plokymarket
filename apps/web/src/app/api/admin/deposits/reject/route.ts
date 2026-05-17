@@ -9,6 +9,8 @@ export async function POST(request: Request) {
   try {
     // Get Bearer token from auth header
     const authResult = await requireAdminUser(request);
+    if ('error' in authResult) return authResult.error;
+    const userId = authResult.user.id;
 
 
     // Check if user has admin role — use user_profiles.is_admin

@@ -3,6 +3,9 @@
  *
  * Posts critical/warning alerts to Discord/Slack webhook.
  * Fails loud: logs to console if webhook URL missing, never crashes app.
+ *
+ * NOTE: This file is Edge Runtime compatible. For DB persistence,
+ * use sendSystemAlertWithPersistence() from alert-persistence.ts (Node.js only).
  */
 
 export type AlertLevel = "WARN" | "CRITICAL" | "INFO";
@@ -75,7 +78,6 @@ export async function sendSystemAlert(
 
 /**
  * Format alert payload for Discord webhook.
- * Discord expects { content: string } or { embeds: [...] }.
  */
 function formatForDiscord(payload: AlertPayload): Record<string, any> {
   const color =
@@ -106,7 +108,6 @@ function formatForDiscord(payload: AlertPayload): Record<string, any> {
 
 /**
  * Send a circuit breaker OPEN alert.
- * Convenience wrapper around sendSystemAlert.
  */
 export async function sendCircuitBreakerAlert(
   service: string,

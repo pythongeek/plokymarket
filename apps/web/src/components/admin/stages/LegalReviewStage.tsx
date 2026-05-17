@@ -6,17 +6,18 @@ import {
   Shield,
   AlertTriangle,
   Check,
-  Clock,
   ArrowRight,
   ArrowLeft,
   Send,
-  Info,
   FileText,
-  AlertCircle,
   Scale,
   Gavel,
   ShieldOff,
-  Zap
+  Zap,
+  Globe,
+  FileCheck,
+  Ban,
+  Vote
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -33,34 +34,8 @@ interface LegalReviewStageProps {
   isSaving: boolean;
   errors: string[];
   adminBypass?: { liquidity: boolean; legal_review: boolean; simulation: boolean };
+  aiScore?: any;
 }
-
-const RISK_INDICATORS = [
-  {
-    category: 'রাজনৈতিক সংবেদনশীলতা',
-    categoryEn: 'Political Sensitivity',
-    keywords: ['election fraud', 'corruption', 'coup', 'assassination', 'নির্বাচন'],
-    level: 'high'
-  },
-  {
-    category: 'সহিংসতা ও ক্ষতি',
-    categoryEn: 'Violence & Harm',
-    keywords: ['terrorism', 'war', 'death', 'violence', 'যুদ্ধ'],
-    level: 'high'
-  },
-  {
-    category: 'আর্থিক নিয়মকানুন',
-    categoryEn: 'Financial Regulation',
-    keywords: ['gambling', 'insider trading', 'market manipulation', 'জুয়া'],
-    level: 'medium'
-  },
-  {
-    category: 'স্বাস্থ্য ও নিরাপত্তা',
-    categoryEn: 'Health & Safety',
-    keywords: ['pandemic', 'disease outbreak', 'public health emergency', 'মহামারী'],
-    level: 'medium'
-  }
-];
 
 export function LegalReviewStage({
   draft,
@@ -68,23 +43,26 @@ export function LegalReviewStage({
   onBack,
   isSaving,
   errors,
-  adminBypass
+  adminBypass,
+  aiScore
 }: LegalReviewStageProps) {
   const isBypassed = adminBypass?.legal_review || false;
   const [reviewNotes, setReviewNotes] = useState(draft?.legal_review_notes || '');
-  const [detectedRisks, setDetectedRisks] = useState<Array<{ category: string; categoryEn: string; level: string; keywords: string[] }>>([]);
   const [selfApproved, setSelfApproved] = useState(
     draft?.legal_review_status === 'approved' || isBypassed
   );
 
-  // Detect risk indicators in question/description
-  useEffect(() => {
-    const text = `${draft?.question || ''} ${draft?.description || ''}`.toLowerCase();
-    const risks = RISK_INDICATORS.filter(indicator =>
-      indicator.keywords.some(keyword => text.includes(keyword.toLowerCase()))
-    );
-    setDetectedRisks(risks);
-  }, [draft?.question, draft?.description]);
+  // Derive risk data from aiScore or fallback
+  const risk = aiScore?.risk;
+  const violations = risk?.violations || [];
+  const warnings = risk?.warnings || [];
+  const isSafe = risk?.isSafe ?? true;
+  const riskScore = risk?.riskScore ?? 0;
+  const policyChecks = risk?.policyChecks || {};
+
+  // Determine overall risk level from AI score
+  const overallRisk = !isSafe || riskScore >= 75 ? 'high' :
+    riskScore >= 40 ? 'medium' : 'low';
 
   const handleSubmit = async () => {
     await onSave({
@@ -99,9 +77,6 @@ export function LegalReviewStage({
     setReviewNotes(prev => prev || 'অ্যাডমিন দ্বারা স্ব-অনুমোদিত');
   };
 
-  const overallRisk = detectedRisks.some(r => r.level === 'high') ? 'high' :
-    detectedRisks.some(r => r.level === 'medium') ? 'medium' : 'low';
-
   return (
     <div className="space-y-6">
       {/* Bypass Notice */}
@@ -113,9 +88,9 @@ export function LegalReviewStage({
         >
           <ShieldOff className="w-5 h-5 text-amber-400 flex-shrink-0" />
           <div>
-            <p className="text-sm font-medium text-amber-300">আইনি পর্যালোচনা বাইপাস সক্রিয়</p>
+            <p className="text-sm font-medium text-amber-300">আইনি পর্যালোচনা বাইপাস সক্রিয</p>
             <p className="text-xs text-amber-400/70">
-              আইনি পর্যালোচনা প্রক্রিয়া বাইপাস করা হয়েছে। আপনি সরাসরি অনুমোদন করে এগিয়ে যেতে পারেন।
+              আইনি পর্যালোচনা প্রক্রিযা বাইপাস করা হয়েছে। আপনি সরাসরি অনুমোদন করে এগিয়ে যেতে পারেন।
             </p>
           </div>
         </motion.div>
@@ -149,13 +124,14 @@ export function LegalReviewStage({
         </div>
       </Card>
 
-      {/* Risk Assessment */}
+      {/* AI Risk Assessment */}
       <div className="space-y-3">
         <h4 className="text-sm font-semibold text-white flex items-center gap-2">
-          <Scale className="w-4 h-4 text-cyan-400" />
-          ঝুঁকি মূল্যায়ন (Risk Assessment)
+          <Zap className="w-4 h-4 text-violet-400" />
+          AI ঝুঁকি মূল্যায়ন (AI Risk Assessment)
         </h4>
 
+        {/* Overall Risk Badge */}
         <div className={cn(
           "flex items-center gap-3 p-3 rounded-lg border",
           overallRisk === 'high' ? "bg-red-900/20 border-red-800/50" :
@@ -172,41 +148,75 @@ export function LegalReviewStage({
           </div>
           <div>
             <p className="text-sm font-medium text-white">
-              সামগ্রিক ঝুঁকি: {overallRisk === 'high' ? 'উচ্চ' : overallRisk === 'medium' ? 'মাঝারি' : 'কম'}
+              সামগ্রিক পরিস্থিতি: {overallRisk === 'high' ? 'উচ্চ ঝুঁকি' : overallRisk === 'medium' ? 'মাঝারি' : 'কম'}
             </p>
             <p className="text-xs text-slate-400">
-              {detectedRisks.length === 0
-                ? 'কোন সংবেদনশীল বিষয় সনাক্ত হয়নি'
-                : `${detectedRisks.length}টি ঝুঁকি সূচক সনাক্ত হয়েছে`}
+              {aiScore ? `AI Risk Score: ${riskScore}/100 • ${isSafe ? 'Safe' : 'Unsafe'}` : 'No AI analysis available'}
             </p>
           </div>
         </div>
 
-        {/* Detected Risks */}
-        {detectedRisks.length > 0 && (
-          <div className="space-y-2">
-            {detectedRisks.map((risk, i) => (
-              <div key={i} className={cn(
-                "p-3 rounded-lg border flex items-center justify-between",
-                risk.level === 'high' ? "bg-red-900/10 border-red-800/30" : "bg-amber-900/10 border-amber-800/30"
+        {/* Policy Checks */}
+        {Object.keys(policyChecks).length > 0 && (
+          <div className="grid grid-cols-2 gap-2">
+            {Object.entries(policyChecks).map(([key, passed]) => (
+              <div key={key} className={cn(
+                "flex items-center gap-2 p-2 rounded border text-xs",
+                passed
+                  ? "bg-green-900/10 border-green-800/30 text-green-300"
+                  : "bg-red-900/10 border-red-800/30 text-red-300"
               )}>
-                <div>
-                  <p className="text-sm text-white">{risk.category}</p>
-                  <p className="text-xs text-slate-500">{risk.categoryEn}</p>
-                </div>
-                <Badge className={cn(
-                  "border",
-                  risk.level === 'high'
-                    ? "bg-red-500/20 text-red-300 border-red-500/30"
-                    : "bg-amber-500/20 text-amber-300 border-amber-500/30"
-                )}>
-                  {risk.level === 'high' ? 'উচ্চ ঝুঁকি' : 'মাঝারি ঝুঁকি'}
-                </Badge>
+                {passed ? <FileCheck className="w-3 h-3" /> : <Ban className="w-3 h-3" />}
+                <span className="capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Violations */}
+        {violations.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-red-400">সাম্প্রতি লংঘন ({violations.length})</p>
+            {violations.map((v: string, i: number) => (
+              <div key={i} className="p-2 rounded bg-red-900/10 border border-red-800/30 flex items-start gap-2">
+                <Ban className="w-3 h-3 text-red-400 mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-red-200">{v}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Warnings */}
+        {warnings.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-amber-400">সাবধান ({warnings.length})</p>
+            {warnings.map((w: string, i: number) => (
+              <div key={i} className="p-2 rounded bg-amber-900/10 border border-amber-800/30 flex items-start gap-2">
+                <AlertTriangle className="w-3 h-3 text-amber-400 mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-amber-200">{w}</p>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* Quality Improvements */}
+      {aiScore?.quality?.improvements?.length > 0 && (
+        <div className="space-y-3">
+          <h4 className="text-sm font-semibold text-white flex items-center gap-2">
+            <Scale className="w-4 h-4 text-cyan-400" />
+            AI সুধারনা (AI Suggestions)
+          </h4>
+          <div className="space-y-2">
+            {aiScore.quality.improvements.map((imp: string, i: number) => (
+              <div key={i} className="p-2 rounded bg-blue-900/10 border border-blue-800/30 flex items-start gap-2">
+                <Zap className="w-3 h-3 text-blue-400 mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-blue-200">{imp}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Admin Self-Approval */}
       <div className="space-y-3">
@@ -235,7 +245,7 @@ export function LegalReviewStage({
               <Check className="w-4 h-4 mr-2" />
               স্ব-অনুমোদন করুন (Self-Approve)
             </Button>
-            {detectedRisks.length > 0 && !isBypassed && (
+            {(violations.length > 0 || !isSafe) && !isBypassed && (
               <Button variant="outline" className="border-amber-500/40 text-amber-300">
                 <Send className="w-4 h-4 mr-2" />
                 সিনিয়র কাউন্সেলে পাঠান

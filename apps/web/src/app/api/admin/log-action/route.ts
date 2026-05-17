@@ -1,6 +1,7 @@
 /**
  * Admin Log Action API
  * Server-side endpoint for logging admin actions with IP tracking
+ * Writes to admin_audit_log (single source of truth)
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { pool, query } from '@/lib/admin/local-db';
@@ -30,6 +31,18 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        // Ensure schema has IP/user_agent columns (idempotent)
+        try {
+            await pool.query(`
+                ALTER TABLE admin_audit_log 
+                ADD COLUMN IF NOT EXISTS ip_address text,
+                ADD COLUMN IF NOT EXISTS user_agent text
+            `);
+        } catch (schemaErr) {
+            // Columns already exist or table lock — safe to ignore
+            console.warn('[Admin Log Action] Schema check:', schemaErr);
+        }
+
         // Get IP and User-Agent from request headers
         const headers = request.headers;
         const ip_address = headers.get('x-forwarded-for') ||
@@ -37,11 +50,11 @@ export async function POST(request: NextRequest) {
                            'unknown';
         const user_agent = headers.get('user-agent') || 'unknown';
 
-        // Insert log directly into local DB using pg
+        // Insert log into admin_audit_log (single source of truth)
         const result = await pool.query(`
-            INSERT INTO admin_activity_logs
-                (admin_id, action_type, resource_type, resource_id, old_values, new_values, reason, ip_address, user_agent, workflow_id, created_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+            INSERT INTO admin_audit_log
+                (admin_id, action, entity_type, entity_id, old_value, new_value, reason, ip_address, user_agent, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
             RETURNING id
         `, [
             admin_id,
@@ -52,8 +65,7 @@ export async function POST(request: NextRequest) {
             new_values ? JSON.stringify(new_values) : null,
             reason || null,
             ip_address,
-            user_agent,
-            workflow_id || null
+            user_agent
         ]);
 
         const logId = result.rows[0]?.id;
@@ -78,7 +90,7 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * GET: Fetch admin logs with filters
+ * GET: Fetch admin logs with filters (parameterized — no SQL injection)
  */
 export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
@@ -86,11 +98,11 @@ export async function GET(request: NextRequest) {
     const adminId = searchParams.get('adminId');
     const actionType = searchParams.get('actionType');
     const resourceType = searchParams.get('resourceType');
-    const limit = parseInt(searchParams.get('limit') || '50');
-    const offset = parseInt(searchParams.get('offset') || '0');
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '50')));
+    const offset = Math.max(0, parseInt(searchParams.get('offset') || '0'));
 
     try {
-        let sql = 'SELECT * FROM admin_activity_logs WHERE 1=1';
+        let sql = 'SELECT * FROM admin_audit_log WHERE 1=1';
         const params: any[] = [];
         let i = 1;
 
@@ -99,11 +111,11 @@ export async function GET(request: NextRequest) {
             params.push(adminId);
         }
         if (actionType) {
-            sql += ` AND action_type = $${i++}`;
+            sql += ` AND action = $${i++}`;
             params.push(actionType);
         }
         if (resourceType) {
-            sql += ` AND resource_type = $${i++}`;
+            sql += ` AND entity_type = $${i++}`;
             params.push(resourceType);
         }
 
@@ -112,13 +124,25 @@ export async function GET(request: NextRequest) {
 
         const rows = await query(sql, params);
 
-        const countResult = await query<{ count: string }>(
-            'SELECT COUNT(*) as count FROM admin_activity_logs WHERE 1=1' +
-            (adminId ? ` AND admin_id = '${adminId}'` : '') +
-            (actionType ? ` AND action_type = '${actionType}'` : '') +
-            (resourceType ? ` AND resource_type = '${resourceType}'` : ''),
-            []
-        );
+        // Count query (also parameterized)
+        let countSql = 'SELECT COUNT(*) as count FROM admin_audit_log WHERE 1=1';
+        const countParams: any[] = [];
+        let ci = 1;
+
+        if (adminId) {
+            countSql += ` AND admin_id = $${ci++}`;
+            countParams.push(adminId);
+        }
+        if (actionType) {
+            countSql += ` AND action = $${ci++}`;
+            countParams.push(actionType);
+        }
+        if (resourceType) {
+            countSql += ` AND entity_type = $${ci++}`;
+            countParams.push(resourceType);
+        }
+
+        const countResult = await query<{ count: string }>(countSql, countParams);
 
         return NextResponse.json({
             logs: rows,

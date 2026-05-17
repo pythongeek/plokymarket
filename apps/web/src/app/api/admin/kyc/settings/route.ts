@@ -1,12 +1,14 @@
-// @ts-nocheck
 import { pool, query } from '@/lib/admin/local-db';
 import { requireAdminUser } from '@/lib/admin/admin-auth';
 import { NextRequest, NextResponse } from 'next/server';
 
 
 // GET /api/admin/kyc/settings - Get platform KYC settings
-export async function GET() {
+export async function GET(req: NextRequest) {
     try {
+        const authResult = await requireAdminUser(req);
+        if ('error' in authResult) return authResult.error;
+
         const result = await pool.query('SELECT * FROM kyc_settings WHERE id = 1');
 
         if (result.rows.length === 0) {

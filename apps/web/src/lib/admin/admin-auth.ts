@@ -16,6 +16,12 @@ export interface AdminUser {
   email: string;
   is_admin: boolean;
   is_super_admin: boolean;
+  level?: 'super' | 'admin';
+  profile?: {
+    full_name: string | null;
+    is_admin: boolean;
+    is_super_admin: boolean;
+  };
 }
 
 /**

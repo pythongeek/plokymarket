@@ -260,8 +260,8 @@ export function UserSupportPanel({ userId, tickets = [], notes = [], onUpdate }:
                                             </span>
                                         </div>
                                         <p className="text-xs text-slate-300">{note.content}</p>
-                                        {note.author && (
-                                            <p className="text-[10px] text-slate-600 mt-2">— {note.author}</p>
+                                        {note.created_by_full_name && (
+                                            <p className="text-[10px] text-slate-600 mt-2">— {note.created_by_full_name}</p>
                                         )}
                                     </motion.div>
                                 ))}

@@ -1,14 +1,12 @@
 /**
  * Admin Workflows Page
- * Manage QStash background cron jobs
+ * Manage cron-job.org background jobs
  */
 
 'use client';
 
-import { QStashWorkflowManager } from '@/components/admin/QStashWorkflowManager';
 import WorkflowManager from '@/components/admin/WorkflowManager';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Workflow, Clock, Server, Play } from 'lucide-react';
@@ -37,7 +35,7 @@ export default function WorkflowsAdminPage() {
               Workflow Management
             </h1>
             <p className="text-slate-400 mt-1">
-              Manage consolidated QStash cron jobs and manual triggers
+              Manage cron-job.org schedules and manual triggers
             </p>
           </div>
         </div>
@@ -53,7 +51,7 @@ export default function WorkflowsAdminPage() {
               </div>
               <div>
                 <p className="text-sm text-slate-400">Automated</p>
-                <p className="text-lg font-semibold text-white">4 Workflows</p>
+                <p className="text-lg font-semibold text-white">cron-job.org</p>
               </div>
             </div>
           </CardContent>
@@ -65,8 +63,8 @@ export default function WorkflowsAdminPage() {
                 <Play className="w-5 h-5 text-emerald-400" />
               </div>
               <div>
-                <p className="text-sm text-slate-400">Manual</p>
-                <p className="text-lg font-semibold text-white">8 Workflows</p>
+                <p className="text-sm text-slate-400">Manual Trigger</p>
+                <p className="text-lg font-semibold text-white">Enabled</p>
               </div>
             </div>
           </CardContent>
@@ -79,32 +77,15 @@ export default function WorkflowsAdminPage() {
               </div>
               <div>
                 <p className="text-sm text-slate-400">Provider</p>
-                <p className="text-lg font-semibold text-white">Upstash QStash</p>
+                <p className="text-lg font-semibold text-white">cron-job.org</p>
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Tabs for Old and New Workflow Managers */}
-      <Tabs defaultValue="consolidated" className="space-y-4">
-        <TabsList className="bg-slate-800 border-slate-700">
-          <TabsTrigger value="consolidated" className="data-[state=active]:bg-slate-700">
-            Consolidated Workflows
-          </TabsTrigger>
-          <TabsTrigger value="qstash" className="data-[state=active]:bg-slate-700">
-            QStash Manager
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="consolidated">
-          <WorkflowManager />
-        </TabsContent>
-
-        <TabsContent value="qstash">
-          <QStashWorkflowManager />
-        </TabsContent>
-      </Tabs>
+      {/* Workflow Manager */}
+      <WorkflowManager />
     </div>
   );
 }

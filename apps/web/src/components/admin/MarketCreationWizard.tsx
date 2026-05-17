@@ -28,6 +28,32 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
+// AI Score type
+interface AIScoreResult {
+  aiQualityScore: number;
+  recommendation: 'approve' | 'review' | 'revise' | 'reject';
+  risk: {
+    isSafe: boolean;
+    riskScore: number;
+    violations: string[];
+    warnings: string[];
+    policyChecks: any;
+  };
+  quality: {
+    score: number;
+    breakdown: any;
+    improvements: string[];
+  };
+  marketLogic: {
+    marketType: string;
+    liquidityRecommendation: number;
+    tradingFee: number;
+    minTradeAmount: number;
+    maxTradeAmount: number;
+    bParameter: number;
+  };
+}
+
 // Stage components
 import { TemplateSelectionStage } from './stages/TemplateSelectionStage';
 import { ParameterConfigurationStage } from './stages/ParameterConfigurationStage';
@@ -86,6 +112,8 @@ export function MarketCreationWizard({
     legal_review: false,
     simulation: false
   });
+  const [aiScore, setAiScore] = useState<AIScoreResult | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   // Load draft and templates
   useEffect(() => {
@@ -281,17 +309,20 @@ export function MarketCreationWizard({
     return false;
   };
 
-  // Render current stage
   const renderStage = () => {
     const stageId = STAGES[currentStageIndex].id;
-    const commonProps = {
+    const commonProps: any = {
       draft: draft!,
       templates,
       onSave: saveStage,
       onBack: currentStageIndex > 0 ? goBack : undefined,
       isSaving,
       errors,
-      adminBypass
+      adminBypass,
+      aiScore,
+      setAiScore,
+      isAnalyzing,
+      setIsAnalyzing,
     };
 
     switch (stageId) {
@@ -347,6 +378,24 @@ export function MarketCreationWizard({
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {/* AI Quality Score Badge */}
+          {aiScore && (
+            <Badge className={cn(
+              "border",
+              aiScore.aiQualityScore >= 80 ? "bg-green-500/20 text-green-400 border-green-500/30" :
+              aiScore.aiQualityScore >= 50 ? "bg-amber-500/20 text-amber-400 border-amber-500/30" :
+              "bg-red-500/20 text-red-400 border-red-500/30"
+            )}>
+              AI: {aiScore.aiQualityScore}/100
+            </Badge>
+          )}
+          {isAnalyzing && (
+            <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30">
+              <Loader2 className="w-3 h-3 animate-spin mr-1" />
+              Analyzing...
+            </Badge>
+          )}
+
           {/* Admin Bypass Toggle */}
           <Button
             variant="outline"

@@ -1,19 +1,17 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { Input } from '@/components/ui/input';
 import {
   Loader2, Play, Clock, CheckCircle, XCircle, AlertCircle,
-  RefreshCw, Save, Edit2, Zap
+  RefreshCw, Zap
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 
-// API helper using fetch (routes use local PostgreSQL)
+// API helper
 async function adminFetch(path: string, options?: RequestInit) {
   const res = await fetch(path, {
     ...options,
@@ -26,137 +24,78 @@ async function adminFetch(path: string, options?: RequestInit) {
   return res.json();
 }
 
-interface WorkflowConfig {
-  id: string;
-  name: string;
-  endpoint: string;
-  cron_expression: string;
-  is_active: boolean;
-  last_run: string | null;
-  next_run: string | null;
-  last_status: string | null;
-  execution_time_ms: number | null;
-  created_at: string;
-  updated_at: string;
+interface CronJob {
+  jobId: number;
+  title: string;
+  url: string;
+  schedule: {
+    timezone: string;
+    hours: number[];
+    mdays: number[];
+    minutes: number[];
+    months: number[];
+    wdays: number[];
+  };
+  enabled: boolean;
+  lastStatus?: number;
+  lastExecution?: string;
+  nextExecution?: string;
+}
+
+function formatSchedule(schedule: CronJob['schedule']): string {
+  if (schedule.minutes.length === 1 && schedule.hours.length === 1) {
+    return `Daily at ${String(schedule.hours[0]).padStart(2, '0')}:${String(schedule.minutes[0]).padStart(2, '0')}`;
+  }
+  if (schedule.minutes.length === 60) {
+    return 'Every minute';
+  }
+  if (schedule.minutes.length === 1 && schedule.hours.length === 24) {
+    return `Every hour at :${String(schedule.minutes[0]).padStart(2, '0')}`;
+  }
+  return `${schedule.minutes.length} min intervals`;
 }
 
 export default function WorkflowManager() {
   const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const [editingCron, setEditingCron] = useState<string | null>(null);
-  const [cronValues, setCronValues] = useState<Record<string, string>>({});
+  const [jobs, setJobs] = useState<CronJob[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [triggeringId, setTriggeringId] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // Fetch workflows via API route (uses local PostgreSQL)
-  const { data: workflows, isLoading, refetch } = useQuery({
-    queryKey: ['workflowConfigs'],
-    queryFn: async () => {
-      const result = await adminFetch('/api/admin/workflows');
-      return result.data as WorkflowConfig[];
+  const fetchJobs = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await adminFetch('/api/admin/workflows/cron-job');
+      setJobs(result.data || []);
+    } catch (err: any) {
+      setError(err.message);
+      toast({ title: 'Failed to load jobs', description: err.message, variant: 'destructive' });
+    } finally {
+      setLoading(false);
     }
-  });
+  }, [toast]);
 
-  // Toggle workflow active/inactive
-  const toggleMutation = useMutation({
-    mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
-      await adminFetch('/api/admin/workflows', {
-        method: 'PATCH',
-        body: JSON.stringify({ id, action: 'toggle', is_active: isActive })
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['workflowConfigs'] });
-      toast({ title: 'Workflow status updated' });
-    },
-    onError: (error: Error) => {
-      toast({ title: 'Failed to update', description: error.message, variant: 'destructive' });
-    }
-  });
+  useEffect(() => {
+    fetchJobs();
+  }, [fetchJobs]);
 
-  // Update cron expression
-  const updateCronMutation = useMutation({
-    mutationFn: async ({ id, cron }: { id: string; cron: string }) => {
-      await adminFetch('/api/admin/workflows', {
-        method: 'PATCH',
-        body: JSON.stringify({ id, cron_expression: cron })
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['workflowConfigs'] });
-      setEditingCron(null);
-      toast({ title: 'Cron expression updated' });
-    },
-    onError: (error: Error) => {
-      toast({ title: 'Failed to update cron', description: error.message, variant: 'destructive' });
-    }
-  });
-
-  // Manual trigger workflow
-  const triggerMutation = useMutation({
-    mutationFn: async (workflow: WorkflowConfig) => {
-      const response = await fetch(workflow.endpoint, {
+  const handleTrigger = async (job: CronJob) => {
+    setTriggeringId(job.jobId);
+    try {
+      await adminFetch('/api/admin/workflows/cron-job', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          // Add cron secret header for authentication
-          'x-cron-secret': process.env.NEXT_PUBLIC_CRON_SECRET || 'ploky-cron-secret'
-        }
+        body: JSON.stringify({ jobId: job.jobId }),
       });
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(error.error || `HTTP ${response.status}`);
-      }
-
-      return response.json();
-    },
-    onSuccess: (data, workflow) => {
-      toast({
-        title: `${workflow.name} triggered successfully`,
-        description: `Execution time: ${data.execution_time_ms || 'N/A'}ms`
-      });
-      refetch();
-    },
-    onError: (error: Error, workflow) => {
-      toast({
-        title: `Failed to trigger ${workflow.name}`,
-        description: error.message,
-        variant: 'destructive'
-      });
-    }
-  });
-
-  const formatCron = (cron: string) => {
-    const descriptions: Record<string, string> = {
-      '*/5 * * * *': 'Every 5 min',
-      '*/15 * * * *': 'Every 15 min',
-      '*/30 * * * *': 'Every 30 min',
-      '0 * * * *': 'Every hour',
-      '0 */2 * * *': 'Every 2 hours',
-      '0 */4 * * *': 'Every 4 hours',
-      '0 */6 * * *': 'Every 6 hours',
-      '0 */12 * * *': 'Every 12 hours',
-      '0 0 * * *': 'Daily at midnight',
-      '0 1 * * *': 'Daily at 1 AM',
-      '0 2 * * *': 'Daily at 2 AM',
-    };
-    return descriptions[cron] || cron;
-  };
-
-  const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return 'Never';
-    return new Date(dateStr).toLocaleString('bn-BD');
-  };
-
-  const handleSaveCron = (workflow: WorkflowConfig) => {
-    const newCron = cronValues[workflow.id];
-    if (newCron && newCron !== workflow.cron_expression) {
-      updateCronMutation.mutate({ id: workflow.id, cron: newCron });
-    } else {
-      setEditingCron(null);
+      toast({ title: `${job.title} triggered`, description: 'Check cron-job.org for execution status' });
+    } catch (err: any) {
+      toast({ title: 'Trigger failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setTriggeringId(null);
     }
   };
 
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="w-8 h-8 animate-spin text-violet-500" />
@@ -169,13 +108,14 @@ export default function WorkflowManager() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">Workflow Configuration</h2>
-          <p className="text-slate-400">Manage cron schedules and trigger workflows manually</p>
+          <h2 className="text-2xl font-bold text-white">Cron Job Management</h2>
+          <p className="text-slate-400">Manage cron-job.org schedules and trigger workflows manually</p>
         </div>
         <Button
           variant="outline"
           size="sm"
-          onClick={() => refetch()}
+          onClick={() => fetchJobs()}
+          disabled={loading}
           className="border-slate-700 text-slate-200 hover:bg-slate-800"
         >
           <RefreshCw className="w-4 h-4 mr-2" />
@@ -183,110 +123,67 @@ export default function WorkflowManager() {
         </Button>
       </div>
 
-      {/* Workflows Table */}
+      {error && (
+        <div className="bg-red-900/30 border border-red-700 text-red-200 px-4 py-3 rounded">
+          Error: {error}
+        </div>
+      )}
+
+      {/* Jobs Table */}
       <Card className="bg-slate-900/80 border-slate-700/50">
         <CardHeader>
           <CardTitle className="text-white flex items-center gap-2">
             <Zap className="w-5 h-5 text-yellow-400" />
-            Workflow Schedules ({workflows?.length || 0})
+            Active Cron Jobs ({jobs.length})
           </CardTitle>
           <CardDescription className="text-slate-400">
-            Toggle workflows on/off, edit schedules, or trigger manually
+            View schedules and trigger jobs manually via cron-job.org
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {workflows?.map((workflow) => (
+            {jobs.map((job) => (
               <div
-                key={workflow.id}
-                className={`p-4 rounded-lg border ${workflow.is_active
+                key={job.jobId}
+                className={`p-4 rounded-lg border ${job.enabled
                     ? 'bg-slate-800/50 border-slate-700'
                     : 'bg-slate-900/50 border-slate-800 opacity-60'
                   }`}
               >
                 <div className="flex items-center justify-between gap-4">
-                  {/* Workflow Info */}
+                  {/* Job Info */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-3">
-                      <h3 className="font-semibold text-white">{workflow.name}</h3>
-                      <Badge variant={workflow.is_active ? 'default' : 'secondary'}>
-                        {workflow.is_active ? 'Active' : 'Inactive'}
+                      <h3 className="font-semibold text-white">{job.title}</h3>
+                      <Badge variant={job.enabled ? 'default' : 'secondary'}>
+                        {job.enabled ? 'Active' : 'Inactive'}
                       </Badge>
-                      {workflow.last_status && (
-                        <Badge variant={workflow.last_status === 'success' ? 'default' : 'destructive'}>
-                          {workflow.last_status}
+                      {job.lastStatus !== undefined && (
+                        <Badge variant={job.lastStatus === 200 ? 'default' : 'destructive'}>
+                          {job.lastStatus === 200 ? 'OK' : `HTTP ${job.lastStatus}`}
                         </Badge>
                       )}
                     </div>
-                    <p className="text-sm text-slate-400 mt-1">{workflow.endpoint}</p>
+                    <p className="text-sm text-slate-400 mt-1 truncate">{job.url}</p>
                   </div>
 
-                  {/* Cron Schedule */}
+                  {/* Schedule */}
                   <div className="flex items-center gap-2">
-                    {editingCron === workflow.id ? (
-                      <div className="flex items-center gap-2">
-                        <Input
-                          value={cronValues[workflow.id] || ''}
-                          onChange={(e) => setCronValues({ ...cronValues, [workflow.id]: e.target.value })}
-                          placeholder="*/5 * * * *"
-                          className="w-32 bg-slate-800 border-slate-600 text-white"
-                        />
-                        <Button
-                          size="sm"
-                          onClick={() => handleSaveCron(workflow)}
-                          disabled={updateCronMutation.isPending}
-                        >
-                          {updateCronMutation.isPending ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Save className="w-4 h-4" />
-                          )}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setEditingCron(null)}
-                        >
-                          <XCircle className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="text-slate-300">
-                          <Clock className="w-3 h-3 mr-1" />
-                          {formatCron(workflow.cron_expression)}
-                        </Badge>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => {
-                            setEditingCron(workflow.id);
-                            setCronValues({ ...cronValues, [workflow.id]: workflow.cron_expression });
-                          }}
-                          className="text-slate-400 hover:text-white"
-                        >
-                          <Edit2 className="w-3 h-3" />
-                        </Button>
-                      </div>
-                    )}
+                    <Badge variant="outline" className="text-slate-300">
+                      <Clock className="w-3 h-3 mr-1" />
+                      {formatSchedule(job.schedule)}
+                    </Badge>
                   </div>
 
-                  {/* Toggle & Trigger */}
+                  {/* Trigger */}
                   <div className="flex items-center gap-3">
-                    <Switch
-                      checked={workflow.is_active}
-                      onCheckedChange={(checked) =>
-                        toggleMutation.mutate({ id: workflow.id, isActive: checked })
-                      }
-                      disabled={toggleMutation.isPending}
-                    />
                     <Button
                       size="sm"
-                      onClick={() => triggerMutation.mutate(workflow)}
-                      disabled={triggerMutation.isPending}
+                      onClick={() => handleTrigger(job)}
+                      disabled={triggeringId === job.jobId || !job.enabled}
                       className="bg-emerald-600 hover:bg-emerald-700"
                     >
-                      {triggerMutation.isPending ? (
+                      {triggeringId === job.jobId ? (
                         <Loader2 className="w-4 h-4 animate-spin" />
                       ) : (
                         <Play className="w-4 h-4" />
@@ -297,19 +194,21 @@ export default function WorkflowManager() {
 
                 {/* Status Info */}
                 <div className="mt-3 pt-3 border-t border-slate-700/50 flex items-center gap-6 text-sm text-slate-400">
-                  <span>Last run: {formatDate(workflow.last_run)}</span>
-                  {workflow.execution_time_ms && (
-                    <span>Last execution: {workflow.execution_time_ms}ms</span>
+                  {job.lastExecution && (
+                    <span>Last run: {new Date(job.lastExecution).toLocaleString()}</span>
+                  )}
+                  {job.nextExecution && (
+                    <span>Next: {new Date(job.nextExecution).toLocaleString()}</span>
                   )}
                 </div>
               </div>
             ))}
 
-            {(!workflows || workflows.length === 0) && (
+            {jobs.length === 0 && !error && (
               <div className="text-center py-8 text-slate-400">
                 <AlertCircle className="w-8 h-8 mx-auto mb-2" />
-                <p>No workflows configured</p>
-                <p className="text-sm">Run migration 200 to add default workflows</p>
+                <p>No cron jobs found</p>
+                <p className="text-sm">Verify your cron-job.org API key is configured</p>
               </div>
             )}
           </div>
@@ -322,15 +221,10 @@ export default function WorkflowManager() {
           <div className="flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-blue-400 mt-0.5" />
             <div>
-              <h4 className="font-medium text-blue-300">Cron Expression Guide</h4>
+              <h4 className="font-medium text-blue-300">cron-job.org Integration</h4>
               <p className="text-sm text-blue-200/70 mt-1">
-                Format: minute hour day-of-month month day-of-week
+                Jobs are managed externally at cron-job.org. Use this panel to monitor status and trigger manual runs.
               </p>
-              <div className="mt-2 text-sm text-blue-200/70 space-y-1">
-                <p>• <code className="bg-blue-800/50 px-1 rounded">*/5 * * * *</code> - Every 5 minutes</p>
-                <p>• <code className="bg-blue-800/50 px-1 rounded">0 */2 * * *</code> - Every 2 hours</p>
-                <p>• <code className="bg-blue-800/50 px-1 rounded">0 2 * * *</code> - Daily at 2 AM</p>
-              </div>
             </div>
           </div>
         </CardContent>

@@ -21,6 +21,7 @@ export default function AnalyticsDashboard() {
     const [tradingData, setTradingData] = useState<any>(null);
     const [userData, setUserData] = useState<any>(null);
     const [financialData, setFinancialData] = useState<any>(null);
+    const [revenueData, setRevenueData] = useState<any>(null);
     const [riskData, setRiskData] = useState<any>(null);
     const [marketMetrics, setMarketMetrics] = useState<any[]>([]);
     const [marketMetricsLoading, setMarketMetricsLoading] = useState(false);
@@ -69,9 +70,19 @@ export default function AnalyticsDashboard() {
                 fetchMetric('risk')
             ]);
 
+            // Fetch platform revenue
+            let revenue = null;
+            try {
+                const revRes = await fetch(`/api/admin/metrics/revenue?period=${period}`, { credentials: 'include' });
+                if (revRes.ok) revenue = await revRes.json();
+            } catch (revErr) {
+                console.error('Failed to fetch revenue:', revErr);
+            }
+
             setTradingData(trading);
             setUserData(users);
             setFinancialData(financial);
+            setRevenueData(revenue);
             setRiskData(risk);
         } catch (error) {
             console.error('Failed to load analytics:', error);
@@ -165,7 +176,7 @@ export default function AnalyticsDashboard() {
                             </CardHeader>
                             <CardContent>
                                 <div className="flex h-[300px] items-center justify-center text-muted-foreground">
-                                    Pie Chart Placeholder
+                                    No category data available
                                 </div>
                             </CardContent>
                         </Card>
@@ -199,12 +210,18 @@ export default function AnalyticsDashboard() {
                 <TabsContent value="financial" className="space-y-4">
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                         <MetricCard
+                            title="Total Platform Revenue"
+                            value={`$${revenueData?.total_house_revenue?.toLocaleString() || '0'}`}
+                            trend="up"
+                            trendValue={period === '24h' ? '24h' : period === '7d' ? '7d' : period === '30d' ? '30d' : 'All Time'}
+                        />
+                        <MetricCard
                             title="Gross Revenue"
-                            value={`৳${financialData?.summary?.gross_revenue?.toLocaleString() || '0'}`}
+                            value={`$${financialData?.summary?.gross_revenue?.toLocaleString() || '0'}`}
                         />
                         <MetricCard
                             title="Net Revenue"
-                            value={`৳${financialData?.summary?.net_revenue?.toLocaleString() || '0'}`}
+                            value={`$${financialData?.summary?.net_revenue?.toLocaleString() || '0'}`}
                         />
                     </div>
                     <Card className="col-span-4">
@@ -226,13 +243,7 @@ export default function AnalyticsDashboard() {
                         </CardHeader>
                         <CardContent className="pl-2">
                             {/* Mock data for visualization if real data is empty */}
-                            <RiskHeatmap data={riskData?.series || [
-                                { risk_score: 20, position_size: 1000, leverage: 1 },
-                                { risk_score: 50, position_size: 5000, leverage: 5 },
-                                { risk_score: 80, position_size: 2000, leverage: 20 },
-                                { risk_score: 90, position_size: 10000, leverage: 50 },
-                                { risk_score: 10, position_size: 500, leverage: 1 }
-                            ]} />
+                            <RiskHeatmap data={riskData?.series || []} />
                         </CardContent>
                     </Card>
                 </TabsContent>

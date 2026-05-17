@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -74,6 +73,7 @@ interface SettlementData {
 // STATUS BADGES
 // ============================================
 const statusConfig: Record<string, { color: string; icon: React.ReactNode; label: string }> = {
+    awaiting_admin_approval: { color: 'bg-purple-500/20 text-purple-400 border-purple-500/30', icon: <Shield className="w-3 h-3" />, label: 'ভবিষ্য অপেক্ষা (Needs Approval)' },
     proposed: { color: 'bg-amber-500/20 text-amber-400 border-amber-500/30', icon: <Clock className="w-3 h-3" />, label: 'প্রস্তাবিত (Proposed)' },
     disputed: { color: 'bg-red-500/20 text-red-400 border-red-500/30', icon: <AlertTriangle className="w-3 h-3" />, label: 'বিতর্কিত (Disputed)' },
     finalized: { color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30', icon: <CheckCircle2 className="w-3 h-3" />, label: 'চূড়ান্ত (Finalized)' },
@@ -167,21 +167,21 @@ export default function ResolutionDashboardPage() {
 
     const fetchResolvableEvents = useCallback(async () => {
         try {
-            // For now, mapping events from standard tables since specialized views might be missing
+            // Fetch closed markets AND awaiting_admin_approval markets
             const { data, error } = await supabase
               .from('events')
-              .select('id, question, category, trading_status, ends_at, resolution_method, resolution_delay_hours')
-              .eq('trading_status', 'closed')
+              .select('id, question, category, trading_status, ends_at, resolution_method, resolution_delay_hours, proposed_outcome, proposed_confidence')
+              .in('trading_status', ['closed', 'awaiting_admin_approval'])
               .order('ends_at', { ascending: false });
               
             if (error) throw error;
             
-            const events = data.map(e => ({
+            const events = (data || []).map(e => ({
               ...e,
               resolution_delay: e.resolution_delay_hours,
               resolution_available_at: new Date(new Date(e.ends_at).getTime() + (e.resolution_delay_hours || 24) * 3600000).toISOString(),
               is_ready_for_resolution: true,
-              oracle: { status: 'none' }
+              oracle: e.proposed_outcome ? { status: 'proposed', proposed_outcome: e.proposed_outcome, confidence_score: e.proposed_confidence } : { status: 'none' }
             }));
             
             setResolvableEvents(events || []);
@@ -241,11 +241,9 @@ export default function ResolutionDashboardPage() {
                 body: JSON.stringify({ eventId, winning_outcome: winner, reason: adminReason }),
             });
             
-            // If the specialized endpoint doesn't exist, handle it manually here
+            // If the specialized endpoint doesn't exist, don't bypass — report error
             if (res.status === 404) {
-               const { error } = await supabase.from('events').update({ trading_status: 'resolved' }).eq('id', eventId);
-               if (error) throw error;
-               toast({ title: 'রেজোলিউশন সম্পন্ন', description: 'মার্কেট সফলভাবে Overridden হয়েছে' });
+               toast({ variant: 'destructive', title: 'Error', description: 'Resolution endpoint not found. Contact engineering.' });
             } else {
                const json = await res.json();
                if (!res.ok) throw new Error(json.error);
@@ -314,6 +312,7 @@ export default function ResolutionDashboardPage() {
     // STATS
     // ============================================
     const pendingCount = oracleRequests.filter(r => r.status === 'proposed').length;
+    const awaitingAdminCount = resolvableEvents.filter(e => e.trading_status === 'awaiting_admin_approval' || e.status === 'awaiting_admin_approval').length;
     const disputedCount = oracleRequests.filter(r => r.status === 'disputed').length;
     const finalizedCount = oracleRequests.filter(r => r.status === 'finalized').length;
 
@@ -350,6 +349,17 @@ export default function ResolutionDashboardPage() {
                         <div>
                             <p className="text-sm text-zinc-400">রেজোলিউশন কিউ (Queue)</p>
                             <p className="text-2xl font-bold text-white">{resolvableEvents.length}</p>
+                        </div>
+                    </CardContent>
+                </Card>
+                <Card className="bg-zinc-900/50 border-zinc-800">
+                    <CardContent className="p-4 flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                            <Shield className="w-5 h-5 text-purple-400" />
+                        </div>
+                        <div>
+                            <p className="text-sm text-zinc-400">অ্যাডমিন অপেক্ষা (Pending Approval)</p>
+                            <p className="text-2xl font-bold text-white">{awaitingAdminCount}</p>
                         </div>
                     </CardContent>
                 </Card>
@@ -425,6 +435,67 @@ export default function ResolutionDashboardPage() {
                 {/* 1. OVERVIEW TAB */}
                 {/* ============================================ */}
                 <TabsContent value="overview" className="space-y-4">
+                    {/* Awaiting Admin Approval Alert */}
+                    {awaitingAdminCount > 0 && (
+                        <Card className="bg-purple-900/20 border-purple-700">
+                            <CardHeader>
+                                <CardTitle className="text-white text-lg flex items-center gap-2">
+                                    <Shield className="w-5 h-5 text-purple-400" />
+                                    AI-Proposed Resolutions Awaiting Admin Approval
+                                </CardTitle>
+                                <CardDescription>
+                                    {awaitingAdminCount} market(s) have AI-proposed outcomes held for your review. No payouts will be triggered until approved.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="p-0">
+                                <div className="divide-y divide-purple-800/50">
+                                    {resolvableEvents
+                                        .filter(e => e.trading_status === 'awaiting_admin_approval' || e.status === 'awaiting_admin_approval')
+                                        .map(e => (
+                                            <div key={e.id} className="p-4 flex items-start justify-between">
+                                                <div>
+                                                    <div className="flex items-center gap-2 mb-1">
+                                                        <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/30 text-xs">
+                                                            AI Proposed: {e.proposed_outcome || 'Pending'}
+                                                        </Badge>
+                                                        <span className="text-xs text-zinc-400">{new Date(e.ends_at).toLocaleString('bn-BD')}</span>
+                                                    </div>
+                                                    <p className="text-sm font-medium text-white">{e.question}</p>
+                                                    {e.proposed_confidence && (
+                                                        <p className="text-xs text-purple-300 mt-0.5">
+                                                            Confidence: {e.proposed_confidence}%
+                                                        </p>
+                                                    )}
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <Button
+                                                        size="sm"
+                                                        className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                                                        onClick={() => handleExecuteResolution(e.id, e.proposed_outcome || 'YES')}
+                                                        disabled={processing}
+                                                    >
+                                                        <CheckCircle2 className="w-3 h-3 mr-1" />
+                                                        Approve & Payout
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        className="border-amber-600 text-amber-400"
+                                                        onClick={() => {
+                                                            setAdminResolveDialog({ open: true, eventId: e.id, marketQuestion: e.question });
+                                                        }}
+                                                    >
+                                                        <Gavel className="w-3 h-3 mr-1" />
+                                                        Override
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    )}
+
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                         <Card className="bg-zinc-900/50 border-zinc-800">
                             <CardHeader>

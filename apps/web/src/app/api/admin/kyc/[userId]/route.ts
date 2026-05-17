@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { pool, query } from '@/lib/admin/local-db';
 import { requireAdminUser } from '@/lib/admin/admin-auth';
 import { NextRequest, NextResponse } from 'next/server';
@@ -10,10 +9,9 @@ export async function GET(
     { params }: { params: Promise<{ userId: string }> }
 ) {
     try {
-        const authHeader = req.headers.get('authorization');
         const authResult = await requireAdminUser(req);
         if ('error' in authResult) return authResult.error;
-        const userId = authResult.user.id;
+        const adminUserId = authResult.user.id;
 
         const profiles = await query<{ is_admin: boolean; is_super_admin: boolean }>(
             'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
@@ -28,19 +26,19 @@ export async function GET(
         // Fetch profile
         const profileResult = await pool.query(
             'SELECT * FROM user_kyc_profiles WHERE id = $1',
-            [userId]
+            [targetUserId]
         );
 
         // Fetch submissions
         const submissionsResult = await pool.query(
             'SELECT * FROM kyc_submissions WHERE user_id = $1 ORDER BY created_at DESC',
-            [userId]
+            [targetUserId]
         );
 
         // Fetch overrides
         const overridesResult = await pool.query(
             'SELECT * FROM kyc_admin_overrides WHERE user_id = $1 ORDER BY created_at DESC',
-            [userId]
+            [targetUserId]
         );
 
         // Get gate status - call RPC if available
@@ -55,7 +53,7 @@ export async function GET(
         try {
             const gateResult = await pool.query(
                 'SELECT * FROM check_kyc_withdrawal_gate($1)',
-                [userId]
+                [targetUserId]
             );
             if (gateResult.rows.length > 0) {
                 gate = gateResult.rows[0];
@@ -85,10 +83,9 @@ export async function POST(
     { params }: { params: Promise<{ userId: string }> }
 ) {
     try {
-        const authHeader = req.headers.get('authorization');
         const authResult = await requireAdminUser(req);
         if ('error' in authResult) return authResult.error;
-        const userId = authResult.user.id;
+        const adminUserId = authResult.user.id;
 
         const profiles = await query<{ is_admin: boolean; is_super_admin: boolean }>(
             'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
@@ -121,7 +118,14 @@ export async function POST(
         try {
             const result = await pool.query(
                 'SELECT * FROM admin_kyc_action($1, $2, $3, $4, $5)',
-                [adminUserId, userId, action, reason || null, rejection_reason || null]
+                [adminUserId, targetUserId, action, reason || null, rejection_reason || null]
+            );
+
+            // Audit log: KYC action
+            await pool.query(
+                `INSERT INTO admin_audit_log (admin_id, action, entity_type, entity_id, new_value, reason, created_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+                [adminUserId, action === 'reject' ? 'reject_kyc' : 'approve_kyc', 'user', targetUserId, JSON.stringify({ action, reason }), reason || rejection_reason || null]
             );
 
             return NextResponse.json(result.rows[0] || { success: true });

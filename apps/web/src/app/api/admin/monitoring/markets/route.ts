@@ -1,102 +1,98 @@
 /**
  * GET /api/admin/monitoring/markets - Aggregated market stats for monitoring
- * Uses local PostgreSQL (pg) for all data operations
+ * Single-query approach — no N+1 loop
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdmin } from '@/lib/admin/auth-guard';
+import { pool } from '@/lib/admin/local-db';
+import { requireAdminUser } from '@/lib/admin/admin-auth';
 
 export async function GET(req: NextRequest) {
-  const admin = await requireAdmin();
-  if (admin.error) {
-    return NextResponse.json({ error: admin.error }, { status: admin.status });
-  }
+  const authResult = await requireAdminUser(req);
+  if ('error' in authResult) return authResult.error;
 
   try {
-    // Fetch recent events with outcomes
-    const eventsResult = await admin.pool.query(`
-      SELECT 
-        e.id,
+    const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+    // Single aggregated query — replaces N+1 loop
+    const { rows } = await pool.query(`
+      SELECT
+        e.id AS "marketId",
         e.question,
         e.status,
-        e.volume,
-        e.created_at,
+        COALESCE(e.volume, 0) AS "totalVolume",
+        e.created_at AS "createdAt",
         e.category,
-        json_agg(
-          json_build_object(
-            'probability', o.probability,
-            'type', o.outcome_type
-          )
-        ) FILTER (WHERE o.id IS NOT NULL) as outcomes
+
+        -- 24h volume
+        COALESCE(SUM(
+          CASE WHEN t.created_at >= $1 THEN t.price * t.quantity ELSE 0 END
+        ), 0) AS "volume24h",
+
+        -- 24h trades
+        COUNT(CASE WHEN t.created_at >= $1 THEN 1 END) AS "trades24h",
+
+        -- unique traders (from positions)
+        COALESCE(p.unique_traders, 0) AS "uniqueTraders",
+
+        -- order book depth
+        COALESCE(ob.bid_depth, 0) AS "bidDepth",
+        COALESCE(ob.ask_depth, 0) AS "askDepth",
+
+        -- yes/no prices from latest outcomes
+        MAX(CASE WHEN o.outcome_type = 'YES' THEN o.probability END) AS "yesPrice",
+        MAX(CASE WHEN o.outcome_type = 'NO' THEN o.probability END) AS "noPrice",
+
+        -- price change (simple: last 24h avg vs prior 24h avg)
+        COALESCE(AVG(
+          CASE WHEN t.created_at >= $1 THEN t.price END
+        ), 0.5) AS "avgPrice24h",
+        COALESCE(AVG(
+          CASE WHEN t.created_at >= $1 AND t.created_at < $1::timestamp + interval '24 hours'
+               THEN NULL
+               WHEN t.created_at < $1 THEN t.price END
+        ), 0.5) AS "avgPricePrior"
+
       FROM events e
-      LEFT JOIN order book o ON o.event_id = e.id
-      GROUP BY e.id, e.question, e.status, e.volume, e.created_at, e.category
+      LEFT JOIN trades t ON t.event_id = e.id
+      LEFT JOIN outcomes o ON o.event_id = e.id
+      LEFT JOIN LATERAL (
+        SELECT COUNT(DISTINCT user_id) AS unique_traders
+        FROM positions WHERE event_id = e.id
+      ) p ON true
+      LEFT JOIN LATERAL (
+        SELECT
+          COALESCE(SUM(
+            CASE WHEN side = 'buy' THEN remaining_quantity ELSE 0 END
+          ), 0) AS bid_depth,
+          COALESCE(SUM(
+            CASE WHEN side = 'sell' THEN remaining_quantity ELSE 0 END
+          ), 0) AS ask_depth
+        FROM orders WHERE event_id = e.id AND status = 'open'
+      ) ob ON true
+
+      GROUP BY e.id, e.question, e.status, e.volume, e.created_at, e.category,
+               p.unique_traders, ob.bid_depth, ob.ask_depth
       ORDER BY e.created_at DESC
       LIMIT 50
-    `);
+    `, [dayAgo]);
 
-    const events = eventsResult.rows;
+    const markets = rows.map(r => ({
+      marketId: r.marketId,
+      question: r.question,
+      status: r.status,
+      volume24h: Number(r.volume24h),
+      totalVolume: Number(r.totalVolume),
+      yesPrice: Number(r.yesPrice) || 0.5,
+      noPrice: Number(r.noPrice) || 0.5,
+      bidDepth: Number(r.bidDepth),
+      askDepth: Number(r.askDepth),
+      uniqueTraders: Number(r.uniqueTraders),
+      trades24h: Number(r.trades24h),
+      priceChange24h: Number(r.avgPrice24h) - Number(r.avgPricePrior),
+      createdAt: r.createdAt,
+    }));
 
-    // For each event, compute 24h trades, unique traders, order book depth
-    const marketsWithStats = await Promise.all(
-      events.map(async (event) => {
-        const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-
-        // 24h trades
-        const tradesResult = await admin.pool.query(`
-          SELECT price, quantity, created_at 
-          FROM trades 
-          WHERE event_id = $1 AND created_at >= $2
-        `, [event.id, dayAgo]);
-
-        const volume24h = tradesResult.rows.reduce(
-          (sum, t) => sum + (Number(t.price) * Number(t.quantity)), 0
-        );
-        const trades24h = tradesResult.rows.length;
-
-        // Unique traders
-        const positionsResult = await admin.pool.query(`
-          SELECT COUNT(DISTINCT user_id) as unique_traders 
-          FROM positions 
-          WHERE event_id = $1
-        `, [event.id]);
-
-        const uniqueTraders = Number(positionsResult.rows[0]?.unique_traders || 0);
-
-        // Order book depth
-        const ordersResult = await admin.pool.query(`
-          SELECT side, price, remaining_quantity 
-          FROM orders 
-          WHERE event_id = $1 AND status = 'open'
-        `, [event.id]);
-
-        const bids = ordersResult.rows
-          .filter(o => o.side === 'buy')
-          .reduce((sum, o) => sum + Number(o.remaining_quantity), 0);
-        const asks = ordersResult.rows
-          .filter(o => o.side === 'sell')
-          .reduce((sum, o) => sum + Number(o.remaining_quantity), 0);
-
-        const yesOutcome = event.outcomes?.find(o => o.outcome_type === 'YES');
-        const noOutcome = event.outcomes?.find(o => o.outcome_type === 'NO');
-
-        return {
-          marketId: event.id,
-          question: event.question,
-          status: event.status,
-          volume24h,
-          totalVolume: Number(event.volume) || 0,
-          yesPrice: yesOutcome ? Number(yesOutcome.probability) : 0.5,
-          noPrice: noOutcome ? Number(noOutcome.probability) : 0.5,
-          bidDepth: bids,
-          askDepth: asks,
-          uniqueTraders,
-          trades24h,
-          priceChange24h: 0,
-        };
-      })
-    );
-
-    return NextResponse.json({ data: marketsWithStats });
+    return NextResponse.json({ data: markets });
   } catch (err) {
     console.error('Error fetching market monitoring data:', err);
     return NextResponse.json({ error: 'Failed to fetch market data' }, { status: 500 });

@@ -226,16 +226,36 @@ export function AiResolutionPanel({ markets, onResolve }: { markets: Market[]; o
               <div className="flex gap-3 pt-2">
                 <Button
                   className="bg-emerald-600 hover:bg-emerald-700 text-white flex-1"
-                  disabled={result.resolution.recommendedAction !== 'AUTO_RESOLVE' && result.resolution.confidence < 0.75}
+                  disabled={result.resolution.confidence < 0.75}
                   onClick={() => onResolve(selectedMarket!.id, result.resolution.outcome === 'YES')}
                 >
                   <CheckCircle className="w-4 h-4 mr-2" />
-                  Accept & Resolve {result.resolution.outcome === 'YES' ? 'YES' : 'NO'}
+                  Accept & Resolve {result.resolution.outcome}
                 </Button>
                 <Button
                   variant="outline"
                   className="border-amber-600 text-amber-400 flex-1"
-                  onClick={() => toast.info('Sent to human review queue')}
+                  onClick={async () => {
+                    try {
+                      const res = await fetch('/api/admin/oracle', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          market_id: selectedMarket!.id,
+                          action: 'queue_human_review',
+                          ai_outcome: result.resolution.outcome,
+                          ai_confidence: result.resolution.confidence,
+                          ai_reasoning: result.resolution.reasoning,
+                        }),
+                      });
+                      if (!res.ok) throw new Error('Failed to queue human review');
+                      toast.success('Sent to human review queue');
+                      setResult(null);
+                      setStage('idle');
+                    } catch (err: any) {
+                      toast.error(err.message || 'Failed to queue review');
+                    }
+                  }}
                 >
                   <AlertTriangle className="w-4 h-4 mr-2" />
                   Send to Human Review

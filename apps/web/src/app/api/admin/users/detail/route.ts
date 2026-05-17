@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
 import { pool } from '@/lib/admin/local-db';
 import { requireAdminUser } from '@/lib/admin/admin-auth';
@@ -8,7 +7,8 @@ import { requireAdminUser } from '@/lib/admin/admin-auth';
 export async function GET(req: NextRequest) {
   try {
     const authResult = await requireAdminUser(req);
-
+    if ('error' in authResult) return authResult.error;
+    const userId = authResult.user.id;
 
     // Check admin status
     const profileResult = await pool.query(
@@ -143,10 +143,11 @@ export async function POST(req: NextRequest) {
 
     const data = insertResult.rows[0];
 
-    // Log action
+    // Audit log: admin note added
     await pool.query(
-      `SELECT * FROM log_admin_action($1, 'add_internal_note', 'support', $2, NULL, $3)`,
-      [userId, user_id, { note_id: data.id, note_type, escalation: is_escalation ? `Escalation: ${escalation_reason}` : 'Internal note added' }]
+      `INSERT INTO admin_audit_log (admin_id, action, entity_type, entity_id, new_value, created_at)
+       VALUES ($1, $2, $3, $4, $5, NOW())`,
+      [userId, 'add_note', 'user', user_id, JSON.stringify({ note_id: data.id, note_type, is_escalation })]
     );
 
     return NextResponse.json({ data });

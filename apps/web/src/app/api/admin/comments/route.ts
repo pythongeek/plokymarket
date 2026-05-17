@@ -24,12 +24,12 @@ export async function GET(req: NextRequest) {
 
   const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
 
-  const countRes = await pool.query(`SELECT COUNT(*) FROM comments ${where}`, values);
+  const countRes = await pool.query(`SELECT COUNT(*) FROM market_comments ${where}`, values);
   const total = parseInt(countRes.rows[0].count);
 
   const dataRes = await pool.query(
     `SELECT c.*, u.email as user_email, m.question as market_question
-     FROM comments c
+     FROM market_comments c
      LEFT JOIN users u ON c.user_id = u.id
      LEFT JOIN markets m ON c.market_id = m.id
      ${where}
@@ -51,16 +51,16 @@ export async function PATCH(req: NextRequest) {
 
   if (action === 'flag') {
     await pool.query(
-      `UPDATE comments SET is_flagged = true, flagged_reason = $1, moderated_by = $2, moderated_at = NOW() WHERE id = $3`,
+      `UPDATE market_comments SET is_flagged = true, flagged_reason = $1, moderated_by = $2, moderated_at = NOW() WHERE id = $3`,
       [reason || '', authResult.user.id, id]
     );
   } else if (action === 'unflag') {
     await pool.query(
-      `UPDATE comments SET is_flagged = false, flagged_reason = NULL, moderated_by = $1, moderated_at = NOW() WHERE id = $2`,
+      `UPDATE market_comments SET is_flagged = false, flagged_reason = NULL, moderated_by = $1, moderated_at = NOW() WHERE id = $2`,
       [authResult.user.id, id]
     );
   } else if (action === 'delete') {
-    await pool.query(`DELETE FROM comments WHERE id = $1`, [id]);
+    await pool.query(`DELETE FROM market_comments WHERE id = $1`, [id]);
   }
 
   return NextResponse.json({ success: true });

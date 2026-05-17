@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
 import { createPublicClient } from '@/lib/supabase/server';
 import { ActivityService } from '@/lib/activity';
@@ -42,7 +41,7 @@ function analyzeSentiment(content: string): { sentiment: string; score: number }
 
 // GET /api/comments?marketId=xxx
 const JWT_SECRET = new TextEncoder().encode(
-  process.env.NEXT_PUBLIC_JWT_SECRET || 'P10kyM@rket.BD.2026.JWT.SECRET.XX'
+  process.env.JWT_SECRET || process.env.SUPABASE_JWT_SECRET || 'P10kyM@rket.BD.2026.JWT.SECRET'
 );
 
 async function getUserFromRequest(request: Request) {
@@ -64,7 +63,6 @@ async function getUserFromRequest(request: Request) {
   } catch { return null; }
 }
 
-
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams;
   const marketId = searchParams.get('marketId');
@@ -74,6 +72,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    const supabase = createPublicClient();
 
     // Simple query - get all comments for this market
     const { data: comments, error } = await supabase
@@ -129,6 +128,7 @@ export async function GET(req: NextRequest) {
 // POST /api/comments
 export async function POST(req: NextRequest) {
   try {
+    const supabase = createPublicClient();
     const body = await req.json();
     const { marketId, content, parentId, marketQuestion } = body;
 
@@ -138,7 +138,7 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    const user = await getUserFromRequest(request);
+    const user = await getUserFromRequest(req);
 
     if (!user) {
       return NextResponse.json(

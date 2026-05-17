@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { pool, query } from '@/lib/admin/local-db';
 import { requireAdminUser } from '@/lib/admin/admin-auth';
 import { NextRequest, NextResponse } from 'next/server';

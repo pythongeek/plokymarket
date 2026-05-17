@@ -63,12 +63,14 @@ export async function resolveMarket(
 
         if (canAutoResolve) {
             console.log(
-                `[Resolution] ✅ Auto-resolving market ${marketId} — outcome: ${oracleResult.resolution}, confidence: ${oracleResult.confidence_score}%`
+                `[Resolution] ⏳ AI high confidence (${oracleResult.confidence_score}%) — holding for admin approval: ${marketId}`
             );
 
+            // SECURITY FIX: Never auto-resolve. Always queue for admin approval.
             await (supabase.from('markets') as any).update({
-                status: 'resolved',
-                resolution_outcome: oracleResult.resolution,
+                status: 'awaiting_admin_approval',
+                proposed_outcome: oracleResult.resolution,
+                proposed_confidence: oracleResult.confidence_score,
                 resolution_details: JSON.stringify({
                     agent: 'MiniMax_M2.7_Oracle',
                     confidence: oracleResult.confidence_score,
@@ -77,28 +79,28 @@ export async function resolveMarket(
                     provider: oracleResult.provider,
                     fallback_triggered: oracleResult.fallback_triggered,
                     audit_log_id: oracleResult.audit_log_id,
-                    auto_resolved: true,
-                    resolved_at: new Date().toISOString(),
+                    auto_resolved: false,
+                    proposed_at: new Date().toISOString(),
                 }),
-                resolved_at: new Date().toISOString(),
+                resolved_at: null,
             }).eq('id', marketId);
 
             await (supabase.from('oracle_verifications') as any).insert({
                 market_id: marketId,
-                verification_type: oracleResult.fallback_triggered ? 'minimax_vertex_fallback' : 'minimax_auto',
+                verification_type: oracleResult.fallback_triggered ? 'minimax_vertex_proposed' : 'minimax_proposed',
                 confidence_score: oracleResult.confidence_score,
                 outcome: oracleResult.resolution,
                 reasoning: oracleResult.reasoning,
                 evidence: JSON.stringify({ sources: oracleResult.sources }),
-                status: 'verified',
+                status: 'proposed',
                 created_at: new Date().toISOString(),
             });
 
             return {
-                status: 'RESOLVED',
+                status: 'AWAITING_REVIEW',
                 outcome: oracleResult.resolution,
                 confidence: oracleResult.confidence_score,
-                autoResolved: true,
+                autoResolved: false,
                 oracleResult,
                 summaryBn: oracleResult.reasoning,
             };

@@ -22,7 +22,7 @@ const BatchOrderSchema = z.object({
  * POST /api/orders/batch
  */
 const JWT_SECRET = new TextEncoder().encode(
-  process.env.NEXT_PUBLIC_JWT_SECRET || 'P10kyM@rket.BD.2026.JWT.SECRET.XX'
+  process.env.JWT_SECRET || process.env.SUPABASE_JWT_SECRET || 'P10kyM@rket.BD.2026.JWT.SECRET'
 );
 
 async function getUserFromRequest(request: Request) {
@@ -48,7 +48,7 @@ async function getUserFromRequest(request: Request) {
 export async function POST(req: NextRequest) {
   try {
     const supabase = createPublicClient();
-    const user = await getUserFromRequest(request);
+    const user = await getUserFromRequest(req);
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -139,6 +139,19 @@ export async function POST(req: NextRequest) {
     const filled = results.filter(r => r.status === 'fulfilled').length;
     const failed = results.length - filled;
 
+    // Link successful orders to batch
+    const successfulOrderIds = results
+      .filter(r => r.status === 'fulfilled')
+      .map(r => (r as PromiseFulfilledResult<{orderId: string}>).value.orderId)
+      .filter(Boolean);
+
+    if (successfulOrderIds.length > 0) {
+      await supabase
+        .from('orders')
+        .update({ batch_id: batch.id })
+        .in('id', successfulOrderIds);
+    }
+
     // Step 3: Update batch status
     const finalStatus =
       filled === orders.length ? 'completed' :
@@ -177,7 +190,7 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   try {
     const supabase = createPublicClient();
-    const user = await getUserFromRequest(request);
+    const user = await getUserFromRequest(req);
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

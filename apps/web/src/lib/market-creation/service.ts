@@ -364,11 +364,18 @@ export class MarketCreationService {
         initialLiquidity
       );
 
-      // Create categorical/scalar dependencies if applicable
+      // Create multi_outcome/scalar dependencies if applicable
       if (draft.market_type === 'categorical' && draft.outcomes) {
-        await supabase.from('categorical_markets').insert({
-          market_id: market.id, outcomes: draft.outcomes, outcome_count: Array.isArray(draft.outcomes) ? draft.outcomes.length : 0
-        });
+        await supabase.from('outcomes').insert(
+          draft.outcomes.map((o: any, i: number) => ({
+            market_id: market.id,
+            label: o.label,
+            label_bn: o.label_bn || o.label,
+            current_price: 1 / draft.outcomes.length,
+            display_order: i,
+          }))
+        );
+        await supabase.from('markets').update({ market_type: 'multi_outcome' }).eq('id', market.id);
       }
 
       if (draft.market_type === 'scalar' && draft.min_value != null) {

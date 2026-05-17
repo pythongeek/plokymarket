@@ -7,6 +7,8 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
     const authResult = await requireAdminUser(req);
+    if ('error' in authResult) return authResult.error;
+    const userId = authResult.user.id;
 
 
     const profileResult = await pool.query(

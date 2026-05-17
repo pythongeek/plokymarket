@@ -89,14 +89,15 @@ export function AIConfigPanel() {
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
-            
             const [configRes, usageRes] = await Promise.all([
                 adminFetch('/api/admin/ai-configs'),
-
+                adminFetch('/api/admin/ai-configs?type=logs'),
+            ]);
             setAgents(configRes.data || []);
             setUsageLogs(usageRes.data || []);
-        } catch (err) {
+        } catch (err: any) {
             console.error('[AIConfig] Fetch error:', err);
+            toast.error('এজেন্ট কনফিগ লোড ব্যর্থ: ' + err.message);
         } finally {
             setLoading(false);
         }
@@ -108,13 +109,16 @@ export function AIConfigPanel() {
     const toggleStatus = async (agent: AgentConfig) => {
         const newStatus = agent.status === 'active' ? 'paused' : 'active';
         try {
-
+            await adminFetch('/api/admin/ai-configs', {
+                method: 'PATCH',
+                body: JSON.stringify({ id: agent.id, updates: { status: newStatus } }),
+            });
             setAgents(prev => prev.map(a =>
                 a.agent_key === agent.agent_key ? { ...a, status: newStatus } : a
             ));
-            toast.success(`${agent.agent_name} ${newStatus === 'active' ? 'সক্রিয়' : 'বিরতি'} করা হয়েছে`);
-        } catch {
-            toast.error('স্ট্যাটাস আপডেট ব্যর্থ');
+            toast.success(`${agent.agent_name} ${newStatus === 'active' ? 'সক্রিয়' : 'বিরতি'} করা হয়েছে`);
+        } catch (err: any) {
+            toast.error('স্ট্যাটাস আপডেট ব্যর্থ: ' + err.message);
         }
     };
 
@@ -122,12 +126,24 @@ export function AIConfigPanel() {
     const saveConfig = async (agentKey: string) => {
         setSavingAgent(agentKey);
         try {
-            const updates: any = { updated_at: new Date().toISOString() };
+            const agent = agents.find(a => a.agent_key === agentKey);
+            if (!agent) return;
+
+            const updates: any = {};
             if (editedPrompts[agentKey] !== undefined) updates.system_prompt = editedPrompts[agentKey];
             if (editedModels[agentKey] !== undefined) updates.model_name = editedModels[agentKey];
             if (editedTemps[agentKey] !== undefined) updates.temperature = editedTemps[agentKey];
             if (editedLimits[agentKey] !== undefined) updates.daily_token_limit = editedLimits[agentKey];
 
+            if (Object.keys(updates).length === 0) {
+                setSavingAgent(null);
+                return;
+            }
+
+            await adminFetch('/api/admin/ai-configs', {
+                method: 'PATCH',
+                body: JSON.stringify({ id: agent.id, updates }),
+            });
 
             // Clear edited state
             setEditedPrompts(p => { const n = { ...p }; delete n[agentKey]; return n; });
@@ -137,8 +153,8 @@ export function AIConfigPanel() {
 
             toast.success('কনফিগারেশন সেভ হয়েছে');
             fetchData();
-        } catch {
-            toast.error('সেভ ব্যর্থ');
+        } catch (err: any) {
+            toast.error('সেভ ব্যর্থ: ' + err.message);
         } finally {
             setSavingAgent(null);
         }

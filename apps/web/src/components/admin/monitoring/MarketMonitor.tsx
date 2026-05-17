@@ -124,7 +124,7 @@ export function MarketMonitor() {
       }
 
       // Resolution pending (>7 days old, still active)
-      const marketAge = Date.now() - new Date(market.marketId).getTime();
+      const marketAge = Date.now() - new Date(market.createdAt || market.created_at || Date.now()).getTime();
       if (market.status === 'active' && marketAge > 7 * 24 * 60 * 60 * 1000) {
         newAlerts.push({
           id: `${market.marketId}-resolution`,
