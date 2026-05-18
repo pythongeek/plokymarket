@@ -1,39 +1,58 @@
 // @ts-nocheck
+export const runtime = 'nodejs';
+
 /**
  * Atomic Event Creation API
- * Uses PostgreSQL RPC to ensure event and market are created together
+ * Uses PostgreSQL RPC to ensure event and markets are created together
  * Prevents partial data (event without market)
- *
+ * 
  * Features:
- * - Slug uniqueness check with fallback (handled in RPC)
+ * - Slug uniqueness check with fallback
  * - Asia/Dhaka timezone handling
  * - Atomic transaction (rollback on failure)
  * - Comprehensive error handling
- *
- * BUG FIX (Phase 1): Fixed two critical issues:
- * 1. `if (false)` block bypassed auth entirely — userId was undefined causing ReferenceError
- * 2. RPC returns jsonb column `create_event_complete`, not individual columns —
- *    was accessing resultData.event_id which was undefined
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { pool } from '@/lib/admin/local-db';
-import { requireAdminUser } from '@/lib/admin/admin-auth';
 import { preFlightCheck, generateUniqueSlug } from '@/lib/events/slug-utils';
 import { convertToUTC } from '@/lib/utils/timezone';
 
+async function getUserFromToken(token: string): Promise<string | null> {
+    const cloudUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sltcfmqefujecqfbmkvz.supabase.co';
+    const cloudRes = await fetch(`${cloudUrl}/auth/v1/user`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'apikey': process.env.SUPABASE_ANON_KEY || ''
+        }
+    });
+    if (!cloudRes.ok) return null;
+    const userData = await cloudRes.json();
+    return userData?.id || null;
+}
 
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   try {
-    // ─── AUTH ────────────────────────────────────────────────────────────────
-    const authResult = await requireAdminUser(req);
-    if ('error' in authResult) return authResult.error;
-    const userId = authResult.user.id;
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json(
+        { error: 'Unauthorized', message: 'Please sign in to create events' },
+        { status: 401 }
+      );
+    }
+    const token = authHeader.split(' ')[1];
 
-    // ─── PERMISSION CHECK ────────────────────────────────────────────────────
+    const userId = await getUserFromToken(token);
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'Unauthorized', message: 'Please sign in to create events' },
+        { status: 401 }
+      );
+    }
+
     const profileResult = await pool.query(
       'SELECT is_admin, can_create_events FROM user_profiles WHERE id = $1',
       [userId]
@@ -47,11 +66,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ─── PARSE BODY ─────────────────────────────────────────────────────────
     const body = await req.json();
     console.log('[Create Event] Received body:', JSON.stringify(body, null, 2));
-
-    const { event_data } = body;
+    
+    const { event_data, markets_data, resolution_config } = body;
 
     if (!event_data?.title) {
       console.error('[Create Event] Missing title:', event_data);
@@ -61,7 +79,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ─── PRE-FLIGHT SLUG CHECK ───────────────────────────────────────────────
     const preFlight = await preFlightCheck(event_data.title);
 
     if (!preFlight.success) {
@@ -73,35 +90,31 @@ export async function POST(req: NextRequest) {
 
     const finalSlug = event_data.slug || preFlight.slug;
 
-    // Double-check slug uniqueness (RPC also checks, but we do it early)
     const slugCheck = await pool.query(
       'SELECT id FROM events WHERE slug = $1',
       [finalSlug]
     );
 
     if (slugCheck.rows.length > 0) {
-      // Slug collision — generate unique one
       const uniqueSlug = await generateUniqueSlug(event_data.title);
       console.warn(`[Create Event] Slug collision detected, using: ${uniqueSlug}`);
-      // Override the slug used in the event
-      event_data.slug = uniqueSlug;
-    } else {
-      event_data.slug = finalSlug;
     }
 
-    // ─── TIMEZONE CONVERSION ─────────────────────────────────────────────────
     const tradingClosesAtUTC = event_data.trading_closes_at
       ? convertToUTC(event_data.trading_closes_at)
       : null;
 
+    const resolutionDateUTC = event_data.resolution_date
+      ? convertToUTC(event_data.resolution_date)
+      : null;
+
     if (!tradingClosesAtUTC) {
       return NextResponse.json(
-        { error: 'Validation Failed', message: 'Invalid or missing trading_closes_at date' },
+        { error: 'Validation Failed', message: 'Invalid trading close date' },
         { status: 400 }
       );
     }
 
-    // ─── BUILD EVENT DATA FOR RPC ────────────────────────────────────────────
     const eventDataForRPC = {
       title: event_data.title,
       question: event_data.question || event_data.title,
@@ -109,12 +122,14 @@ export async function POST(req: NextRequest) {
       category: event_data.category || 'Other',
       subcategory: event_data.subcategory || '',
       tags: event_data.tags || [],
-      slug: event_data.slug,
+      slug: finalSlug,
       image_url: event_data.image_url || '',
       trading_closes_at: tradingClosesAtUTC,
       resolution_delay_hours: event_data.resolution_delay_hours || 24,
-      // Normalize resolution_method to match DB CHECK constraint
-      resolution_method: normalizeResolutionMethod(event_data.resolution_method),
+      resolution_method: event_data.resolution_method === 'MANUAL' ? 'manual_admin' : 
+                        event_data.resolution_method === 'AI_ORACLE' ? 'ai_oracle' :
+                        event_data.resolution_method === 'HYBRID' ? 'hybrid' :
+                        (event_data.resolution_method || 'manual_admin').toLowerCase(),
       resolution_source: event_data.resolution_source || '',
       answer_type: 'binary',
       answer1: 'হ্যাঁ (Yes)',
@@ -127,51 +142,29 @@ export async function POST(req: NextRequest) {
       ai_confidence_threshold: event_data.ai_confidence_threshold || 85,
     };
 
-    console.log('[Create Event] Calling create_event_complete RPC...');
-    console.log('[Create Event] eventDataForRPC:', JSON.stringify(eventDataForRPC, null, 2));
+    console.log('[Create Event] Executing atomic transaction with create_event_debug...');
 
-    // ─── CALL RPC ───────────────────────────────────────────────────────────
-    // BUG FIX #2: The RPC returns jsonb — access result.rows[0].create_event_complete
     const rpcResult = await pool.query(
-      'SELECT create_event_complete($1, $2) AS result',
+      'SELECT * FROM create_event_debug($1, $2)',
       [JSON.stringify(eventDataForRPC), userId]
     );
 
-    const rpcOutput = rpcResult.rows[0]?.result;
+    const resultData = rpcResult.rows[0];
 
-    if (!rpcOutput) {
-      console.error('[Create Event] RPC returned no output');
+    if (!resultData?.success) {
       return NextResponse.json(
-        { error: 'Creation Failed', message: 'RPC returned empty result' },
+        { error: 'Creation Failed', message: resultData?.message || 'Unknown error' },
         { status: 500 }
       );
     }
 
-    console.log('[Create Event] RPC result:', JSON.stringify(rpcOutput, null, 2));
-
-    // The RPC returns { success, event_id, slug, message }
-    if (!rpcOutput.success) {
-      return NextResponse.json(
-        { error: 'Creation Failed', message: rpcOutput.message || 'Unknown RPC error' },
-        { status: 500 }
-      );
-    }
-
-    console.log(`[Create Event] Success: event_id=${rpcOutput.event_id}, slug=${rpcOutput.slug}`);
-
-    // Get the created event to return its linked market_id
-    const eventResult = await pool.query(
-      'SELECT id, market_id, slug FROM events WHERE id = $1',
-      [rpcOutput.event_id]
-    );
-    const event = eventResult.rows[0];
+    console.log(`[Create Event] Success: ${resultData.event_id}`);
 
     return NextResponse.json({
       success: true,
-      event_id: rpcOutput.event_id,
-      market_id: event?.market_id || null,
-      slug: rpcOutput.slug,
-      message: rpcOutput.message,
+      event_id: resultData.event_id,
+      slug: resultData.slug,
+      message: resultData.message,
       warnings: preFlight.warnings || [],
       metadata: {
         created_by: userId,
@@ -187,34 +180,11 @@ export async function POST(req: NextRequest) {
       {
         error: 'Internal Server Error',
         message: error instanceof Error ? error.message : 'Unknown error occurred',
-        stack: error instanceof Error ? error.stack : undefined,
         timestamp: new Date().toISOString(),
       },
       { status: 500 }
     );
   }
-}
-
-// ─── HELPER: Normalize resolution_method to DB CHECK constraint values ───
-function normalizeResolutionMethod(method: string | undefined): string {
-  if (!method) return 'manual_admin';
-
-  const m = method.toUpperCase();
-  if (m === 'MANUAL' || m === 'MANUAL_ADMIN') return 'manual_admin';
-  if (m === 'AI' || m === 'AI_ORACLE' || m === 'AI_CONSENSUS') return 'ai_oracle';
-  if (m === 'UMA') return 'uma_oracle';
-  if (m === 'CHAINLINK') return 'chainlink';
-  if (m === 'HYBRID' || m === 'MULTI') return 'hybrid';
-  if (m === 'EXPERT' || m === 'EXPERT_PANEL') return 'expert_panel';
-  if (m === 'EXTERNAL' || m === 'EXTERNAL_API') return 'external_api';
-  if (m === 'COMMUNITY' || m === 'COMMUNITY_VOTE') return 'community_vote';
-
-  // Default: if it looks like a DB value, use it; else manual_admin
-  const validMethods = [
-    'manual_admin', 'ai_oracle', 'expert_panel',
-    'external_api', 'community_vote', 'hybrid'
-  ];
-  return validMethods.includes(m.toLowerCase()) ? m.toLowerCase() : 'manual_admin';
 }
 
 export async function GET(req: NextRequest) {

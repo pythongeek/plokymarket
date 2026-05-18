@@ -1,7 +1,8 @@
 import createMiddleware from 'next-intl/middleware';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { jwtVerify } from 'jose';
+import { Redis } from '@upstash/redis';
+import jwt from 'jsonwebtoken';
 
 // Secure admin paths
 const SECURE_PATHS = {
@@ -10,39 +11,48 @@ const SECURE_PATHS = {
 };
 
 const ALLOWED_ADMIN_IPS: string[] = process.env.ADMIN_IP_WHITELIST?.split(',') || [];
-const AUTH_RATE_LIMIT_WINDOW = Number(process.env.AUTH_RATE_LIMIT_WINDOW) || 300; // 5 min
-const MAX_AUTH_ATTEMPTS = Number(process.env.MAX_AUTH_ATTEMPTS) || 5;
+const AUTH_RATE_LIMIT_WINDOW = 15 * 60;
+const MAX_AUTH_ATTEMPTS = 20;
+const JWT_SECRET = process.env.LOCAL_JWT_SECRET || 'P10kyM@rket.BD.2026.JWT.SECRET';
 
-// MUST match login/route.ts and session/route.ts exactly
-const JWT_SECRET = process.env.JWT_SECRET || process.env.SUPABASE_JWT_SECRET || 'P10kyM@rket.BD.2026.JWT.SECRET';
+// Lazy Redis
+let redis: Redis | undefined;
+const getRedis = () => {
+  if (!redis) {
+    const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+    const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+    if (url && token) redis = new Redis({ url, token });
+  }
+  return redis;
+};
 
 function getClientIp(request: NextRequest): string {
   const forwarded = request.headers.get('x-forwarded-for');
   return forwarded ? forwarded.split(',')[0].trim() : request.headers.get('x-real-ip') || 'unknown';
 }
 
-// Simple in-memory auth rate limiter for Edge Runtime (best-effort, resets on cold start)
-const authLimitStore = new Map<string, { count: number; resetAt: number }>();
 async function checkAuthRateLimit(ip: string) {
-  const now = Date.now();
-  const entry = authLimitStore.get(ip);
-  if (!entry || now > entry.resetAt) {
-    authLimitStore.set(ip, { count: 1, resetAt: now + AUTH_RATE_LIMIT_WINDOW * 1000 });
-    return { allowed: true, remaining: MAX_AUTH_ATTEMPTS - 1 };
-  }
-  entry.count++;
-  if (entry.count > MAX_AUTH_ATTEMPTS) {
-    const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
-    return { allowed: false, remaining: 0, retryAfter };
-  }
-  return { allowed: true, remaining: Math.max(0, MAX_AUTH_ATTEMPTS - entry.count) };
+  const redis = getRedis();
+  if (!redis) return { allowed: true, remaining: MAX_AUTH_ATTEMPTS };
+  const key = `ratelimit:auth:${ip}`;
+  try {
+    const pipeline = redis.pipeline();
+    pipeline.incr(key);
+    pipeline.expire(key, AUTH_RATE_LIMIT_WINDOW);
+    pipeline.ttl(key);
+    const results = await pipeline.exec() as number[];
+    const count = results[0] || 0;
+    const ttl = results[2] as number || AUTH_RATE_LIMIT_WINDOW;
+    if (count > MAX_AUTH_ATTEMPTS) return { allowed: false, remaining: 0, retryAfter: ttl > 0 ? ttl : AUTH_RATE_LIMIT_WINDOW };
+    return { allowed: true, remaining: Math.max(0, MAX_AUTH_ATTEMPTS - count) };
+  } catch { return { allowed: true, remaining: MAX_AUTH_ATTEMPTS }; }
 }
 
 // Auth portal only needs rate limiting and security headers, NOT auth checks
 function isAuthPortal(pathname: string) { return pathname.includes(SECURE_PATHS.auth); }
 function isSecurePath(pathname: string) { return !isAuthPortal(pathname) && Object.values(SECURE_PATHS).some(p => pathname.includes(p)); }
 function isApiAdminPath(pathname: string) { return pathname.includes('/api/admin'); }
-function isAdminPath(pathname: string) { return pathname === '/admin' || pathname.startsWith('/admin/'); }
+function isAdminPath(pathname: string) { return pathname.includes('/admin'); }
 
 const intlMiddleware = createMiddleware({
   locales: ['bn', 'en', 'hi'],
@@ -58,9 +68,6 @@ const securityHeaders = {
   'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
   'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
 };
-
-// Encode JWT secret for jose
-const secretKey = new TextEncoder().encode(JWT_SECRET);
 
 export async function middleware(request: NextRequest) {
   const intlResponse = intlMiddleware(request);
@@ -101,15 +108,19 @@ export async function middleware(request: NextRequest) {
       }
     }
 
-    // Validate JWT from cookie using jose (Edge Runtime compatible)
-    const token = request.cookies.get('sb-access-token')?.value;
+    // Validate JWT from cookie OR Authorization header
+    let token = request.cookies.get('sb-access-token')?.value;
+    console.log('[MW] Cookie token:', token ? 'present' : 'missing');
     if (!token) {
-      if (isApiAdminPath(pathname)) {
-        return new NextResponse(
-          JSON.stringify({ error: 'Unauthorized', code: 'NO_TOKEN' }),
-          { status: 401, headers: { 'Content-Type': 'application/json' } }
-        );
+      const authHeader = request.headers.get('authorization');
+      console.log('[MW] Auth header:', authHeader ? 'present' : 'missing');
+      if (authHeader?.startsWith('Bearer ')) {
+        token = authHeader.slice(7);
+        console.log('[MW] Using Bearer token');
       }
+    }
+    if (!token) {
+      console.log('[MW] No token found, redirecting to auth');
       const authUrl = new URL(SECURE_PATHS.auth, request.url);
       authUrl.searchParams.set('redirect', pathname);
       return NextResponse.redirect(authUrl);
@@ -117,28 +128,20 @@ export async function middleware(request: NextRequest) {
 
     let decoded: any;
     try {
-      // jose works in Edge Runtime - no Node.js crypto needed
-      const { payload } = await jwtVerify(token, secretKey);
-      decoded = payload;
+      decoded = jwt.verify(token, JWT_SECRET);
     } catch (jwtErr) {
       console.warn('JWT validation failed:', (jwtErr as Error).message);
-      if (isApiAdminPath(pathname)) {
-        return new NextResponse(
-          JSON.stringify({ error: 'Unauthorized', code: 'INVALID_TOKEN' }),
-          { status: 401, headers: { 'Content-Type': 'application/json' } }
-        );
-      }
       const authUrl = new URL(SECURE_PATHS.auth, request.url);
       authUrl.searchParams.set('redirect', pathname);
-      authUrl.searchParams.set('error', 'invalid_token');
       return NextResponse.redirect(authUrl);
     }
 
     const userId = decoded.sub as string;
     const isAdmin = decoded.is_admin as boolean;
     const isSuperAdmin = decoded.is_super_admin as boolean;
+    const isServiceRole = decoded.role === 'service_role';
 
-    if (!isAdmin && !isSuperAdmin) {
+    if (!isAdmin && !isSuperAdmin && !isServiceRole) {
       return new NextResponse('Forbidden', { status: 403 });
     }
 
