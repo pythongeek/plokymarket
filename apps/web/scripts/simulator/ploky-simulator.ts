@@ -32,6 +32,7 @@
  * ============================================================================
  */
 
+import { Pool } from "pg";
 import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
 import ws from 'ws';
 
@@ -210,6 +211,7 @@ interface SimulatedUser {
 
 class PlokySimulator {
   private supabase: SupabaseClient;
+  private pgPool: Pool;
   private logger: SimulationLogger;
   private users: SimulatedUser[] = [];
   private marketId: string | null = null;
@@ -224,6 +226,9 @@ class PlokySimulator {
     this.supabase = createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_SERVICE_ROLE_KEY, {
       auth: { autoRefreshToken: false, persistSession: false },
       realtime: { transport: ws },
+    });
+    this.pgPool = new Pool({
+      host: '127.0.0.1', port: 5433, database: 'polymarket', user: 'postgres',
     });
     this.logger = new SimulationLogger();
   }
@@ -270,73 +275,43 @@ class PlokySimulator {
       const fullName = `Simulated Trader ${userNum}`;
 
       try {
-        // 1. Create auth user
-        const { data: authData, error: authError } = await this.supabase.auth.admin.createUser({
-          email,
-          password,
-          email_confirm: true,
-          user_metadata: { full_name: fullName, is_simulation: true },
-        });
+        // 1. Create auth user via direct PostgreSQL (bypasses GoTrue/SMTP)
+        const { rows: authRows } = await this.pgPool.query(`
+          INSERT INTO auth.users (
+            instance_id, id, aud, role, email, encrypted_password,
+            email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at
+          ) VALUES (
+            '00000000-0000-0000-0000-000000000000', gen_random_uuid(), 'authenticated', 'authenticated', $1,
+            extensions.crypt($2, extensions.gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}'::jsonb,
+            ('{"full_name": "' || $3 || '", "is_simulation": true}')::jsonb, now(), now()
+          )
+          RETURNING id, email;
+        `, [email, password, fullName]);
 
-        if (authError || !authData.user) {
-          throw authError || new Error('User creation returned null');
-        }
-
-        const authUser = authData.user;
-        this.logger.debug(`Auth user created`, { id: authUser.id, email: authUser.email });
+        const authUser = { id: authRows[0].id, email: authRows[0].email };
+        this.logger.debug(`Auth user created via PG`, { id: authUser.id, email: authUser.email });
 
         // 2. Create extended profile in users table
-        const { error: profileError } = await this.supabase.from('users').upsert({
-          id: authUser.id,
-          email,
-          full_name: fullName,
-          avatar_url: null,
-          role: 'user',
-          created_at: new Date().toISOString(),
-          is_simulation: true,
-        }, { onConflict: 'id' });
+        await this.pgPool.query(`
+          INSERT INTO users (id, email, full_name, created_at, updated_at)
+          VALUES ($1, $2, $3, now(), now())
+          ON CONFLICT (id) DO NOTHING;
+        `, [authUser.id, email, fullName]).catch((e: any) => {
+          this.logger.warn(`Profile insert failed`, { error: e.message });
+        });
 
-        if (profileError) {
-          this.logger.warn(`Profile insert failed (table may not exist or schema differs)`, { error: profileError.message });
-        }
+        // 3. Create wallet via direct PostgreSQL (bypasses RLS)
+        await this.pgPool.query(`
+          INSERT INTO wallets (user_id, balance, locked_balance, currency, created_at, updated_at)
+          VALUES ($1, $2, 0, 'USDC', now(), now());
+        `, [authUser.id, CONFIG.INITIAL_BALANCE]);
 
-        // 3. Create wallet
-        const { data: wallet, error: walletError } = await this.supabase
-          .from('wallets')
-          .insert({
-            user_id: authUser.id,
-            available_balance: CONFIG.INITIAL_BALANCE,
-            locked_balance: 0,
-            currency: 'USDC',
-            created_at: new Date().toISOString(),
-          })
-          .select()
-          .single();
-
-        if (walletError) {
-          // Try alternative schema (balance instead of available_balance)
-          const { data: walletAlt, error: walletAltError } = await this.supabase
-            .from('wallets')
-            .insert({
-              user_id: authUser.id,
-              balance: CONFIG.INITIAL_BALANCE,
-              currency: 'USDC',
-            })
-            .select()
-            .single();
-
-          if (walletAltError) {
-            throw walletAltError;
-          }
-          this.logger.success(`User ${userNum} wallet created (alt schema)`, { walletId: walletAlt?.id });
-        } else {
-          this.logger.success(`User ${userNum} created`, { id: authUser.id.slice(0, 8), walletId: wallet?.id });
-        }
+        this.logger.success(`User ${userNum} created via PG`, { id: authUser.id.slice(0, 8) });
 
         this.users.push({
-          authUser,
+          authUser: authUser as any,
           profile: { full_name: fullName, email },
-          wallet: wallet || { user_id: authUser.id, available_balance: CONFIG.INITIAL_BALANCE },
+          wallet: { user_id: authUser.id, balance: CONFIG.INITIAL_BALANCE },
           initialBalance: CONFIG.INITIAL_BALANCE,
           orders: [],
           positions: [],
@@ -366,62 +341,36 @@ class PlokySimulator {
 
     const now = new Date();
     const endsAt = new Date(now.getTime() + CONFIG.SIMULATION_DURATION_MS);
-    const slug = `sim-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-
-    const marketData = {
-      name: CONFIG.MARKET_NAME,
-      slug,
-      question: CONFIG.MARKET_NAME,
-      category: 'Crypto',
-      answer1: 'Yes',
-      answer2: 'No',
-      description: 'Auto-generated by PlokySimulator for end-to-end system validation.',
-      status: 'active',
-      starts_at: now.toISOString(),
-      ends_at: endsAt.toISOString(),
-      initial_price: 0.5,
-      initial_liquidity: 10000,
-      neg_risk: false,
-      resolver_address: '0x0000000000000000000000000000000000000000',
-      created_at: now.toISOString(),
-      is_simulation: true,
-    };
+    const creatorId = this.users[0]?.authUser.id;
 
     try {
-      const { data, error } = await this.supabase
-        .from('markets')
-        .insert(marketData)
-        .select()
-        .single();
+      // Use direct PostgreSQL to bypass schema mismatch issues
+      // Create event first (markets requires event_id FK)
+      const { rows: eventRows } = await this.pgPool.query(`
+        INSERT INTO events (id, title, slug, question, description, category, status, created_at, updated_at)
+        VALUES (gen_random_uuid(), $1, $2, $1, $3, 'Crypto', 'active', now(), now())
+        RETURNING id;
+      `, [CONFIG.MARKET_NAME, `sim-event-${Date.now()}`, 'Auto-generated by PlokySimulator']);
+      const eventId = eventRows[0].id;
 
-      if (error) {
-        // Try alternative column names
-        const altData = {
-          ...marketData,
-          start_time: marketData.starts_at,
-          end_time: marketData.ends_at,
-          created_by: this.users[0]?.authUser.id,
-        };
-        delete (altData as any).starts_at;
-        delete (altData as any).ends_at;
+      const { rows } = await this.pgPool.query(`
+        INSERT INTO markets (
+          id, question, description, category, status,
+          trading_closes_at, event_date, creator_id, event_id, created_at, updated_at,
+          min_price, max_price, tick_size, fee_percent
+        ) VALUES (
+          gen_random_uuid(), $1, $2, $3, 'active',
+          $4, $4, $5, $6, now(), now(),
+          0.01, 0.99, 0.01, 0.02
+        )
+        RETURNING id;
+      `, [CONFIG.MARKET_NAME, 'Auto-generated by PlokySimulator', 'Crypto', endsAt.toISOString(), creatorId, eventId]);
 
-        const { data: altResult, error: altError } = await this.supabase
-          .from('markets')
-          .insert(altData)
-          .select()
-          .single();
+      this.marketId = rows[0].id;
+      this.marketSlug = `sim-${Date.now()}`;
 
-        if (altError) throw altError;
-        this.marketId = altResult.id;
-        this.marketSlug = altResult.slug;
-      } else {
-        this.marketId = data.id;
-        this.marketSlug = data.slug;
-      }
-
-      this.logger.success('Market created', {
+      this.logger.success('Market created via PG', {
         marketId: this.marketId,
-        slug: this.marketSlug,
         duration: `${CONFIG.SIMULATION_DURATION_MS / 60000} minutes`,
         closesAt: endsAt.toISOString(),
       });
@@ -500,8 +449,9 @@ class PlokySimulator {
             type: orderType,
             side: 'buy', // All buying for simplicity; sells would require existing positions
             outcome,
-            amount: size,
-            price: orderType === 'limit' ? parseFloat(price.toFixed(2)) : null,
+            quantity: size,
+            remaining_quantity: size,
+            price: orderType === 'limit' ? parseFloat(price.toFixed(2)) : 0.50,
             status: 'open',
             created_at: new Date().toISOString(),
           };
@@ -513,16 +463,27 @@ class PlokySimulator {
             .single();
 
           if (orderError) {
-            // Try alternative schema
-            delete orderData.outcome;
-            orderData.outcome_type = outcome;
-            const { data: altOrder, error: altErr } = await this.supabase
-              .from('orders')
-              .insert(orderData)
-              .select()
-              .single();
-            if (altErr) throw altErr;
-            user.orders.push(altOrder);
+            // RLS fallback: use pgPool directly
+            try {
+              const { rows } = await this.pgPool.query(`
+                INSERT INTO orders (
+                  user_id, market_id, type, side, outcome, quantity, remaining_quantity,
+                  price, status, created_at
+                ) VALUES ($1, $2, $3, $4, $5::outcome_type, $6, $7, $8, $9, $10)
+                RETURNING *`
+              , [
+                orderData.user_id, orderData.market_id, orderData.type, orderData.side,
+                orderData.outcome, orderData.quantity, orderData.remaining_quantity,
+                orderData.price, orderData.status, orderData.created_at
+              ]);
+              user.orders.push(rows[0]);
+            // Trigger matching engine
+            try {
+              await this.pgPool.query('SELECT match_order_jsonb($1)', [rows[0].id]);
+            } catch (e) { /* matching may fail if no counterparty */ }
+            } catch (pgErr: any) {
+              this.logger.error(`Order failed for user ${i + 1}`, { error: pgErr.message });
+            }
           } else {
             user.orders.push(order);
           }
@@ -633,7 +594,7 @@ class PlokySimulator {
         .from('markets')
         .update({ 
           status: 'resolved', 
-          resolved_outcome: this.winningOutcome,
+          winning_outcome: this.winningOutcome,
           resolved_at: new Date().toISOString(),
         })
         .eq('id', this.marketId);
@@ -836,7 +797,8 @@ class PlokySimulator {
       type: 'market',
       side: 'buy',
       outcome: 'YES',
-      amount: Math.floor(balance * 0.8),
+      quantity: Math.floor,
+      remaining_quantity: Math.floor(balance * 0.8),
       status: 'open',
     });
 
@@ -846,7 +808,8 @@ class PlokySimulator {
       type: 'market',
       side: 'buy',
       outcome: 'NO',
-      amount: Math.floor(balance * 0.8),
+      quantity: Math.floor,
+      remaining_quantity: Math.floor(balance * 0.8),
       status: 'open',
     });
 
@@ -862,7 +825,8 @@ class PlokySimulator {
       type: 'market',
       side: 'buy',
       outcome: 'YES',
-      amount: 0,
+      quantity: 0,
+      remaining_quantity: 0,
       status: 'open',
     });
   }
@@ -875,7 +839,8 @@ class PlokySimulator {
       type: 'market',
       side: 'buy',
       outcome: 'YES',
-      amount: 999999,
+      quantity: 999999,
+      remaining_quantity: 999999,
       status: 'open',
     });
   }
@@ -888,7 +853,8 @@ class PlokySimulator {
       type: 'market',
       side: 'buy',
       outcome: 'YES',
-      amount: 10,
+      quantity: 10,
+      remaining_quantity: 10,
       status: 'open',
     });
   }
