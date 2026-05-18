@@ -1,0 +1,20 @@
+{
+  "name": "ploky-simulator",
+  "version": "1.0.0",
+  "description": "End-to-end simulation engine for Plokymarket — runs completely outside the main project",
+  "type": "module",
+  "scripts": {
+    "sim": "npx tsx ploky-simulator.ts",
+    "sim:fast": "SIMULATION_DURATION_MINUTES=1 npx tsx ploky-simulator.ts",
+    "sim:stress": "ENABLE_STRESS_TEST=true npx tsx ploky-simulator.ts",
+    "sim:report": "cat simulation-report-*.json | npx json-pretty-print || cat simulation-report-*.json"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.105.4",
+    "ws": "^8.20.1"
+  },
+  "devDependencies": {
+    "tsx": "^4.22.1",
+    "typescript": "^5.9.3"
+  }
+}
