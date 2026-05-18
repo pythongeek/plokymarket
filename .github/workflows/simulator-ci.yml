@@ -1,0 +1,43 @@
+name: Ploky CLOB Simulator CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  simulator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: |
+          cd apps/web/scripts/simulator
+          npm ci
+
+      - name: Run Ploky Simulator V3
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SIMULATION_DURATION_MINUTES: 1
+          USER_COUNT: 5
+          ENABLE_STRESS_TEST: true
+        run: |
+          cd apps/web/scripts/simulator
+          npx tsx ploky-simulator-v3.ts
+
+      - name: Upload simulation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: simulation-report
+          path: apps/web/scripts/simulator/simulation-report-*.json
