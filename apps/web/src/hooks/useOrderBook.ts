@@ -1,193 +1,223 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { MarketDataLevel, OrderBookState } from '@/lib/clob/types';
-import { createClient } from '@supabase/supabase-js';
-import { decode } from '@msgpack/msgpack';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { createClient } from '@/lib/supabase/client';
 
-// Browser-compatible zlib decompression
-async function decompress(base64: string): Promise<Uint8Array> {
-    const binary = atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-
-    // Native browser decompression (modern browsers)
-    const ds = new (window as any).DecompressionStream('deflate');
-    const writer = ds.writable.getWriter();
-    writer.write(bytes);
-    writer.close();
-
-    const response = new Response(ds.readable);
-    const arrayBuffer = await response.arrayBuffer();
-    return new Uint8Array(arrayBuffer);
+export interface OrderBookLevel {
+  price: number;
+  quantity: number;
+  orderCount: number;
 }
 
+export interface UseOrderBookResult {
+  bids: OrderBookLevel[];
+  asks: OrderBookLevel[];
+  lastTradePrice: number | null;
+  lastTradeSide: 'buy' | 'sell' | null;
+  spread: number;
+  isConnected: boolean;
+  error: string | null;
+}
 
-export function useOrderBook(marketId: string, depthValue: number = 100, granularity: number = 1) {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+interface RawOrder {
+  id: string;
+  side: 'buy' | 'sell';
+  price: number;
+  quantity: number;
+  filled_quantity: number;
+  remaining_quantity: number;
+  status: string;
+}
 
-    // Memoize the client instance unless we want it re-created every render
-    const supabase = React.useMemo(() => createClient(supabaseUrl, supabaseAnonKey), [supabaseUrl, supabaseAnonKey]);
+interface RawTrade {
+  price: number;
+  side: 'buy' | 'sell';
+}
 
-    const [bids, setBids] = useState<MarketDataLevel[]>([]);
-    const [asks, setAsks] = useState<MarketDataLevel[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [midPrice, setMidPrice] = useState<number | null>(null);
+/**
+ * useOrderBook — Snapshot + Delta streaming order book
+ *
+ * 1. Fetches initial snapshot of open orders grouped by price
+ * 2. Subscribes to Supabase Realtime for orders + trades
+ * 3. Applies deltas to local React state
+ */
+export function useOrderBook(marketId: string): UseOrderBookResult {
+  const supabase = createClient();
+  const [bids, setBids] = useState<OrderBookLevel[]>([]);
+  const [asks, setAsks] = useState<OrderBookLevel[]>([]);
+  const [lastTradePrice, setLastTradePrice] = useState<number | null>(null);
+  const [lastTradeSide, setLastTradeSide] = useState<'buy' | 'sell' | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-    // Sequence Tracking
-    const lastSeq = useRef<number>(0);
-    const isResyncing = useRef<boolean>(false);
-    const watchdogTimer = useRef<NodeJS.Timeout | null>(null);
+  // Use a ref for the book map to avoid stale closures in the realtime callback
+  const bookRef = useRef<{
+    bids: Map<number, OrderBookLevel>;
+    asks: Map<number, OrderBookLevel>;
+  }>({ bids: new Map(), asks: new Map() });
 
-    useEffect(() => {
-        if (!marketId) return;
-        let mounted = true;
+  const syncState = useCallback(() => {
+    const bidLevels = Array.from(bookRef.current.bids.values())
+      .filter((l) => l.quantity > 0)
+      .sort((a, b) => b.price - a.price);
+    const askLevels = Array.from(bookRef.current.asks.values())
+      .filter((l) => l.quantity > 0)
+      .sort((a, b) => a.price - b.price);
+    setBids(bidLevels);
+    setAsks(askLevels);
+  }, []);
 
-        const resetWatchdog = () => {
-            if (watchdogTimer.current) clearTimeout(watchdogTimer.current);
-            watchdogTimer.current = setTimeout(() => {
-                console.warn('[OrderBook] Watchdog timeout: 90s silence. Resyncing...');
-                fetchSnapshot();
-            }, 90000); // 3 missed 30s heartbeats
-        };
+  // ── Snapshot fetch ──
+  const fetchSnapshot = useCallback(async () => {
+    if (!marketId) return;
+    try {
+      const { data, error: dbError } = await supabase
+        .from('orders')
+        .select('id, side, price, quantity, filled_quantity, remaining_quantity, status')
+        .eq('market_id', marketId)
+        .eq('status', 'open')
+        .order('price', { ascending: false });
 
-        const fetchSnapshot = async () => {
-            if (isResyncing.current) return;
-            isResyncing.current = true;
-            try {
-                // Use granularity in API call if provided
-                const res = await fetch(`/api/orderbook/${marketId}?granularity=${granularity}`);
-                if (!res.ok) throw new Error('Snapshot failed');
-                const data: OrderBookState = await res.json();
-                if (mounted) {
-                    const topBids = data.bids.slice(0, depthValue);
-                    const topAsks = data.asks.slice(0, depthValue);
-                    setBids(topBids);
-                    setAsks(topAsks);
+      if (dbError) throw dbError;
 
-                    if (topBids[0] && topAsks[0]) {
-                        setMidPrice((topBids[0].price + topAsks[0].price) / 2);
-                    } else if (topBids[0]) {
-                        setMidPrice(topBids[0].price);
-                    } else if (topAsks[0]) {
-                        setMidPrice(topAsks[0].price);
-                    }
+      const bidMap = new Map<number, OrderBookLevel>();
+      const askMap = new Map<number, OrderBookLevel>();
 
-                    setLoading(false);
-                    // Reset watchdog upon successful snapshot
-                    resetWatchdog();
-                }
-            } catch (e) {
-                console.error("Resync error:", e);
-            } finally {
-                isResyncing.current = false;
-            }
-        };
+      (data || []).forEach((row: RawOrder) => {
+        const rem = Number(row.remaining_quantity);
+        if (rem <= 0) return;
+        const price = Number(row.price);
+        const map = row.side === 'buy' ? bidMap : askMap;
+        const existing = map.get(price);
+        if (existing) {
+          existing.quantity += rem;
+          existing.orderCount += 1;
+        } else {
+          map.set(price, { price, quantity: rem, orderCount: 1 });
+        }
+      });
 
-        fetchSnapshot();
+      bookRef.current = { bids: bidMap, asks: askMap };
+      syncState();
+    } catch (err: any) {
+      console.error('[useOrderBook] Snapshot error:', err);
+      setError(err.message);
+    }
+  }, [marketId, supabase, syncState]);
 
-        const channel = supabase.channel(`market:${marketId}:${granularity}`, {
-            config: { broadcast: { self: false } }
-        });
+  // ── Delta application ──
+  const applyDelta = useCallback(
+    (payload: any) => {
+      const { eventType, new: newRow, old: oldRow } = payload;
+      if (!newRow && !oldRow) return;
 
-        const handleUpdate = (update: any) => {
-            resetWatchdog(); // Activity detected
+      const side = (newRow?.side || oldRow?.side) as 'buy' | 'sell';
+      const price = Number(newRow?.price || oldRow?.price);
+      if (!price || !side) return;
 
-            // 1. Sequence & Idempotency Check
-            if (update.seq <= lastSeq.current && lastSeq.current !== 0) {
-                return;
-            }
+      const map = side === 'buy' ? bookRef.current.bids : bookRef.current.asks;
 
-            if (lastSeq.current !== 0 && update.seq > lastSeq.current + 1) {
-                console.warn(`[OrderBook] Gap detected: ${lastSeq.current} -> ${update.seq}. Resyncing...`);
-                fetchSnapshot();
-                return;
-            }
-            lastSeq.current = update.seq;
+      if (eventType === 'INSERT') {
+        const rem = Number(newRow.remaining_quantity || newRow.quantity);
+        if (newRow.status !== 'open' || rem <= 0) return;
+        const existing = map.get(price);
+        if (existing) {
+          existing.quantity += rem;
+          existing.orderCount += 1;
+        } else {
+          map.set(price, { price, quantity: rem, orderCount: 1 });
+        }
+      } else if (eventType === 'UPDATE') {
+        const oldRem = Number(oldRow?.remaining_quantity || oldRow?.quantity || 0);
+        const newRem = Number(newRow?.remaining_quantity || newRow?.quantity || 0);
+        const delta = newRem - oldRem; // negative if filled, positive if added
+        const existing = map.get(price);
+        if (existing) {
+          existing.quantity += delta;
+          if (newRow.status !== 'open') {
+            // Order closed — subtract all remaining
+            existing.quantity -= newRem;
+            existing.orderCount = Math.max(0, existing.orderCount - 1);
+          }
+          if (existing.quantity <= 0) map.delete(price);
+        }
+      } else if (eventType === 'DELETE') {
+        const rem = Number(oldRow?.remaining_quantity || oldRow?.quantity || 0);
+        const existing = map.get(price);
+        if (existing) {
+          existing.quantity -= rem;
+          existing.orderCount = Math.max(0, existing.orderCount - 1);
+          if (existing.quantity <= 0) map.delete(price);
+        }
+      }
 
-            // 2. ACK requested critical events
-            if (update.ack) {
-                channel.send({
-                    type: 'broadcast',
-                    event: 'market:ack',
-                    payload: { seq: update.seq }
-                });
-            }
+      syncState();
+    },
+    [syncState]
+  );
 
-            // 3. Apply Deltas
-            const apply = (prev: MarketDataLevel[], deltas: any[], sortAsc: boolean) => {
-                const newLevels = [...prev];
-                deltas.forEach(([price, size, total]: [number, number, number]) => {
-                    // Note: If granularity > 1, the price in deltas must match the bucket price
-                    // For now, we assume the server sends tick-level updates and we aggregate or
-                    // the server sends granular updates if we subscribe to a specific channel.
-                    // But our publisher doesn't support multiple granularities yet.
-                    // So we must aggregate locally if granularity > 1.
+  useEffect(() => {
+    if (!marketId) return;
+    setError(null);
+    setIsConnected(false);
 
-                    let targetPrice = price;
-                    if (granularity > 1) {
-                        const tickSize = 0.0001;
-                        const gFactor = granularity * tickSize;
-                        targetPrice = Math.floor(price / gFactor) * gFactor;
-                    }
+    // 1. Snapshot
+    fetchSnapshot();
 
-                    const idx = newLevels.findIndex(l => Math.abs(l.price - targetPrice) < 0.000001);
-                    if (size === 0) {
-                        if (idx > -1) newLevels.splice(idx, 1);
-                    } else {
-                        const newLevel = { price: targetPrice, size, total };
-                        if (idx > -1) newLevels[idx] = newLevel;
-                        else newLevels.push(newLevel);
-                    }
-                });
-                return newLevels.sort((a, b) => sortAsc ? a.price - b.price : b.price - a.price).slice(0, depthValue);
-            };
+    // 2. Realtime — Orders
+    const orderChannel = supabase
+      .channel(`market-${marketId}-orders`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'orders',
+          filter: `market_id=eq.${marketId}`,
+        },
+        (payload) => {
+          console.log('[Realtime] Order delta:', payload);
+          applyDelta(payload);
+        }
+      )
+      .subscribe((status) => {
+        console.log('[Realtime] Orders channel status:', status);
+        if (status === 'SUBSCRIBED') setIsConnected(true);
+        if (status === 'CLOSED' || status === 'CHANNEL_ERROR') setIsConnected(false);
+      });
 
-            if (update.b && update.b.length > 0) setBids(prev => {
-                const result = apply(prev, update.b, false);
-                if (result[0] && update.a && update.a[0]) {
-                    setMidPrice((result[0].price + update.a[0][0]) / 2);
-                }
-                return result;
-            });
-            if (update.a && update.a.length > 0) setAsks(prev => {
-                const result = apply(prev, update.a, true);
-                if (result[0] && update.b && update.b[0]) {
-                    setMidPrice((update.b[0][0] + result[0].price) / 2);
-                }
-                return result;
-            });
-        };
+    // 3. Realtime — Trades (tape)
+    const tradeChannel = supabase
+      .channel(`market-${marketId}-trades`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'trades',
+          filter: `market_id=eq.${marketId}`,
+        },
+        (payload) => {
+          const row = payload.new as RawTrade;
+          console.log('[Realtime] Trade:', row);
+          if (row.price) {
+            setLastTradePrice(Number(row.price));
+            setLastTradeSide(row.side);
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('[Realtime] Trades channel status:', status);
+      });
 
-        const handleRealtimeMessage = async (msg: any) => {
-            if (!mounted || isResyncing.current) return;
-            try {
-                const buffer = await decompress(msg.payload.data);
-                const decoded = decode(buffer) as any;
+    return () => {
+      supabase.removeChannel(orderChannel);
+      supabase.removeChannel(tradeChannel);
+    };
+  }, [marketId, supabase, fetchSnapshot, applyDelta]);
 
-                if (decoded.t === 'upd') {
-                    handleUpdate(decoded);
-                } else if (decoded.t === 'batch') {
-                    decoded.msgs.forEach((m: any) => {
-                        if (m.t === 'upd') handleUpdate(m);
-                    });
-                } else if (decoded.t === 'hb') {
-                    resetWatchdog(); // Heartbeat received
-                }
-            } catch (e) {
-                console.error("Realtime decode error:", e);
-            }
-        };
+  const spread =
+    asks.length > 0 && bids.length > 0
+      ? Number((asks[0].price - bids[0].price).toFixed(4))
+      : 0;
 
-        channel
-            .on('broadcast', { event: 'market:update' }, handleRealtimeMessage)
-            .subscribe();
-
-        return () => {
-            mounted = false;
-            if (watchdogTimer.current) clearTimeout(watchdogTimer.current);
-            supabase.removeChannel(channel);
-        };
-    }, [marketId, depthValue, granularity]);
-
-    return { bids, asks, loading, midPrice };
+  return { bids, asks, lastTradePrice, lastTradeSide, spread, isConnected, error };
 }

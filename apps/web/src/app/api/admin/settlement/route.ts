@@ -1,152 +1,81 @@
 // @ts-nocheck
-import { NextRequest, NextResponse } from 'next/server';
-import { pool } from '@/lib/admin/local-db';
-import { requireAdminUser } from '@/lib/admin/admin-auth';
-import { SettlementEngine } from '@/lib/settlement/SettlementEngine';
+import { NextResponse } from 'next/server';
+import jwt from 'jsonwebtoken';
+import { Pool } from 'pg';
 
-const settlementEngine = new SettlementEngine();
+const pgPool = new Pool({
+  host: process.env.LOCAL_DB_HOST || '127.0.0.1',
+  port: parseInt(process.env.LOCAL_DB_PORT || '5433'),
+  user: process.env.LOCAL_DB_USER || 'postgres',
+  password: process.env.LOCAL_DB_PASSWORD || 'postgres',
+  database: process.env.LOCAL_DB_NAME || 'polymarket',
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000,
+});
 
+const JWT_SECRET = process.env.SUPABASE_JWT_SECRET || process.env.LOCAL_JWT_SECRET || process.env.JWT_SECRET || '';
 
-/**
- * GET /api/admin/settlement - List settlement claims and batches
- * Query: ?market_id=... or list all recent
- */
-export async function GET(request: Request) {
-    try {
-        const authResult = await requireAdminUser(request);
-        if ('error' in authResult) return authResult.error;
-        const userId = authResult.user.id;
-
-        const { searchParams } = new URL(request.url);
-        const marketId = searchParams.get('market_id');
-
-        // Fetch claims
-        let claimsQuery = `
-            SELECT sc.*, 
-                   m.question as markets_question, 
-                   m.status as markets_status
-            FROM settlement_claims sc
-            LEFT JOIN markets m ON m.id = sc.market_id
-            ORDER BY sc.created_at DESC
-            LIMIT 100
-        `;
-        
-        if (marketId) {
-            claimsQuery = `
-                SELECT sc.*, 
-                       m.question as markets_question, 
-                       m.status as markets_status
-                FROM settlement_claims sc
-                LEFT JOIN markets m ON m.id = sc.market_id
-                WHERE sc.market_id = $1
-                ORDER BY sc.created_at DESC
-                LIMIT 100
-            `;
-        }
-
-        const claimsResult = await pool.query(
-            marketId ? claimsQuery : claimsQuery.replace('$1', 'NULL'),
-            marketId ? [marketId] : []
-        );
-
-        // Fetch batches
-        let batchesQuery = `
-            SELECT sb.*, 
-                   m.question as markets_question, 
-                   m.status as markets_status
-            FROM settlement_batches sb
-            LEFT JOIN markets m ON m.id = sb.market_id
-            ORDER BY sb.created_at DESC
-            LIMIT 50
-        `;
-        
-        if (marketId) {
-            batchesQuery = `
-                SELECT sb.*, 
-                       m.question as markets_question, 
-                       m.status as markets_status
-                FROM settlement_batches sb
-                LEFT JOIN markets m ON m.id = sb.market_id
-                WHERE sb.market_id = $1
-                ORDER BY sb.created_at DESC
-                LIMIT 50
-            `;
-        }
-
-        const batchesResult = await pool.query(
-            marketId ? batchesQuery : batchesQuery.replace('$1', 'NULL'),
-            marketId ? [marketId] : []
-        );
-
-        // Fetch stats
-        const statsResult = await pool.query(
-            'SELECT * FROM settlement_statistics LIMIT 1'
-        );
-
-        return NextResponse.json({
-            data: {
-                claims: claimsResult.rows || [],
-                batches: batchesResult.rows || [],
-                stats: statsResult.rows[0] || null,
-            },
-        });
-    } catch (error: any) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+export async function POST(req: Request) {
+  try {
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Missing authorization' }, { status: 401 });
     }
-}
 
-/**
- * POST /api/admin/settlement - Trigger settlement for a resolved market
- * Body: { market_id: string }
- */
-export async function POST(req: NextRequest) {
+    const token = authHeader.split(' ')[1];
+    let decoded: any;
     try {
-        const authResult = await requireAdminUser(req);
-        if ('error' in authResult) return authResult.error;
-        const userId = authResult.user.id;
-
-        // Admin check
-        const profileResult = await pool.query(
-            'SELECT is_admin, is_super_admin FROM user_profiles WHERE id = $1',
-            [userId]
-        );
-        const profile = profileResult.rows[0];
-
-        if (!profile?.is_admin && !profile?.is_super_admin) {
-            return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
-        }
-
-        const body = await req.json();
-        const { market_id } = body;
-
-        if (!market_id) {
-            return NextResponse.json({ error: 'market_id is required' }, { status: 400 });
-        }
-
-        // Verify market is resolved
-        const marketResult = await pool.query(
-            'SELECT status, winning_outcome FROM markets WHERE id = $1',
-            [market_id]
-        );
-        const market = marketResult.rows[0];
-
-        if (!market) {
-            return NextResponse.json({ error: 'Market not found' }, { status: 404 });
-        }
-
-        if (market.status !== 'resolved') {
-            return NextResponse.json(
-                { error: `Market must be resolved before settlement. Current status: ${market.status}` },
-                { status: 400 }
-            );
-        }
-
-        // Trigger settlement
-        const result = await settlementEngine.processMarket(market_id, market.winning_outcome);
-
-        return NextResponse.json({ data: result });
-    } catch (error: any) {
-        console.error('Settlement error:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+      decoded = jwt.verify(token, JWT_SECRET);
+    } catch {
+      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
     }
+
+    const isSuperAdmin = decoded.is_super_admin || decoded.role === 'service_role';
+    if (!isSuperAdmin) {
+      return NextResponse.json({ error: 'Super Admin required' }, { status: 403 });
+    }
+
+    const adminId = decoded.sub;
+    const body = await req.json();
+    const { market_id, winning_outcome } = body;
+
+    if (!market_id || !winning_outcome) {
+      return NextResponse.json({ error: 'Missing market_id or winning_outcome' }, { status: 400 });
+    }
+
+    if (!['YES', 'NO'].includes(winning_outcome)) {
+      return NextResponse.json({ error: 'winning_outcome must be YES or NO' }, { status: 400 });
+    }
+
+    const client = await pgPool.connect();
+    try {
+      await client.query('BEGIN');
+      const { rows: marketRows } = await client.query('SELECT status, name FROM markets WHERE id = $1 FOR UPDATE', [market_id]);
+      if (marketRows.length === 0) throw new Error('Market not found');
+      if (marketRows[0].status === 'resolved') throw new Error('Market already resolved');
+
+      await client.query('SELECT settle_market_with_collateral($1, $2::outcome_type)', [market_id, winning_outcome]);
+
+      await client.query(
+        "INSERT INTO admin_audit_log (admin_id, action, resource, target_id, new_value, details, created_at) VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, NOW())",
+        [adminId, 'settle_market', 'market', market_id,
+         JSON.stringify({ winning_outcome, previous_status: marketRows[0].status }),
+         JSON.stringify({ message: 'Settled to ' + winning_outcome })]
+      );
+
+      await client.query('COMMIT');
+      return NextResponse.json({ success: true, message: 'Market settled to ' + winning_outcome, market_name: marketRows[0].name });
+    } catch (dbErr: any) {
+      await client.query('ROLLBACK');
+      throw dbErr;
+    } finally {
+      client.release();
+    }
+  } catch (error: any) {
+    console.error('[Settlement API] Error:', error);
+    const msg = error.message || 'Internal error';
+    const status = msg.includes('not found') || msg.includes('already resolved') ? 400 : 500;
+    return NextResponse.json({ error: msg }, { status });
+  }
 }
